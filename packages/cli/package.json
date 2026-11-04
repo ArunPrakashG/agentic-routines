@@ -1,0 +1,25 @@
+{
+  "name": "browser-routines",
+  "version": "0.1.0",
+  "description": "Record a browser task once from your agent, replay it without the model.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "browser-routines": "dist/index.js" },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "jsonc-parser": "^3.3.1",
+    "smol-toml": "^1.9.1",
+    "yaml": "^2.8.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@browser-routines/core": "workspace:*",
+    "tsup": "^8.5.0"
+  }
+}

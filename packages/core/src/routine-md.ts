@@ -1,0 +1,72 @@
+import { parse, stringify } from 'yaml';
+import type { RoutineMeta } from './types.ts';
+
+const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+
+export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string } {
+  const m = FENCE.exec(text);
+  if (!m) throw new Error('ROUTINE.md has no frontmatter');
+  const raw = (parse(m[1]) ?? {}) as Partial<RoutineMeta>;
+  if (!raw.name) throw new Error('ROUTINE.md frontmatter has no name');
+  const meta: RoutineMeta = {
+    name: String(raw.name),
+    owner: raw.owner ? String(raw.owner) : undefined,
+    version: Number(raw.version ?? 1),
+    site: String(raw.site ?? ''),
+    description: String(raw.description ?? '').trim(),
+    params: raw.params ?? {},
+    secrets: raw.secrets ?? [],
+    pauses: raw.pauses ?? [],
+    requires: raw.requires,
+    returns: raw.returns,
+  };
+  return { meta, body: text.slice(m[0].length).trim() };
+}
+
+export function stringifyRoutineMd(meta: RoutineMeta, body: string): string {
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) if (v !== undefined) clean[k] = v;
+  // Examples are the user's own values; they stay in steps.json on this machine only.
+  const params: Record<string, unknown> = {};
+  for (const [k, p] of Object.entries(meta.params)) {
+    const { example: _drop, ...rest } = p;
+    params[k] = rest;
+  }
+  clean.params = params;
+  const fm = stringify(clean, { lineWidth: 80 }).trimEnd();
+  return `---\n${fm}\n---\n\n${body.trim()}\n`;
+}
+
+export interface LintIssue {
+  field: string;
+  message: string;
+}
+
+/** Rules a routine must pass before it can be published. */
+export function lintForPublish(meta: RoutineMeta, stepUrls: string[]): LintIssue[] {
+  const issues: LintIssue[] = [];
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(meta.name))
+    issues.push({ field: 'name', message: 'Use lowercase letters, digits and dashes.' });
+  if (!meta.description) issues.push({ field: 'description', message: 'Add when to use it.' });
+  else if (!/\buse when\b/i.test(meta.description))
+    issues.push({ field: 'description', message: 'Say when to use it, starting with "Use when".' });
+  if (meta.description.length > 1024)
+    issues.push({ field: 'description', message: 'Keep it under 1024 characters.' });
+  if (!meta.site) issues.push({ field: 'site', message: 'No site set.' });
+  for (const u of stepUrls) {
+    if (!onSite(u, meta.site)) {
+      issues.push({ field: 'steps', message: `A step leaves ${meta.site}: ${new URL(u).host}` });
+      break;
+    }
+  }
+  return issues;
+}
+
+export function onSite(url: string, site: string): boolean {
+  try {
+    const host = new URL(url).host;
+    return host === site || host.endsWith('.' + site);
+  } catch {
+    return false;
+  }
+}
