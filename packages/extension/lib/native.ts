@@ -1,0 +1,96 @@
+// The line to the native host, which the MCP server talks to.
+// An open port also keeps the service worker alive.
+
+const HOST = 'com.browser_routines.host';
+
+type Handler = (method: string, params: any) => Promise<unknown>;
+
+let port: Browser.runtime.Port | undefined;
+let nextId = 1;
+const waiting = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+const listeners = new Set<(connected: boolean) => void>();
+const eventListeners = new Set<(event: string, data: unknown) => void>();
+let handler: Handler = async () => {
+  throw new Error('Not ready');
+};
+let retry = 1000;
+
+export function onRequest(h: Handler) {
+  handler = h;
+}
+
+export function onConnection(fn: (connected: boolean) => void) {
+  listeners.add(fn);
+}
+
+export function onHostEvent(fn: (event: string, data: unknown) => void) {
+  eventListeners.add(fn);
+}
+
+export function connected() {
+  return !!port;
+}
+
+function browserName() {
+  const ua = navigator.userAgent;
+  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/Edg\//.test(ua)) return 'Edge';
+  if ((navigator as any).brave) return 'Brave';
+  return 'Chrome';
+}
+
+export function connect() {
+  if (port) return;
+  let p: Browser.runtime.Port;
+  try {
+    p = browser.runtime.connectNative(HOST);
+  } catch {
+    setTimeout(connect, (retry = Math.min(retry * 2, 30_000)));
+    return;
+  }
+  port = p;
+  p.onMessage.addListener(async (m: any) => {
+    if ('method' in m && 'id' in m) {
+      try {
+        p.postMessage({ id: m.id, result: (await handler(m.method, m.params)) ?? null });
+      } catch (e) {
+        p.postMessage({ id: m.id, error: (e as Error).message });
+      }
+    } else if ('id' in m) {
+      const w = waiting.get(m.id);
+      if (!w) return;
+      waiting.delete(m.id);
+      if (m.error) w.reject(new Error(m.error));
+      else w.resolve(m.result);
+    } else if ('event' in m) {
+      for (const fn of eventListeners) fn(m.event, m.data);
+    }
+  });
+  p.onDisconnect.addListener(() => {
+    port = undefined;
+    for (const w of waiting.values()) w.reject(new Error('Host disconnected'));
+    waiting.clear();
+    for (const fn of listeners) fn(false);
+    setTimeout(connect, (retry = Math.min(retry * 2, 30_000)));
+  });
+  call('host.hello', { browser: browserName() }).then(
+    () => {
+      retry = 1000;
+      for (const fn of listeners) fn(true);
+    },
+    () => {},
+  );
+}
+
+export function call<T = unknown>(method: string, params?: unknown): Promise<T> {
+  if (!port) return Promise.reject(new Error('Run `npx browser-routines setup` to connect this browser.'));
+  const id = nextId++;
+  return new Promise<T>((resolve, reject) => {
+    waiting.set(id, { resolve: resolve as (v: unknown) => void, reject });
+    port!.postMessage({ id, method, params });
+  });
+}
+
+export function emit(event: string, data?: unknown) {
+  port?.postMessage({ event, data });
+}
