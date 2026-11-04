@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routines list, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.sp,.sp *{box-sizing:border-box}
+.btn{height:36px;padding:0 14px;border-radius:8px;font:500 13px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:var(--surface-1);color:var(--text-1);border-color:var(--border-strong)}
+.icon-btn{width:44px;height:44px;border-radius:8px;border:0;background:transparent;color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.arrive{animation:arrive .42s var(--ease-out) .3s both}
+@keyframes arrive{0%{opacity:0;transform:translateY(-8px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.sp *{animation:none !important}}
+</style>
+</helmet>
+<div class="sp t-dark" style="width: 400px; height: 844px; display: flex; flex-direction: column; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); border-left: 1px solid var(--border);">
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 16px; border-bottom: 1px solid var(--border);">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--accent-ink);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <h1 style="margin: 0; font-size: 15px; font-weight: 500;">Routines</h1>
+    </div>
+    <div style="display: flex; align-items: center; gap: 4px;">
+      <button class="btn btn-primary" type="button" aria-keyshortcuts="R"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="currentColor"></circle></svg>Record</button>
+      <button class="icon-btn" type="button" aria-label="Account, arun.prakash"><span style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span></button>
+    </div>
+  </header>
+
+  <main style="flex: 1; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 24px;">
+    <section aria-label="Unsaved run" class="arrive" style="border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); padding: 14px 14px 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+        <span style="font-size: 14px; font-weight: 500;">Firebase console · 14 steps</span>
+        <span style="font-size: 12px; color: var(--text-3);">Claude Code · 12 min ago · not saved</span>
+      </div>
+      <button class="btn btn-secondary" type="button">Save</button>
+    </section>
+
+    <section aria-label="Saved routines" style="display: flex; flex-direction: column;">
+      <sc-for list="{{routines}}" as="r" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 0 10px 4px; border-bottom: 1px solid var(--border);">
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+            <span style="display: flex; align-items: center; gap: 8px;"><span style="font-family: var(--font-mono); font-size: 13px; font-weight: 500;">{{r.name}}</span><sc-if value="{{r.community}}" hint-placeholder-val="{{false}}"><span style="padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); font-size: 11px;">by {{r.owner}}</span></sc-if></span>
+            <span style="font-size: 13px; line-height: 18px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.desc}}</span>
+            <span style="font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.site}} · {{r.ver}} · {{r.when}}</span>
+            <sc-if value="{{r.note}}" hint-placeholder-val="{{false}}">
+              <span style="font-size: 12px; color: var(--warn);">{{r.note}}</span>
+            </sc-if>
+          </div>
+          <button class="icon-btn" type="button" aria-label="{{r.label}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7.5-4.5z" fill="currentColor"></path></svg></button>
+        </div>
+      </sc-for>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const r = (name, desc, site, ver, when, note, owner) => ({ name, desc, site, ver, when, note: note || '', community: !!owner, owner: owner || '', label: 'Run ' + name });
+    return {
+      routines: [
+        r('play-release', 'Upload a bundle to Play testing and start rollout', 'play.google.com', 'v4', 'ran 2 days ago'),
+        r('testflight-build', 'Add a build to a TestFlight group', 'appstoreconnect.apple.com', 'v2', 'ran 5 days ago'),
+        r('gstr2b-download', 'Download GSTR-2B for a month', 'gst.gov.in', 'v12', 'ran 3 weeks ago', 'Step 6 changed on the last run', 'meeraiyer'),
+        r('cf-dns-record', 'Add a DNS record, pauses before saving', 'dash.cloudflare.com', 'v7', 'ran last month', '', 'tomaszk'),
+        r('razorpay-settlements', 'Export settlements for a date range', 'dashboard.razorpay.com', 'v1', 'ran last month')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

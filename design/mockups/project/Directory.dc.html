@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routine directory</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.mk,.mk *{box-sizing:border-box}
+.mono{font-family:var(--font-mono)}
+.btn{height:44px;padding:0 18px;border-radius:8px;font:500 14px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.nav{height:44px;padding:0 12px;display:inline-flex;align-items:center;font-size:14px;color:var(--text-2);text-decoration:none}
+.chip{padding:2px 7px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink);font-family:var(--font-mono);font-size:12px}
+.item{height:72px;display:grid;grid-template-columns:40px minmax(0,1fr) 96px 80px;gap:16px;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer}
+.fav{width:32px;height:32px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--text-2)}
+.step{height:32px;display:grid;grid-template-columns:24px 60px minmax(0,1fr);align-items:center;gap:6px;font-size:13px;white-space:nowrap}
+.step .n{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}.step .v{font-family:var(--font-mono);font-size:12px;color:var(--text-2)}
+.step .t{overflow:hidden;text-overflow:ellipsis}
+.in{animation:in .42s var(--ease-out) both;animation-delay:calc(var(--i) * 50ms + .1s)}
+@keyframes in{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.pane{animation:pane .42s var(--ease-out) .25s both}
+@keyframes pane{0%{opacity:0;transform:translateX(12px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.mk *{animation:none !important}}
+</style>
+</helmet>
+<div class="mk t-light" style="width: 1440px; height: 1024px; background: var(--bg); color: var(--text-1); font-family: var(--font-sans);">
+  <header style="height: 96px; padding: 0 52px 0 64px; display: flex; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--accent-ink);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.01em;">Browser Routines</span>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 4px;">
+      <a class="nav" href="#" aria-current="page" style="color: var(--text-1);">Directory</a><a class="nav" href="#">GitHub</a><a class="btn btn-primary" href="#" style="margin-left: 8px;">Install</a>
+    </nav>
+  </header>
+
+  <div style="padding: 24px 64px 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 40px;">
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <h1 style="margin: 0; font-size: 40px; line-height: 46px; font-weight: 600; letter-spacing: -0.025em;">Directory</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--text-2);">Routines published by people who run them.</p>
+    </div>
+    <label style="width: 400px; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-1); color: var(--text-3);">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+      <input type="search" aria-label="Search routines" placeholder="Search by site or task" style="flex: 1; border: 0; outline: 0; background: transparent; font: 400 14px var(--font-sans); color: var(--text-1);">
+      <kbd style="font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border-strong);">/</kbd>
+    </label>
+  </div>
+
+  <div style="padding: 40px 64px 0; display: grid; grid-template-columns: minmax(0, 1fr) 456px; gap: 40px; align-items: start;">
+    <div role="list" aria-label="Routines" style="border-top: 1px solid var(--border);">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="8">
+        <div class="item in" role="listitem" aria-current="{{it.sel}}" style="--i: {{it.i}}; background: {{it.bg}}; box-shadow: {{it.bar}};">
+          <span class="fav" aria-hidden="true">{{it.letter}}</span>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+            <span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">{{it.owner}}/</span>{{it.name}}</span>
+            <span style="font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{it.site}} · {{it.desc}}</span>
+          </div>
+          <span style="font-size: 13px; color: var(--text-3);">{{it.uses}} use it</span>
+          <span style="font-size: 13px; color: var(--text-3); text-align: right;">{{it.steps}} steps</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <aside class="pane" aria-label="play-release details" style="border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); padding: 24px; display: flex; flex-direction: column; gap: 24px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h2 class="mono" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 500;">play-release</h2>
+        <span style="font-size: 13px; color: var(--text-3);">by <a href="#" style="color: var(--text-2);">arunprakashg</a> · play.google.com · v4</span>
+        <span style="margin-top: 4px; font-size: 13px; color: var(--accent-ink); display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg>Working on 312 runs this week</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 12px; color: var(--text-3);">When to use</span>
+        <p style="margin: 0; font-size: 14px; line-height: 22px; color: var(--text-1);">Upload an Android App Bundle to a Google Play testing track and start the rollout. Use when the user asks to ship or release a build to internal, closed or open testing.</p>
+        <span style="font-size: 13px; color: var(--text-3);">Not for production releases.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 12px; color: var(--text-3);">Asks each run</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;"><span class="chip">{{p.version}}</span><span class="chip">{{p.notes}}</span><span class="chip">{{p.bundle}}</span></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 12px; color: var(--text-3);">Pauses before</span>
+        <span style="font-size: 14px; color: var(--warn); display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 4v8M10 4v8"></path></svg>Step 20, Start rollout</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 12px; color: var(--text-3); margin-bottom: 6px;">20 steps</span>
+        <sc-for list="{{steps}}" as="s" hint-placeholder-count="4">
+          <div class="step"><span class="n">{{s.n}}</span><span class="v">{{s.v}}</span><span class="t">{{s.t}}</span></div>
+        </sc-for>
+        <span style="font-size: 13px; color: var(--text-2); padding-left: 30px;">16 more</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 4px;">
+        <button class="btn btn-primary" type="button" style="width: 100%;">Add to my routines</button>
+        <span style="font-size: 12px; line-height: 18px; color: var(--text-3); text-align: center;">or from your agent<br><span class="mono" style="color: var(--text-2); white-space: nowrap;">routine_install("arunprakashg/play-release")</span></span>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1024}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const it = (i, owner, name, site, desc, uses, steps) => ({
+      i, owner, name, site, desc, uses, steps,
+      letter: site.replace(/^(dash|dashboard|search)\./, '').charAt(0).toUpperCase(),
+      sel: i === 0 ? 'true' : 'false',
+      bg: i === 0 ? 'var(--surface-1)' : 'transparent',
+      bar: i === 0 ? 'inset 2px 0 0 var(--accent)' : 'none'
+    });
+    return {
+      p: { bundle: '{{bundle}}', version: '{{version_name}}', notes: '{{release_notes}}' },
+      items: [
+        it(0, 'arunprakashg', 'play-release', 'play.google.com', 'Upload a bundle to a testing track and start rollout', '2.3k', 20),
+        it(1, 'arunprakashg', 'testflight-build', 'appstoreconnect.apple.com', 'Add a build to a TestFlight group', '1.9k', 14),
+        it(2, 'meeraiyer', 'gstr2b-download', 'gst.gov.in', 'Download GSTR-2B for a month', '8.1k', 11),
+        it(3, 'lena-w', 'stripe-refund', 'dashboard.stripe.com', 'Refund a payment, pauses before confirming', '3.0k', 7),
+        it(4, 'devkumar', 'search-console-sitemap', 'search.google.com', 'Submit a sitemap', '2.7k', 6),
+        it(5, 'tomaszk', 'cf-dns-record', 'dash.cloudflare.com', 'Add a DNS record, pauses before saving', '1.4k', 9),
+        it(6, 'lena-w', 'vercel-env-var', 'vercel.com', 'Set an environment variable for a project', '1.1k', 10),
+        it(7, 'arunprakashg', 'razorpay-settlements', 'dashboard.razorpay.com', 'Export settlements for a date range', '960', 8)
+      ],
+      steps: [
+        { n: '1', v: 'navigate', t: '…/internal-testing/releases/new' },
+        { n: '2', v: 'wait', t: '“Create internal testing release”' },
+        { n: '3', v: 'click', t: 'Upload' },
+        { n: '4', v: 'upload', t: '{{bundle}}' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

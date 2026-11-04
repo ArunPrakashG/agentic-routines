@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Empty and broken states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.sp,.sp *{box-sizing:border-box}
+.btn{height:44px;padding:0 16px;border-radius:8px;font:500 14px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:var(--surface-2);color:var(--text-1);border-color:var(--border-strong)}
+kbd{font-family:var(--font-mono);font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid currentColor;opacity:.6}
+.step{height:40px;display:grid;grid-template-columns:24px 52px minmax(0,1fr) auto;align-items:center;gap:6px;padding:0 12px;font-size:13px;white-space:nowrap}
+.step .n{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}
+.step .v{font-family:var(--font-mono);font-size:12px;color:var(--text-2)}
+.step .t{overflow:hidden;text-overflow:ellipsis}
+.step .s{display:flex;align-items:center;gap:6px;font-size:12px}
+.pips{display:inline-flex;gap:3px}
+.pips i{width:6px;height:6px;border-radius:2px;background:var(--surface-3)}
+.drift{animation:drift 6s ease-in-out infinite alternate}
+@keyframes drift{0%{transform:translateY(0)}100%{transform:translateY(-4px)}}
+.work{animation:work 1.6s var(--ease-in-out) infinite}
+@keyframes work{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+@media (prefers-reduced-motion: reduce){.sp *{animation:none !important}}
+</style>
+</helmet>
+<div class="sp t-light" style="width: 880px; height: 844px; display: flex; gap: 80px; background: var(--bg); color: var(--text-1); font-family: var(--font-sans);">
+
+  <!-- Empty -->
+  <div style="width: 400px; height: 844px; display: flex; flex-direction: column; border-left: 1px solid var(--border); border-right: 1px solid var(--border);">
+    <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border);">
+      <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--accent-ink);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <h1 style="margin: 0; font-size: 15px; font-weight: 500;">Routines</h1>
+    </header>
+    <main style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 32px; text-align: center;">
+      <svg class="drift" width="56" height="56" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--border-strong);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 500;">No routines yet</h2>
+        <p style="margin: 0; font-size: 13px; line-height: 20px; color: var(--text-2); max-width: 260px;">Runs from Claude Code, Codex, Copilot and OpenCode show up here. Or record one yourself.</p>
+      </div>
+      <button class="btn btn-primary" type="button" aria-keyshortcuts="R"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="currentColor"></circle></svg>Record a demo <kbd>R</kbd></button>
+    </main>
+  </div>
+
+  <!-- Broken: handed back to the agent -->
+  <div style="width: 400px; height: 844px; display: flex; flex-direction: column; border-left: 1px solid var(--border); border-right: 1px solid var(--border);">
+    <header style="flex-shrink: 0; padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid var(--border);">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <h1 style="margin: 0; font-family: var(--font-mono); font-size: 15px; font-weight: 500;">gstr2b-download <span style="color: var(--text-3); font-weight: 400;">v12</span></h1>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-2);">0:14</span>
+      </div>
+      <div style="height: 3px; border-radius: 2px; background: var(--surface-3); overflow: hidden;"><div style="width: 45%; height: 100%; background: var(--danger);"></div></div>
+      <span style="font-size: 12px; color: var(--danger);">Stopped at step 6 of 11</span>
+    </header>
+
+    <main style="flex: 1; padding: 8px 4px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="step" style="color: var(--text-2);"><span class="n"></span><span class="v"></span><span class="t" style="font-size: 12px;">Steps 1 to 5 done</span><span class="s" style="color: var(--accent-ink);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span></div>
+
+      <div style="border-radius: 10px; background: var(--surface-1); border: 1px solid var(--border);">
+        <div class="step"><span class="n">6</span><span class="v">click</span><span class="t">Download</span><span class="s" style="color: var(--danger);"><span class="pips" role="img" aria-label="Page passed, element and crop failed"><i style="background: var(--accent);"></i><i style="background: var(--danger);"></i><i style="background: var(--danger);"></i></span>broken</span></div>
+        <div style="padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+            <figure style="margin: 0; display: flex; flex-direction: column; gap: 6px;">
+              <div style="height: 72px; border-radius: 6px; background: #FFFFFF; border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center;" role="img" aria-label="Recorded crop: a Download button">
+                <span style="padding: 6px 12px; border-radius: 4px; background: #1B4F8C; color: #FFFFFF; font-size: 11px;">DOWNLOAD</span>
+              </div>
+              <figcaption style="font-size: 11px; color: var(--text-3);">Recorded</figcaption>
+            </figure>
+            <figure style="margin: 0; display: flex; flex-direction: column; gap: 6px;">
+              <div style="height: 72px; border-radius: 6px; background: #FFFFFF; border: 1.5px solid var(--danger); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;" role="img" aria-label="Current crop: two buttons, Generate Excel and Generate JSON">
+                <span style="padding: 4px 8px; border-radius: 4px; background: #1B4F8C; color: #FFFFFF; font-size: 9px;">GENERATE EXCEL FILE</span>
+                <span style="padding: 4px 8px; border-radius: 4px; border: 1px solid #1B4F8C; color: #1B4F8C; font-size: 9px;">GENERATE JSON FILE</span>
+              </div>
+              <figcaption style="font-size: 11px; color: var(--text-3);">Now</figcaption>
+            </figure>
+          </div>
+          <span style="font-size: 12px; line-height: 18px; color: var(--text-2);">The button is gone and two new ones replaced it. Too different to match without asking.</span>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-2); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+        <span style="font-size: 15px; font-weight: 500;">Claude Code has the page</span>
+        <span style="font-size: 13px; line-height: 20px; color: var(--text-2);">It finishes from step 6 and sends the fix to meeraiyer, who owns this routine.</span>
+        <div style="height: 2px; border-radius: 1px; background: var(--surface-3); overflow: hidden;" role="status" aria-label="Agent working"><div class="work" style="width: 25%; height: 100%; background: var(--text-2);"></div></div>
+      </div>
+    </main>
+
+    <footer style="flex-shrink: 0; padding: 12px 16px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+      <button class="btn btn-secondary" type="button" aria-keyshortcuts="Escape">Stop</button>
+    </footer>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

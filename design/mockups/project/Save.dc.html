@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Save routine</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.sp,.sp *{box-sizing:border-box}
+.btn{height:44px;padding:0 16px;border-radius:8px;font:500 14px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-ghost{background:transparent;color:var(--text-2)}
+.icon-btn{width:44px;height:44px;border-radius:8px;border:0;background:transparent;color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.step{position:relative;height:40px;display:grid;grid-template-columns:24px 60px minmax(0,1fr) auto;align-items:center;gap:6px;padding:0 12px;font-size:13px;white-space:nowrap}
+.step .n{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}
+.step .v{font-family:var(--font-mono);font-size:12px;color:var(--text-2)}
+.step .t{overflow:hidden;text-overflow:ellipsis}
+.chip{font-family:var(--font-mono);font-size:12px;padding:2px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink)}
+.lp{animation-duration:8s;animation-iteration-count:infinite;animation-fill-mode:both}
+.fold{transform-origin:50% 0;opacity:0;transform:scaleY(0);animation-name:fold;animation-timing-function:var(--ease-in-out);animation-delay:calc(var(--k) * 50ms)}
+@keyframes fold{0%,30%{opacity:1;transform:none}38%,88%{opacity:0;transform:scaleY(0)}96%,100%{opacity:1;transform:none}}
+.strike{position:absolute;left:102px;right:12px;top:20px;height:1px;background:var(--text-3);transform-origin:0 50%;animation-name:strike;animation-timing-function:var(--ease-out);animation-delay:calc(var(--k) * 50ms)}
+@keyframes strike{0%,16%{transform:scaleX(0)}24%,90%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+.newRow{animation-name:newRow;animation-timing-function:var(--ease-out)}
+@keyframes newRow{0%,36%{opacity:0;transform:translateX(-8px)}44%,86%{opacity:1;transform:none}90%,100%{opacity:0}}
+.shift{animation-name:shift;animation-timing-function:var(--ease-in-out)}
+@keyframes shift{0%,32%{transform:translateY(200px)}42%,88%{transform:none}96%,100%{transform:translateY(200px)}}
+.cOld{position:absolute;right:0;top:0;opacity:0;animation-name:cOld}
+@keyframes cOld{0%,36%{opacity:1}40%,88%{opacity:0}94%,100%{opacity:1}}
+.cNew{position:absolute;right:0;top:0;animation-name:cNew}
+@keyframes cNew{0%,38%{opacity:0}44%,86%{opacity:1}90%,100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.sp *{animation:none !important}}
+</style>
+</helmet>
+<div class="sp t-light" style="width: 400px; height: 844px; display: flex; flex-direction: column; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); border-left: 1px solid var(--border);">
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 16px 0 6px; border-bottom: 1px solid var(--border);">
+    <button class="icon-btn" type="button" aria-label="Back to routines"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 3L5 8l5 5"></path></svg></button>
+    <h1 style="margin: 0; font-size: 15px; font-weight: 500;">Save routine</h1>
+  </header>
+
+  <main style="flex: 1; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 20px;">
+    <label style="display: flex; flex-direction: column; gap: 8px;">
+      <span style="font-size: 12px; color: var(--text-3);">Name</span>
+      <input type="text" value="play-release" style="height: 44px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-1); color: var(--text-1); padding: 0 12px; font: 500 14px var(--font-mono);">
+    </label>
+
+    <label style="display: flex; flex-direction: column; gap: 8px;">
+      <span style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-3);"><span>When to use</span><span>Drafted by Claude Code</span></span>
+      <textarea rows="3" style="height: 84px; resize: none; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-1); color: var(--text-1); padding: 10px 12px; font: 400 13px/20px var(--font-sans);">Upload an Android App Bundle to a Google Play testing track and start the rollout. Use when the user asks to ship or release a build to internal, closed or open testing.</textarea>
+    </label>
+
+    <section aria-labelledby="vals" style="display: flex; flex-direction: column; gap: 8px;">
+      <h2 id="vals" style="margin: 0; font-size: 12px; font-weight: 400; color: var(--text-3);">Asked each run</h2>
+      <div style="border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);">
+        <sc-for list="{{params}}" as="p" hint-placeholder-count="3">
+          <div style="height: 44px; display: grid; grid-template-columns: auto minmax(0, 1fr) 36px; align-items: center; gap: 10px; padding: 0 4px 0 12px; border-top: {{p.bt}};">
+            <span class="chip">{{p.name}}</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{p.example}}</span>
+            <button class="icon-btn" type="button" aria-label="{{p.remove}}" style="width: 36px; height: 36px;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-labelledby="steps" style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <h2 id="steps" style="margin: 0; font-size: 12px; font-weight: 400; color: var(--text-3);">Steps</h2>
+        <span style="position: relative; width: 140px; height: 16px; font-size: 12px;">
+          <span class="cOld lp" style="color: var(--text-3);">25 recorded</span>
+          <span class="cNew lp" style="color: var(--text-2);"><span style="color: var(--text-1);">20</span> of 25 recorded</span>
+        </span>
+      </div>
+      <div style="position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);">
+        <div style="position: absolute; left: 0; right: 0; top: 4px;">
+          <div class="step newRow lp"><span class="n">1</span><span class="v">open</span><span class="t mono" style="font-family: var(--font-mono); font-size: 12px;">…/internal-testing/releases/new</span><span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-ink);">direct URL</span></div>
+        </div>
+        <div style="position: absolute; left: 0; right: 0; top: 4px;">
+          <sc-for list="{{old}}" as="o" hint-placeholder-count="6">
+            <div class="fold lp" style="--k: {{o.k}};"><div class="step"><span class="n">{{o.n}}</span><span class="v">{{o.v}}</span><span class="t" style="color: var(--text-2);">{{o.t}}</span><span></span><span class="strike lp" style="--k: {{o.k}};"></span></div></div>
+          </sc-for>
+        </div>
+        <div class="shift lp" style="position: absolute; left: 0; right: 0; top: 44px;">
+          <sc-for list="{{rest}}" as="s" hint-placeholder-count="10">
+            <div class="step"><span class="n">{{s.n}}</span><span class="v">{{s.v}}</span><span class="t">{{s.t}}<sc-if value="{{s.chip}}" hint-placeholder-val="{{false}}"><span class="chip">{{s.chip}}</span></sc-if></span><span></span></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 2px 0; font-size: 13px; color: var(--warn);">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 4v8M10 4v8"></path></svg>
+        Pauses before step 20, Start rollout
+      </div>
+    </section>
+  </main>
+
+  <footer style="flex-shrink: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; padding: 4px 16px 16px; border-top: 1px solid var(--border);">
+    <label style="grid-column: 1 / -1; height: 44px; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); cursor: pointer;">
+      <input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: var(--accent);">
+      Publish to the directory
+    </label>
+    <button class="btn btn-ghost" type="button">Discard</button>
+    <button class="btn btn-primary" type="button">Save routine</button>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      params: [
+        { name: '{{version_name}}', example: '2.14.0 (214)', remove: 'Keep version_name fixed', bt: '0' },
+        { name: '{{release_notes}}', example: 'Faster search. Fixes a crash when sharing a poem.', remove: 'Keep release_notes fixed', bt: '1px solid var(--border)' },
+        { name: '{{bundle}}', example: 'kavyam-2.14.0.aab', remove: 'Keep bundle fixed', bt: '1px solid var(--border)' }
+      ],
+      old: [
+        { k: 0, n: '1', v: 'navigate', t: 'play.google.com/console' },
+        { k: 1, n: '2', v: 'click', t: 'Kavyam' },
+        { k: 2, n: '3', v: 'click', t: 'Test and release' },
+        { k: 3, n: '4', v: 'click', t: 'Testing' },
+        { k: 4, n: '5', v: 'click', t: 'Internal testing' },
+        { k: 5, n: '6', v: 'click', t: 'Create new release' }
+      ],
+      rest: [
+        { n: '2', v: 'wait', t: '“Create internal testing release”' },
+        { n: '3', v: 'click', t: 'Upload' },
+        { n: '4', v: 'upload', t: '', chip: '{{bundle}}' },
+        { n: '5', v: 'wait', t: 'Upload complete' },
+        { n: '6', v: 'read', t: 'Version code' },
+        { n: '7', v: 'clear', t: 'Release name' },
+        { n: '8', v: 'type', t: '', chip: '{{version_name}}' },
+        { n: '9', v: 'click', t: 'Release notes' },
+        { n: '10', v: 'type', t: '', chip: '{{release_notes}}' },
+        { n: '11', v: 'click', t: 'Next' },
+        { n: '12', v: 'wait', t: '“Preview and confirm”' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

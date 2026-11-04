@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Replay, paused before an irreversible step</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.sp,.sp *{box-sizing:border-box}
+.btn{height:44px;padding:0 16px;border-radius:8px;font:500 14px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:var(--surface-2);color:var(--text-1);border-color:var(--border-strong)}
+kbd{font-family:var(--font-mono);font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid currentColor;opacity:.6}
+.step{position:relative;height:40px;display:grid;grid-template-columns:24px 52px minmax(0,1fr) auto;align-items:center;gap:6px;padding:0 12px;font-size:13px;white-space:nowrap}
+.step .n{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}
+.step .v{font-family:var(--font-mono);font-size:12px;color:var(--text-2)}
+.step .t{overflow:hidden;text-overflow:ellipsis}
+.step .s{display:flex;align-items:center;gap:6px;font-size:12px}
+.pips{display:inline-flex;gap:3px}
+.pips i{width:6px;height:6px;border-radius:2px;background:var(--surface-3)}
+.lp{animation-duration:7s;animation-iteration-count:infinite;animation-fill-mode:both}
+.scan i{animation:scan 7s var(--ease-out) infinite both}
+.scan i:nth-child(2){animation-delay:.09s}.scan i:nth-child(3){animation-delay:.18s}
+@keyframes scan{0%,4%{background:var(--surface-3);transform:scale(.8)}6%,100%{background:var(--accent);transform:none}}
+.sCheck{position:absolute;right:0;top:0;opacity:0;animation-name:sCheck}
+@keyframes sCheck{0%,15%{opacity:1}17%,100%{opacity:0}}
+.sDone{position:absolute;right:0;top:0;animation-name:sDone;animation-timing-function:var(--ease-settle)}
+@keyframes sDone{0%,16%{opacity:0;transform:scale(.7)}19%,100%{opacity:1;transform:none}}
+.bar{transform-origin:0 50%;animation-name:bar;animation-timing-function:var(--ease-in-out)}
+@keyframes bar{0%,15%{transform:scaleX(.9)}21%,100%{transform:scaleX(.95)}}
+.cur{position:absolute;inset:0;animation-name:cur}
+@keyframes cur{0%{opacity:0}2%{opacity:1}}
+.pTxtA{position:absolute;left:0;top:0;opacity:0;animation-name:pTxtA}
+@keyframes pTxtA{0%,16%{opacity:1}19%,100%{opacity:0}}
+.pTxtB{position:absolute;left:0;top:0;animation-name:pTxtB}
+@keyframes pTxtB{0%,19%{opacity:0}23%,100%{opacity:1}}
+.card{animation-name:card;animation-timing-function:var(--ease-out)}
+@keyframes card{0%,20%{opacity:0;transform:translateY(24px)}26%,95%{opacity:1;transform:none}100%{opacity:0;transform:none}}
+.breathe{animation:breathe 2.8s ease-in-out infinite alternate}
+@keyframes breathe{0%{border-color:var(--warn-a);transform:translateY(0)}100%{border-color:var(--warn);transform:translateY(-2px)}}
+@media (prefers-reduced-motion: reduce){.sp *{animation:none !important}}
+</style>
+</helmet>
+<div class="sp t-light" style="width: 400px; height: 844px; position: relative; display: flex; flex-direction: column; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); border-left: 1px solid var(--border);">
+  <header style="flex-shrink: 0; padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid var(--border);">
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <h1 style="margin: 0; font-family: var(--font-mono); font-size: 15px; font-weight: 500;">play-release <span style="color: var(--text-3); font-weight: 400;">v4</span></h1>
+      <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-2);">0:27</span>
+    </div>
+    <div role="progressbar" aria-valuemin="0" aria-valuemax="20" aria-valuenow="19" aria-label="Replay progress" style="height: 3px; border-radius: 2px; background: var(--surface-3); overflow: hidden;"><div class="bar lp" style="width: 100%; height: 100%; background: var(--accent); transform: scaleX(.95);"></div></div>
+    <div style="position: relative; height: 18px; font-size: 12px; color: var(--text-2);">
+      <span class="pTxtA lp">Step 19 of 20 · no model calls since step 9</span>
+      <span class="pTxtB lp">Paused at step 20 · 1 model call</span>
+    </div>
+  </header>
+
+  <section aria-label="Values for this run" style="flex-shrink: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 12px;">
+    <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px;"><span style="color: var(--text-3);">version_name</span><span>2.15.0 (215)</span></div>
+    <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px;"><span style="color: var(--text-3);">release_notes</span><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Dark mode for the reader.</span></div>
+    <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px;"><span style="color: var(--text-3);">bundle</span><span>kavyam-2.15.0.aab</span></div>
+  </section>
+
+  <main style="flex: 1; min-height: 0; overflow: hidden; padding: 8px 4px 200px;">
+    <div class="step"><span class="n">8</span><span class="v">type</span><span class="t">Release name</span><span class="s" style="color: var(--accent-ink);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg>done</span></div>
+
+    <div style="margin: 2px 0; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--border);">
+      <div class="step"><span class="n">9</span><span class="v">click</span><span class="t">Release notes</span><span class="s" style="color: var(--warn);"><span class="pips" role="img" aria-label="Page passed, element and crop changed"><i style="background: var(--accent);"></i><i style="background: var(--warn);"></i><i style="background: var(--warn);"></i></span>changed</span></div>
+      <div style="padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <figure style="margin: 0; display: flex; flex-direction: column; gap: 6px;">
+            <div style="height: 64px; border-radius: 6px; background: #FFFFFF; border: 1px solid var(--border-strong); padding: 10px; display: flex; flex-direction: column; gap: 6px;" role="img" aria-label="Recorded crop: field labelled Release notes">
+              <span style="font-size: 11px; color: #3C4043;">Release notes</span>
+              <span style="height: 18px; border-radius: 4px; border: 1px solid #DADCE0;"></span>
+            </div>
+            <figcaption style="font-size: 11px; color: var(--text-3);">Recorded</figcaption>
+          </figure>
+          <figure style="margin: 0; display: flex; flex-direction: column; gap: 6px;">
+            <div style="height: 64px; border-radius: 6px; background: #FFFFFF; border: 1.5px solid var(--warn); padding: 10px; display: flex; flex-direction: column; gap: 6px;" role="img" aria-label="Current crop: field labelled Release notes, en-US">
+              <span style="font-size: 11px; color: #3C4043;">Release notes · en-US</span>
+              <span style="height: 18px; border-radius: 4px; border: 1px solid #DADCE0;"></span>
+            </div>
+            <figcaption style="font-size: 11px; color: var(--text-3);">Now</figcaption>
+          </figure>
+        </div>
+        <span style="font-size: 12px; color: var(--text-2);">Label changed. Model matched it in one call; step updated for v5.</span>
+      </div>
+    </div>
+
+    <div class="step" style="color: var(--text-2);"><span class="n"></span><span class="v"></span><span class="t" style="font-size: 12px;">Steps 10 to 18 done</span><span class="s" style="color: var(--accent-ink);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span></div>
+
+    <div class="step" style="border-radius: 8px;"><span class="n">19</span><span class="v">wait</span><span class="t">Saved</span>
+      <span style="position: relative; width: 82px; height: 18px;">
+        <span class="s sCheck lp" style="color: var(--text-2);"><span class="pips scan"><i></i><i></i><i></i></span>checking</span>
+        <span class="s sDone lp" style="color: var(--accent-ink);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg>done</span>
+      </span>
+    </div>
+  </main>
+
+  <div class="card lp" style="position: absolute; left: 12px; right: 12px; bottom: 12px;">
+    <section class="breathe" aria-live="polite" aria-label="Paused before an irreversible step" style="border: 1.5px solid var(--warn); border-radius: 12px; background: var(--surface-2); box-shadow: var(--shadow-2); padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 4v8M10 4v8"></path></svg>Paused before step 20</span>
+        <span style="font-size: 17px; font-weight: 500; line-height: 24px;">Start rollout to Internal testing</span>
+        <span style="font-size: 13px; color: var(--text-2);">Kavyam 2.15.0 (215) · checks passed</span>
+      </div>
+      <div style="display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px;">
+        <button class="btn btn-secondary" type="button" aria-keyshortcuts="Escape">Stop</button>
+        <button class="btn btn-primary" type="button" aria-keyshortcuts="Meta+Enter">Start rollout <kbd>⌘↵</kbd></button>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

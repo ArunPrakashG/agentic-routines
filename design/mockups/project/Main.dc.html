@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Browser Routines hero</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.st,.st *{box-sizing:border-box}
+.st .an{animation-duration:var(--loop);animation-iteration-count:infinite;animation-fill-mode:both}
+.row{position:relative;height:18px;display:grid;grid-template-columns:28px 76px minmax(0,1fr);align-items:center;font-family:var(--font-mono);font-size:12px;white-space:nowrap}
+.row .n{color:var(--text-3)}.row .v{color:var(--text-2)}.row .t{color:var(--text-1);overflow:hidden;text-overflow:ellipsis;position:relative;height:18px;line-height:18px}
+.rowIn{animation-name:rowIn;animation-delay:calc(var(--i) * 90ms);animation-timing-function:var(--ease-out)}
+@keyframes rowIn{0%{opacity:0;transform:translateY(4px)}2%{opacity:1;transform:none}79%{opacity:1}80%,100%{opacity:0}}
+.fold{transform-origin:50% 0;animation-name:fold;animation-delay:calc(var(--k) * 50ms);animation-timing-function:var(--ease-in-out)}
+@keyframes fold{0%,25%{opacity:1;transform:scaleY(1)}28%,100%{opacity:0;transform:scaleY(0)}}
+.strike{position:absolute;left:104px;right:0;top:9px;height:1px;background:var(--text-3);transform-origin:0 50%;animation-name:strike;animation-delay:calc(var(--k) * 50ms);animation-timing-function:var(--ease-out)}
+@keyframes strike{0%,21%{transform:scaleX(0)}24%,100%{transform:scaleX(1)}}
+.shift{animation-name:shift;animation-timing-function:var(--ease-in-out)}
+@keyframes shift{0%,26%{transform:none}30.5%,100%{transform:translateY(-90px)}}
+.xOld{position:absolute;left:0;top:0;animation-name:xOld}
+@keyframes xOld{0%,26%{opacity:1}28.5%,100%{opacity:0}}
+.xNew{position:absolute;left:0;top:0;animation-name:xNew;animation-timing-function:var(--ease-out)}
+@keyframes xNew{0%,28%{opacity:0;transform:translateX(-8px)}31.5%,100%{opacity:1;transform:none}}
+.pOld{position:absolute;left:0;top:0;animation-name:pOld;animation-delay:calc(var(--k) * 80ms)}
+@keyframes pOld{0%,32%{opacity:1}34%,100%{opacity:0}}
+.pNew{position:absolute;left:0;top:1px;height:16px;line-height:16px;padding:0 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink);animation-name:pNew;animation-delay:calc(var(--k) * 80ms);animation-timing-function:var(--ease-settle)}
+@keyframes pNew{0%,33%{opacity:0;transform:scale(.94)}36%,100%{opacity:1;transform:none}}
+.card{transform-origin:50% 0;opacity:0;animation-name:card;animation-timing-function:var(--ease-in-out)}
+@keyframes card{0%{opacity:0;transform:none}2%,41%{opacity:1;transform:none}44%{opacity:0}47%,100%{opacity:0;transform:scaleY(.04)}}
+.call{animation-name:call;animation-timing-function:var(--ease-settle)}
+@keyframes call{0%,45%{opacity:0;transform:translateY(16px)}50%,96%{opacity:1;transform:none}99%,100%{opacity:0}}
+.tick{position:relative;width:20px;height:8px;border-radius:2px;background:var(--surface-3)}
+.tick i{position:absolute;inset:0;border-radius:2px;background:var(--accent)}
+.tA{animation-name:tA;animation-delay:calc(var(--i) * 140ms);animation-timing-function:var(--ease-settle)}
+@keyframes tA{0%,54.29%{opacity:0;transform:scale(.3)}55.4%,96%{opacity:1;transform:none}99%,100%{opacity:0}}
+.tB{animation-name:tB;animation-delay:calc(var(--i) * 140ms);animation-timing-function:var(--ease-settle)}
+@keyframes tB{0%,68.57%{opacity:0;transform:scale(.3)}69.7%,96%{opacity:1;transform:none}99%,100%{opacity:0}}
+.tWarn{background:var(--warn) !important;animation-name:tWarn}
+@keyframes tWarn{0%,62.3%{opacity:0;transform:scale(.3)}63.2%,67%{opacity:1;transform:none}68.5%,100%{opacity:0}}
+.tFix{animation-name:tFix;animation-timing-function:var(--ease-settle)}
+@keyframes tFix{0%,67.9%{opacity:0;transform:scale(.3)}69%,96%{opacity:1;transform:none}99%,100%{opacity:0}}
+.tLast{animation-name:tLast;animation-timing-function:var(--ease-settle)}
+@keyframes tLast{0%,86.4%{opacity:0;transform:scale(.3)}87.4%,96%{opacity:1;transform:none}99%,100%{opacity:0}}
+.ring{position:absolute;inset:-4px;border:1.5px solid var(--warn);border-radius:4px;opacity:0;animation-name:ring;animation-timing-function:ease-in-out}
+@keyframes ring{0%,78%{opacity:0;transform:scale(.8)}79.3%{opacity:1;transform:none}81.5%{opacity:.45}83.5%{opacity:1}85.7%{opacity:.6}86.6%,100%{opacity:0}}
+.lab{position:absolute;left:0;top:0;white-space:nowrap}
+.l1{opacity:0;animation-name:l1;animation-timing-function:var(--ease-out)}
+@keyframes l1{0%,62.5%{opacity:0;transform:translateY(4px)}64.5%,76%{opacity:1;transform:none}77.5%,100%{opacity:0}}
+.l2{opacity:0;animation-name:l2;animation-timing-function:var(--ease-out)}
+@keyframes l2{0%,78.6%{opacity:0;transform:translateY(4px)}80%,85.5%{opacity:1;transform:none}86.5%,100%{opacity:0}}
+.l3{animation-name:l3;animation-timing-function:var(--ease-out)}
+@keyframes l3{0%,87%{opacity:0;transform:translateY(4px)}89%,96%{opacity:1;transform:none}99%,100%{opacity:0}}
+.phase{transform:translateX(240px);animation-name:phase;animation-timing-function:var(--ease-settle)}
+@keyframes phase{0%,23%{transform:none}25.5%,52%{transform:translateX(120px)}54.5%,97%{transform:translateX(240px)}100%{transform:none}}
+.fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;transform-origin:0 50%}
+.gFirst{animation-name:gFirst;animation-timing-function:var(--ease-out)}
+@keyframes gFirst{0%,3%{transform:scaleX(0);opacity:1}21%,96%{transform:none;opacity:1}99%,100%{opacity:0;transform:none}}
+.gRep{animation-name:gRep;animation-timing-function:var(--ease-out)}
+@keyframes gRep{0%,56%{transform:scaleX(0);opacity:1}70%,96%{transform:none;opacity:1}99%,100%{opacity:0}}
+.vFirst{animation-name:vFirst}
+@keyframes vFirst{0%,19%{opacity:0}22%,96%{opacity:1}99%,100%{opacity:0}}
+.vRep{animation-name:vRep}
+@keyframes vRep{0%,69%{opacity:0}72%,96%{opacity:1}99%,100%{opacity:0}}
+.drift{animation:drift 7s ease-in-out infinite alternate}
+@keyframes drift{0%{transform:translateY(0)}100%{transform:translateY(-3px)}}
+@media (prefers-reduced-motion: reduce){.st *{animation:none !important}}
+</style>
+</helmet>
+<div class="st t-light" style="width: 1440px; height: 810px; position: relative; overflow: hidden; background: var(--bg); color: var(--text-1); font-family: var(--font-sans);">
+
+  <div style="position: absolute; left: 64px; top: 48px; display: flex; align-items: center; gap: 10px;">
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--accent-ink);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.01em;">Browser Routines</span>
+  </div>
+
+  <h1 style="position: absolute; left: 64px; top: 104px; margin: 0; font-size: 44px; line-height: 50px; font-weight: 600; letter-spacing: -0.025em;"><span style="display: block;">Record a browser task once.</span><span style="display: block; color: var(--text-2);">Replay it without the model.</span></h1>
+
+  <!-- Left: the recorded run, compiled, then folded into one call -->
+  <div class="card an" style="position: absolute; left: 64px; top: 248px; width: 680px; height: 520px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); overflow: hidden;">
+    <div style="height: 44px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); font-size: 13px;">
+      <span style="position: relative; width: 320px; height: 20px; line-height: 20px;">
+        <span class="xOld an" style="color: var(--text-2);">Agent run · play.google.com</span>
+        <span class="xNew an" style="color: var(--text-1);">Routine <span style="font-family: var(--font-mono); color: var(--accent-ink);">play-release</span></span>
+      </span>
+      <span style="position: relative; width: 80px; height: 20px; line-height: 20px; font-family: var(--font-mono); font-size: 12px; text-align: right;">
+        <span class="xOld an" style="left: auto; right: 0; color: var(--text-3);">25 steps</span>
+        <span class="xNew an" style="left: auto; right: 0; color: var(--text-1);">20 steps</span>
+      </span>
+    </div>
+    <div style="position: absolute; left: 16px; right: 16px; top: 56px; height: 456px; overflow: hidden;">
+      <div class="row rowIn an" style="--i: 0;"><span class="n">1</span><span class="v">navigate</span><span class="t"><span class="xOld an">play.google.com/console</span><span class="xNew an">play.google.com/console/…/tracks/internal-testing/releases/new <span style="margin-left: 8px; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-ink); font-size: 11px;">direct URL</span></span></span></div>
+      <div class="fold an" style="--k: 0;"><div class="row rowIn an" style="--i: 1;"><span class="n">2</span><span class="v">click</span><span class="t">Kavyam</span><span class="strike an" style="--k: 0;"></span></div></div>
+      <div class="fold an" style="--k: 1;"><div class="row rowIn an" style="--i: 2;"><span class="n">3</span><span class="v">click</span><span class="t">Test and release</span><span class="strike an" style="--k: 1;"></span></div></div>
+      <div class="fold an" style="--k: 2;"><div class="row rowIn an" style="--i: 3;"><span class="n">4</span><span class="v">click</span><span class="t">Testing</span><span class="strike an" style="--k: 2;"></span></div></div>
+      <div class="fold an" style="--k: 3;"><div class="row rowIn an" style="--i: 4;"><span class="n">5</span><span class="v">click</span><span class="t">Internal testing</span><span class="strike an" style="--k: 3;"></span></div></div>
+      <div class="fold an" style="--k: 4;"><div class="row rowIn an" style="--i: 5;"><span class="n">6</span><span class="v">click</span><span class="t">Create new release</span><span class="strike an" style="--k: 4;"></span></div></div>
+      <div class="shift an">
+        <div class="row rowIn an" style="--i: 6;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">7</span><span class="xNew an">2</span></span><span class="v">wait</span><span class="t">“Create internal testing release”</span></div>
+        <div class="row rowIn an" style="--i: 7;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">8</span><span class="xNew an">3</span></span><span class="v">click</span><span class="t">Upload</span></div>
+        <div class="row rowIn an" style="--i: 8;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">9</span><span class="xNew an">4</span></span><span class="v">upload</span><span class="t"><span class="pOld an" style="--k: 0;">kavyam-2.14.0.aab</span><span class="pNew an" style="--k: 0;">{{p.bundle}}</span></span></div>
+        <div class="row rowIn an" style="--i: 9;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">10</span><span class="xNew an">5</span></span><span class="v">wait</span><span class="t">Upload complete</span></div>
+        <div class="row rowIn an" style="--i: 10;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">11</span><span class="xNew an">6</span></span><span class="v">read</span><span class="t">Version code 214</span></div>
+        <div class="row rowIn an" style="--i: 11;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">12</span><span class="xNew an">7</span></span><span class="v">clear</span><span class="t">Release name</span></div>
+        <div class="row rowIn an" style="--i: 12;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">13</span><span class="xNew an">8</span></span><span class="v">type</span><span class="t"><span class="pOld an" style="--k: 1;">Release name · “2.14.0 (214)”</span><span class="pNew an" style="--k: 1;">{{p.version}}</span></span></div>
+        <div class="row rowIn an" style="--i: 13;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">14</span><span class="xNew an">9</span></span><span class="v">click</span><span class="t">Release notes</span></div>
+        <div class="row rowIn an" style="--i: 14;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">15</span><span class="xNew an">10</span></span><span class="v">type</span><span class="t"><span class="pOld an" style="--k: 2;">“Faster search. Fixes a crash when sharing a poem.”</span><span class="pNew an" style="--k: 2;">{{p.notes}}</span></span></div>
+        <div class="row rowIn an" style="--i: 15;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">16</span><span class="xNew an">11</span></span><span class="v">click</span><span class="t">Next</span></div>
+        <div class="row rowIn an" style="--i: 16;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">17</span><span class="xNew an">12</span></span><span class="v">wait</span><span class="t">“Preview and confirm”</span></div>
+        <div class="row rowIn an" style="--i: 17;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">18</span><span class="xNew an">13</span></span><span class="v">read</span><span class="t">0 errors, 1 warning</span></div>
+        <div class="row rowIn an" style="--i: 18;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">19</span><span class="xNew an">14</span></span><span class="v">click</span><span class="t">Show warning</span></div>
+        <div class="row rowIn an" style="--i: 19;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">20</span><span class="xNew an">15</span></span><span class="v">read</span><span class="t">Deobfuscation file not uploaded</span></div>
+        <div class="row rowIn an" style="--i: 20;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">21</span><span class="xNew an">16</span></span><span class="v">click</span><span class="t">Hide warning</span></div>
+        <div class="row rowIn an" style="--i: 21;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">22</span><span class="xNew an">17</span></span><span class="v">scroll</span><span class="t">To bottom</span></div>
+        <div class="row rowIn an" style="--i: 22;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">23</span><span class="xNew an">18</span></span><span class="v">click</span><span class="t">Save</span></div>
+        <div class="row rowIn an" style="--i: 23;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">24</span><span class="xNew an">19</span></span><span class="v">wait</span><span class="t">Saved</span></div>
+        <div class="row rowIn an" style="--i: 24;"><span class="n" style="position: relative; height: 18px;"><span class="xOld an">25</span><span class="xNew an">20</span></span><span class="v">click</span><span class="t">Start rollout to Internal testing</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left: the single call that replaces it -->
+  <div class="call an" style="position: absolute; left: 64px; top: 248px; width: 680px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); padding: 24px;">
+    <div class="drift">
+      <pre style="margin: 0; font-family: var(--font-mono); font-size: 14px; line-height: 24px; color: var(--text-2);"><span style="color: var(--accent-ink);">routine_run</span>(<span style="color: var(--text-1);">"play-release"</span>, {
+  version_name: <span style="color: var(--text-1);">"2.15.0 (215)"</span>,
+  release_notes: <span style="color: var(--text-1);">"Dark mode for the reader."</span>,
+  bundle: <span style="color: var(--text-1);">"kavyam-2.15.0.aab"</span>
+})</pre>
+      <div style="margin-top: 28px; display: flex; gap: 6px;" role="img" aria-label="20 replayed steps">
+        <span class="tick"><i class="tA an" style="--i: 0;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 1;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 2;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 3;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 4;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 5;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 6;"></i></span>
+        <span class="tick"><i class="tA an" style="--i: 7;"></i></span>
+        <span class="tick"><i class="tWarn an"></i><i class="tFix an"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 0;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 1;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 2;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 3;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 4;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 5;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 6;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 7;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 8;"></i></span>
+        <span class="tick"><i class="tB an" style="--i: 9;"></i></span>
+        <span class="tick"><i class="tLast an"></i><b class="ring an"></b></span>
+      </div>
+      <div style="position: relative; margin-top: 16px; height: 20px; font-size: 13px; line-height: 20px;">
+        <span class="lab l1 an" style="color: var(--warn);">Step 9 changed · model called once</span>
+        <span class="lab l2 an" style="color: var(--warn);">Paused before Start rollout · waiting for you</span>
+        <span class="lab l3 an" style="color: var(--text-1);">20 steps · 1 model call · 0:31</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: phase and the cost of each run -->
+  <div style="position: absolute; left: 824px; top: 248px; width: 552px;">
+    <div style="position: relative; display: flex; font-size: 15px; font-weight: 500; height: 32px;">
+      <span style="width: 120px;">Record</span>
+      <span style="width: 120px;">Compile</span>
+      <span style="width: 120px;">Replay</span>
+      <span class="phase an" style="position: absolute; left: 0; bottom: 0; width: 28px; height: 2px; border-radius: 1px; background: var(--accent);"></span>
+    </div>
+
+    <div style="margin-top: 48px; display: flex; flex-direction: column; gap: 36px;">
+      <sc-for list="{{metrics}}" as="m" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <span style="font-size: 13px; color: var(--text-2);">{{m.label}}</span>
+          <div style="display: grid; grid-template-columns: 88px minmax(0, 1fr) 72px; align-items: center; gap: 12px; font-size: 12px;">
+            <span style="color: var(--text-3);">First run</span>
+            <span style="position: relative; height: 6px; border-radius: 3px; background: var(--surface-2);"><span class="fill gFirst an" style="width: 100%; background: var(--text-3);"></span></span>
+            <span class="vFirst an" style="font-family: var(--font-mono); text-align: right;">{{m.first}}</span>
+            <span style="color: var(--text-3);">Replay</span>
+            <span style="position: relative; height: 6px; border-radius: 3px; background: var(--surface-2);"><span class="fill gRep an" style="width: {{m.rep}}; min-width: 4px; background: var(--accent);"></span></span>
+            <span class="vRep an" style="font-family: var(--font-mono); text-align: right; color: var(--accent-ink);">{{m.replay}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <p style="margin: 40px 0 0; font-size: 11px; color: var(--text-3);">Estimates for one 25-step task, not measured.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      p: { bundle: '{{bundle}}', version: '{{version_name}}', notes: '{{release_notes}}' },
+      metrics: [
+        { label: 'Tokens in context', first: '128k', replay: '2.1k', rep: '1.6%' },
+        { label: 'Time', first: '2:34', replay: '0:31', rep: '20%' },
+        { label: 'Cost', first: '$1.40', replay: '$0.02', rep: '1.4%' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

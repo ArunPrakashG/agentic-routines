@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Profile, signed in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.mk,.mk *{box-sizing:border-box}
+.mono{font-family:var(--font-mono)}
+.btn{height:44px;padding:0 18px;border-radius:8px;font:500 14px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:var(--surface-1);color:var(--text-1);border-color:var(--border-strong)}
+.av{border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-weight:600;display:inline-flex;align-items:center;justify-content:center}
+.nav{height:44px;padding:0 12px;display:inline-flex;align-items:center;font-size:14px;color:var(--text-2);text-decoration:none}
+.chip{padding:2px 7px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink);font-family:var(--font-mono);font-size:12px}
+.item{height:72px;display:grid;grid-template-columns:40px minmax(0,1fr) 96px 80px;gap:16px;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer}
+.fav{width:32px;height:32px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--text-2)}
+.step{height:32px;display:grid;grid-template-columns:24px 60px minmax(0,1fr);align-items:center;gap:6px;font-size:13px;white-space:nowrap}
+.step .n{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}.step .v{font-family:var(--font-mono);font-size:12px;color:var(--text-2)}
+.step .t{overflow:hidden;text-overflow:ellipsis}
+.in{animation:in .42s var(--ease-out) both;animation-delay:calc(var(--i) * 50ms + .1s)}
+@keyframes in{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.pane{animation:pane .42s var(--ease-out) .25s both}
+@keyframes pane{0%{opacity:0;transform:translateX(12px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.mk *{animation:none !important}}
+</style>
+</helmet>
+<div class="mk t-light" style="width: 1440px; height: 720px; background: var(--bg); color: var(--text-1); font-family: var(--font-sans);">
+  <header style="height: 96px; padding: 0 52px 0 64px; display: flex; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--accent-ink);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.01em;">Browser Routines</span>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 4px;">
+      <a class="nav" href="#">Directory</a><a class="nav" href="#">GitHub</a>
+      <a href="#" aria-label="Your profile, arunprakashg" aria-current="page" style="text-decoration: none; width: 44px; height: 44px; margin-left: 4px; display: inline-flex; align-items: center; justify-content: center;"><span class="av" style="width: 32px; height: 32px; font-size: 14px;">A</span></a>
+    </nav>
+  </header>
+
+  <div style="padding: 24px 64px 0; display: flex; align-items: center; gap: 20px;">
+    <span class="av" aria-hidden="true" style="width: 64px; height: 64px; font-size: 26px;">A</span>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 600; letter-spacing: -0.02em;">Arun Prakash</h1>
+      <span style="font-size: 14px; color: var(--text-3);"><span class="mono" style="color: var(--text-2);">arunprakashg</span> · 3 routines · used by 5.2k people</span>
+    </div>
+  </div>
+
+  <section aria-labelledby="fx" class="in" style="--i: 0; margin: 48px 64px 0; display: flex; flex-direction: column; gap: 12px;">
+    <h2 id="fx" style="margin: 0; font-size: 13px; font-weight: 400; color: var(--text-3);">Fix waiting for you</h2>
+    <div style="height: 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 16px 0 20px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); box-shadow: inset 2px 0 0 var(--accent);">
+      <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+        <span style="font-size: 15px;"><span class="mono" style="font-weight: 500;">testflight-build</span> <span style="color: var(--text-2);">· Step 7 changed. “Add testers” moved into the group menu.</span></span>
+        <span style="font-size: 13px; color: var(--text-3);">Fixed by <a href="#" style="color: var(--text-2);">lena-w</a> · worked on 6 runs by 3 people</span>
+      </div>
+      <div style="display: flex; gap: 8px; flex-shrink: 0;">
+        <a class="btn btn-secondary" href="#">Compare</a>
+        <button class="btn btn-primary" type="button">Publish as v3</button>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="pub" style="margin: 48px 64px 0; display: flex; flex-direction: column; gap: 12px;">
+    <h2 id="pub" style="margin: 0; font-size: 13px; font-weight: 400; color: var(--text-3);">Published</h2>
+    <div role="list" style="border-top: 1px solid var(--border);">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="3">
+        <div class="item in" role="listitem" style="--i: {{it.i}}; grid-template-columns: 40px minmax(0, 1fr) 96px 80px 80px;">
+          <span class="fav" aria-hidden="true">{{it.letter}}</span>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+            <span class="mono" style="font-size: 14px; font-weight: 500;">{{it.name}}</span>
+            <span style="font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{it.site}} · {{it.desc}}</span>
+          </div>
+          <span style="font-size: 13px; color: var(--text-3);">{{it.uses}} use it</span>
+          <span style="font-size: 13px; color: var(--text-3);">{{it.ver}}</span>
+          <span style="font-size: 13px; color: var(--text-3); text-align: right;">{{it.steps}} steps</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const it = (i, name, site, desc, uses, ver, steps) => ({ i: i + 1, name, site, desc, uses, ver, steps, letter: site.replace(/^(dash|dashboard)\./, '').charAt(0).toUpperCase() });
+    return {
+      items: [
+        it(0, 'play-release', 'play.google.com', 'Upload a bundle to a testing track and start rollout', '2.3k', 'v4', 20),
+        it(1, 'testflight-build', 'appstoreconnect.apple.com', 'Add a build to a TestFlight group', '1.9k', 'v2', 14),
+        it(2, 'razorpay-settlements', 'dashboard.razorpay.com', 'Export settlements for a date range', '960', 'v1', 8)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

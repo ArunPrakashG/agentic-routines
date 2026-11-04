@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent calls one routine</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.tm,.tm *{box-sizing:border-box}
+.ln{animation:12s var(--ease-out) infinite both}
+.a0{animation-name:a0}.a1{animation-name:a1}.a2{animation-name:a2}.a3{animation-name:a3}.a4{animation-name:a4}.a5{animation-name:a5}.a6{animation-name:a6}.a7{animation-name:a7}.a8{animation-name:a8}
+@keyframes a0{0%{opacity:0;transform:translateY(4px)}2.5%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a1{0%,7.5%{opacity:0;transform:translateY(4px)}10%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a2{0%,20%{opacity:0;transform:translateY(4px)}22.5%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a3{0%,26.7%{opacity:0;transform:translateY(4px)}29.2%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a4{0%,35%{opacity:0;transform:translateY(4px)}37.5%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a5{0%,43.3%{opacity:0;transform:translateY(4px)}45.8%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a6{0%,55%{opacity:0;transform:translateY(4px)}57.5%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a7{0%,65%{opacity:0;transform:translateY(4px)}67.5%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+@keyframes a8{0%,71.7%{opacity:0;transform:translateY(4px)}74.2%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+.grow{transform-origin:0 50%;animation:grow 12s var(--ease-out) infinite both}
+@keyframes grow{0%,62%{transform:scaleX(0)}72%,94%{transform:none}98%,100%{transform:none;opacity:0}}
+.cursor{display:inline-block;width:8px;height:16px;background:var(--text-2);vertical-align:-3px;animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.tm *{animation:none !important}}
+</style>
+</helmet>
+<div class="tm t-dark" style="width: 960px; height: 844px; display: flex; flex-direction: column; background: var(--bg); color: var(--text-1); font-family: var(--font-mono); font-size: 14px; line-height: 22px; border: 1px solid var(--border);">
+  <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border); font-family: var(--font-sans); font-size: 12px; color: var(--text-3);">
+    <span>~/Projects/kavyam</span>
+    <span>Claude Code · Codex · Copilot · OpenCode</span>
+  </div>
+
+  <main style="flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px;">
+    <p class="ln a0" style="margin: 0; color: var(--text-2);">&gt; <span style="color: var(--text-1);">Ship 2.15.0 to internal testing. Notes: “Dark mode for the reader.”</span></p>
+
+    <div class="ln a1" style="display: flex; flex-direction: column; gap: 4px;">
+      <span><span style="color: var(--accent-ink);">●</span> browser-routines · <span style="color: var(--accent-ink);">routine_run</span></span>
+      <span style="padding-left: 22px; color: var(--text-2);">name: <span style="color: var(--text-1);">"play-release"</span></span>
+      <span style="padding-left: 22px; color: var(--text-2);">version_name: <span style="color: var(--text-1);">"2.15.0 (215)"</span></span>
+      <span style="padding-left: 22px; color: var(--text-2);">release_notes: <span style="color: var(--text-1);">"Dark mode for the reader."</span></span>
+      <span style="padding-left: 22px; color: var(--text-2);">bundle: <span style="color: var(--text-1);">"build/app/outputs/bundle/release/app-release.aab"</span></span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 22px; border-left: 1px solid var(--border); margin-left: 5px;">
+      <span class="ln a2" style="padding-left: 16px; color: var(--text-2);">Steps 1–8 replayed</span>
+      <span class="ln a3" style="padding-left: 16px; color: var(--warn);">Step 9 changed · “Release notes” is now “Release notes · en-US” · model matched it (1 call)</span>
+      <span class="ln a4" style="padding-left: 16px; color: var(--text-2);">Steps 10–19 replayed</span>
+      <span class="ln a5" style="padding-left: 16px; color: var(--warn);">Paused before step 20 “Start rollout to Internal testing” · approved in the side panel</span>
+      <span class="ln a6" style="padding-left: 16px; color: var(--text-1);"><span style="color: var(--accent-ink);">Done</span> · 20 steps · 1 model call · 0:31 · routine updated to v5</span>
+    </div>
+
+    <p class="ln a7" style="margin: 0;"><span style="color: var(--text-1);">●</span> <span style="font-family: var(--font-sans); font-size: 15px;">Kavyam 2.15.0 (215) is rolling out to Internal testing.</span></p>
+
+    <p class="ln a8" style="margin: 0; color: var(--text-2);">&gt; <span class="cursor"></span></p>
+  </main>
+
+  <footer style="flex-shrink: 0; padding: 18px 32px 22px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 200px minmax(0, 1fr) 64px; gap: 10px 16px; align-items: center; font-family: var(--font-sans); font-size: 12px;">
+    <span style="color: var(--text-2);">This task in context</span>
+    <span style="position: relative; height: 6px; border-radius: 3px; background: var(--surface-2);"><span class="grow" style="position: absolute; left: 0; top: 0; bottom: 0; width: 1.6%; min-width: 4px; border-radius: 3px; background: var(--accent);"></span></span>
+    <span style="font-family: var(--font-mono); text-align: right; color: var(--accent-ink);">2.1k</span>
+    <span style="color: var(--text-3);">Same task, step by step</span>
+    <span style="position: relative; height: 6px; border-radius: 3px; background: var(--surface-2);"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 100%; border-radius: 3px; background: var(--text-3); opacity: .6;"></span></span>
+    <span style="font-family: var(--font-mono); text-align: right; color: var(--text-2);">128k</span>
+    <span></span>
+    <span style="font-size: 11px; color: var(--text-3);">Estimates, not measured.</span>
+    <span></span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
