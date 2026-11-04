@@ -83,7 +83,10 @@ export function runHost(): void {
           } catch (e) {
             toClient(client, { id: m.id, error: (e as Error).message });
           }
-          if (m.method !== 'store.list' && m.method !== 'store.read') toBrowser({ event: 'routines.changed' });
+          if (m.method !== 'store.list' && m.method !== 'store.read') {
+            toBrowser({ event: 'routines.changed' });
+            for (const c of clients) if (c !== client) toClient(c, { event: 'routines.changed' });
+          }
           return;
         }
         if (m.method === 'host.info') {

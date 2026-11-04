@@ -89,7 +89,8 @@ export async function runMcp(): Promise<void> {
     const fixes = result.fixes ?? {};
     if (Object.keys(fixes).length) {
       const steps = p.routine.steps.map((s) => (fixes[s.n] ? { ...s, target: fixes[s.n], crop: result.crops?.[s.n] ?? s.crop } : s));
-      const saved = await store.write({ ...p.routine, steps }, (p.routine as any).owner);
+      // Through the host, so the side panel and other agents hear about it.
+      const saved = await bridge.call<Routine>('store.write', { routine: { ...p.routine, steps }, owner: (p.routine as any).owner });
       result.updated_to = saved.meta.version;
     }
     return result;
@@ -266,7 +267,8 @@ export async function runMcp(): Promise<void> {
       const run = await bridge.call<Run>('runs.get', { run_id: a.run_id });
       const body = a.do_not_use_for ? `## Do not use for\n${a.do_not_use_for}` : '';
       const { routine, recorded, dropped } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, body });
-      const saved = await store.write(routine);
+      const saved = await bridge.call<Routine>('store.write', { routine });
+      await bridge.call('runs.markSaved', { run_id: run.id }).catch(() => {});
       scheduleRefresh();
       const params = Object.keys(saved.meta.params);
       return text(
@@ -285,5 +287,10 @@ export async function runMcp(): Promise<void> {
   } catch {
     // Recursive watch is missing on some platforms; host events still refresh.
   }
+  server.server.oninitialized = () => {
+    bridge.agent = server.server.getClientVersion()?.name;
+    // Lets the side panel show this agent as connected.
+    bridge.call('agent.hello', {}, 5_000).catch(() => {});
+  };
   await server.connect(new StdioServerTransport());
 }

@@ -53,6 +53,8 @@ export class Bridge {
   private sock?: Socket;
   private host?: HostInfo;
   private nextId = 1;
+  /** MCP client name, e.g. "claude-code". */
+  agent?: string;
   private waiting = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
 
   constructor(private onEvent: (e: Event) => void = () => {}) {}
@@ -109,6 +111,8 @@ export class Bridge {
         reject(new Error(`The browser did not answer ${method} within ${Math.round(timeoutMs / 1000)}s`));
       }, timeoutMs);
       this.waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+      // The extension records which agent did what.
+      if (this.agent && !/^(store|host)\./.test(method)) params = { ...(params as object), agent: this.agent };
       sock.write(JSON.stringify({ id, method, params }) + '\n');
     });
   }

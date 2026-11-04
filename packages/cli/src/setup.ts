@@ -142,7 +142,8 @@ async function codex(cmd: string[], dry: boolean): Promise<Line | null> {
   const file = join(dir, 'config.toml');
   const conf = existsSync(file) ? (parseToml(await readFile(file, 'utf8')) as Record<string, any>) : {};
   conf.mcp_servers ??= {};
-  conf.mcp_servers[SERVER] = { command: cmd[0], args: cmd.slice(1) };
+  // A replay can wait at a pause for longer than Codex's 60s default.
+  conf.mcp_servers[SERVER] = { command: cmd[0], args: cmd.slice(1), tool_timeout_sec: 900 };
   if (!dry) await writeFile(file, stringifyToml(conf) + '\n');
   return { ok: true, name: 'Codex', detail: tilde(file) };
 }
