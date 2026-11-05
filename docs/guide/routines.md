@@ -20,6 +20,8 @@ name: play-release
 owner: arunprakashg
 version: 4
 site: play.google.com
+urls:
+  - play.google.com/console/u/*/developers/*/app/*/tracks/*
 description: >
   Upload an Android App Bundle to a Google Play Console testing track and
   start the rollout. Use when the user asks to ship, release or upload an
@@ -43,17 +45,21 @@ Production releases. This routine only covers testing tracks.
 |---|---|
 | `name` | Lower case letters, digits and dashes. Becomes the tool name `rt_<name>`. |
 | `site` | The one site the routine works on. A step that leaves it stops the replay. |
+| `urls` | The pages the routine applies to, as globs: a host on `site` and a path, with `*` for one part (an id, a number) and a closing `**` for the rest. No `https://`, no query. At most 8. Left out, they are worked out from the recorded pages. `navigate`, `read_page` and `routines_search` match the page an agent is on against them. |
+| `surface` | Where the routine acts. `browser` (the default, and the only one that runs today). `desktop` is reserved so desktop steps can come later without a format change; a routine that says it is read, listed as not supported yet, and not run or published. |
 | `description` | What it does, then a "Use when" clause in the words a person would say. Required, at most 1024 characters. This is what an agent reads to choose it. |
 | `params` | The values asked for on each run. Types are `string` and `file`. |
 | `pauses` | Step numbers where the replay stops before going on. |
 | `returns` | What the routine gives back. |
+| `instructions` | Notes for the agent that runs it, up to 4000 characters. See [Hooks and instructions](/docs/hooks). |
+| `hooks` | Code on events, one function per event. Off until the person allows it. See [Hooks and instructions](/docs/hooks). |
 | `version` | Goes up with every save. A fixed step is saved as the next version. |
 
-Agents see only `name`, `description` and `params` up front. The body comes back from `routine_describe`, and the steps never reach the agent.
+Agents see only `name`, `description` and `params` up front. The body comes back from `routine_describe`, and the steps never reach the agent, apart from the notes an author wrote on a step, which come back in a run's result inside a marked block.
 
 ## Steps
 
-Steps are declarative: navigate, click, type, select, upload, wait and read. A routine cannot contain a script. Each step carries the locators the replayer checks and a label for people to read.
+Steps are declarative: navigate, click, type, select, upload, wait and read. A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
 
 ## Share a routine through Git
 

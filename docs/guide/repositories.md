@@ -57,8 +57,9 @@ The same repository is in the project as `dev/fixtures/routine-repo`, and the te
 | `path` | yes | The routine file, relative to the repository root, ending in `.md`. No `..`. |
 | `instructions` | no | Notes for the agent about this routine, up to 4000 characters. |
 | `sites` | no | The hosts the routine works on. If set, the routine file's site must be one of them or under one, or the routine is left out. |
+| `urls` | no | The pages the routine applies to, as globs like `console.acme.test/releases/*`. Replaces the pages in the routine file, which are otherwise worked out from its steps. See [Routine format](/docs/routines). |
 | `params` | no | What each value is for, as a short text or a set with `description` and `type` (`string` or `file`). The routine file decides which values exist. |
-| `hooks` | no | Code to run on events, one function per event. The names and sizes are checked here; running hooks comes in a later change. |
+| `hooks` | no | Code to run on events, one function per event. Off until the person has read it and allowed it in the side panel. See [Hooks and instructions](/docs/hooks). |
 
 Unknown fields are an error, so a typo does not go unnoticed.
 

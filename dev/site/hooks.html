@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>Name a release · Acme Console</title>
+<style>body{font:14px system-ui;margin:24px;max-width:520px}label{display:block;margin:12px 0}input{display:block;width:100%}</style>
+<h1>Name the release</h1>
+<p>Suggested name: <b id="suggest">Falcon</b></p>
+<label>Release name <input id="rname" name="release_name"></label>
+<label>Password <input id="pw" type="password"></label>
+<button id="save" type="button">Save draft</button>
+<p id="status" role="status"></p>
+<script>
+document.getElementById('save').onclick = () => {
+  document.getElementById('status').textContent = 'Saved draft: ' + document.getElementById('rname').value;
+};
+</script>

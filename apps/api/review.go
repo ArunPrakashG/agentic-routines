@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ import (
 // boring part first and never approve anything on their own: they only tell the reviewer where to look.
 
 var (
-	guidelines  = map[string]bool{"G1": true, "G2": true, "G3": true, "G4": true, "G5": true, "G6": true, "G7": true, "G8": true}
+	guidelines  = map[string]bool{"G1": true, "G2": true, "G3": true, "G4": true, "G5": true, "G6": true, "G7": true, "G8": true, "G9": true}
 	placeholder = regexp.MustCompile(`^\{\{[a-z0-9_:]+\}\}$`)
 	// Things that look like a key, token or password someone typed in while recording.
 	secretShape = regexp.MustCompile(`(?i)(sk-[a-z0-9_-]{16,}|gh[pousr]_[a-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[a-z0-9-]{10,}|eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.|-----BEGIN [A-Z ]*PRIVATE KEY|[a-f0-9]{40,})`)
@@ -229,7 +230,7 @@ var checkText = map[string]string{
 	"bad_name": "The name is not a valid routine name.", "bad_description": "The description needs a clear \"Use when\" clause.",
 	"bad_site": "The site is not a valid host.", "body_too_long": "The notes are too long.", "bad_steps": "A step is malformed or there are too many.",
 	"bad_meta": "The details are too large.", "bad_params": "A value the person fills in is malformed.", "bad_secrets": "A secret name is malformed.",
-	"bad_pauses": "A pause points at a step that does not exist.", "step_off_site": "A step leaves the routine's site.",
+	"bad_pauses": "A pause points at a step that does not exist.", "bad_urls": "The pages the routine applies to are not host-and-path patterns on its site.", "bad_surface": "Only browser routines are accepted for now.", "bad_hooks": "The hooks or the notes for the agent are too long, or a hook is on an unknown event.", "step_off_site": "A step leaves the routine's site.",
 }
 
 // autoChecks tells the reviewer where to look. A pass is not an approval.
@@ -264,6 +265,7 @@ func autoChecks(name string, in routineIn) []checkResult {
 			unpaused = append(unpaused, n)
 		}
 	}
+	out = append(out, hookChecks(in)...)
 	if len(secrets) > 0 {
 		out = append(out, checkResult{"secrets", "fail", "Steps " + strings.Join(secrets, ", ") + " type something that looks like a key or token.", "Looks like a key"})
 	} else {
@@ -278,6 +280,40 @@ func autoChecks(name string, in routineIn) []checkResult {
 		out = append(out, checkResult{"pauses", "warn", "Steps " + strings.Join(unpaused, ", ") + " read like a final action and do not pause first.", "No pause before a final step"})
 	} else {
 		out = append(out, checkResult{"pauses", "pass", "Nothing that reads like a final action runs without a pause.", ""})
+	}
+	return out
+}
+
+// hookPatterns are things a hook has no way to do in its sandbox. Seeing one says what the author was after.
+var hookPatterns = regexp.MustCompile(`\b(fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|importScripts|postMessage|indexedDB|localStorage|document\.cookie)\b|\beval\s*\(|\bimport\s*\(`)
+
+// hookChecks tells the reviewer a routine carries code and what that code reaches for. Hooks cannot leave their
+// sandbox, so none of this is blocking: it is where to read.
+func hookChecks(in routineIn) []checkResult {
+	n := len(in.Meta.Hooks)
+	notes := in.Meta.Instructions != ""
+	for _, s := range in.Steps {
+		notes = notes || s.Instructions != ""
+	}
+	out := []checkResult{}
+	if n == 0 {
+		out = append(out, checkResult{"hooks", "pass", "No hooks.", ""})
+	} else {
+		var reach []string
+		for ev, code := range in.Meta.Hooks {
+			if m := hookPatterns.FindString(code); m != "" {
+				reach = append(reach, ev+" uses "+strings.TrimSpace(m))
+			}
+		}
+		sort.Strings(reach)
+		if len(reach) > 0 {
+			out = append(out, checkResult{"hooks", "warn", "Hooks on " + plural(n, "event") + ". They run in a sandbox with no network. " + strings.Join(reach, "; ") + ", which does nothing there. Read the code below.", "Hooks reach outside"})
+		} else {
+			out = append(out, checkResult{"hooks", "warn", "Hooks on " + plural(n, "event") + ". They run in a sandbox with no network and can only ask for the listed directives. Read the code below.", plural(n, "hook")})
+		}
+	}
+	if notes {
+		out = append(out, checkResult{"notes", "warn", "It carries notes for the installer's agent. Read them below: an agent is shown them as written by someone else.", "Agent notes"})
 	}
 	return out
 }
