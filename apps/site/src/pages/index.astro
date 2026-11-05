@@ -32,6 +32,23 @@ const stops = [
   { h: 'Never saves a password.', p: 'What you type into a password field stays in the browser and shows up as a placeholder.' },
   { h: 'Learns from you too.', p: 'Do the task once yourself. It saves the same way an agent run does.' },
 ];
+// Direct store entries go in here once the listings are live; until then each opens the store's search.
+const stores = [
+  { id: 'chrome', name: 'Chrome', store: 'the Chrome Web Store', href: 'https://chromewebstore.google.com/search/browser%20routines' },
+  { id: 'edge', name: 'Edge', store: 'Microsoft Edge Add-ons', href: 'https://microsoftedge.microsoft.com/addons/search/browser%20routines' },
+  { id: 'firefox', name: 'Firefox', store: 'Firefox Add-ons', href: 'https://addons.mozilla.org/firefox/search/?q=browser+routines' },
+];
+const runs = [
+  { pm: 'npm', cmd: 'npx browser-routines setup' },
+  { pm: 'pnpm', cmd: 'pnpm dlx browser-routines setup' },
+  { pm: 'bun', cmd: 'bunx browser-routines setup' },
+  { pm: 'yarn', cmd: 'yarn dlx browser-routines setup' },
+];
+const prompt = `Set up Browser Routines on this machine.
+1. Run "npx browser-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
+2. Run "npx browser-routines doctor" and tell me which agents and browsers are connected and what is still missing.
+3. If my browser has no extension yet, tell me which store page to open. Do not install anything else.
+4. Tell me to restart this agent so it loads the browser tools.`;
 const ld = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
@@ -225,19 +242,38 @@ click     Next
         <div class="step">
           <span class="num mono">1</span>
           <h3>Add the extension</h3>
-          <div class="chips"><span>Chrome</span><span>Edge</span><span>Firefox</span></div>
+          <div class="stores">
+            {stores.map((s) => (
+              <a class="btn btn-secondary btn-lg" href={s.href} target="_blank" rel="noopener" aria-label={`Add to ${s.name}, opens ${s.store}`}>
+                <img src={`/browsers/${s.id}.svg`} alt="" width="20" height="20" />{s.name}
+              </a>
+            ))}
+          </div>
           <p>Brave, Arc and Opera use the Chrome version. Signing in with Google is optional.</p>
         </div>
         <div class="step">
           <span class="num mono">2</span>
           <h3>Connect your agent</h3>
           <div class="term" aria-label="Terminal">
-            <div><span class="dim">$</span> npx browser-routines setup</div>
+            <div class="runs">
+              {runs.map((r) => (
+                <>
+                  <span class="dim">{r.pm}</span>
+                  <span><span class="dim">$</span> {r.cmd}</span>
+                </>
+              ))}
+            </div>
             <div class="ok"><span>✓</span> Claude Code <span class="dim">~/.claude.json</span></div>
             <div class="ok"><span>✓</span> Codex <span class="dim">~/.codex/config.toml</span></div>
             <div class="ok"><span>✓</span> GitHub Copilot <span class="dim">VS Code mcp.json</span></div>
             <div class="ok"><span>✓</span> OpenCode <span class="dim">~/.config/opencode/opencode.json</span></div>
             <div class="ok"><span>✓</span> Chrome <span class="dim">extension connected</span></div>
+          </div>
+          <div class="or" aria-hidden="true"><span></span>or<span></span></div>
+          <p>Paste this into Claude Code, Codex, OpenCode or any agent chat and it sets everything up for you.</p>
+          <div class="prompt">
+            <pre id="setup-prompt">{prompt}</pre>
+            <button type="button" class="btn btn-secondary btn-lg" id="copy-prompt" data-label="Copy instructions">Copy instructions</button>
           </div>
         </div>
       </div>
@@ -322,8 +358,15 @@ click     Next
 
   .step { display: flex; flex-direction: column; gap: 14px; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); min-width: 0; }
   .step .num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
-  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-  .chips span { padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 14px; }
+  .stores { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stores .btn { gap: 10px; }
+  .stores img { display: block; }
+  .runs { display: grid; grid-template-columns: 48px minmax(0, 1fr); margin-bottom: 8px; }
+  .or { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-3); }
+  .or span { flex: 1; height: 1px; background: var(--border); }
+  .prompt { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+  .prompt pre { margin: 0; font: 400 13px/22px var(--font-mono); white-space: pre-wrap; user-select: all; }
+  .prompt .btn { align-self: flex-end; }
   .term { font: 400 13px/22px var(--font-mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; white-space: nowrap; }
   .term .ok span:first-child { color: var(--accent-ink); }
 
@@ -351,5 +394,27 @@ click     Next
     .tr .m::before { content: attr(data-l); font: 400 11px/1 var(--font-sans); color: var(--text-3); }
     .tr .m { font-size: 12px; }
     .split-cta .btn { flex: 1 1 100%; }
+    .prompt .btn { align-self: stretch; }
+    .prompt pre { font-size: 12px; line-height: 20px; }
   }
 </style>
+
+<script>
+  const copy = document.getElementById('copy-prompt');
+  const prompt = document.getElementById('setup-prompt');
+  copy?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(prompt?.textContent ?? '');
+      copy.textContent = 'Copied';
+    } catch {
+      // No clipboard access: select the text so it can be copied by hand.
+      const range = document.createRange();
+      if (prompt) range.selectNodeContents(prompt);
+      const sel = getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      copy.textContent = 'Press Ctrl+C';
+    }
+    setTimeout(() => { copy.textContent = copy.dataset.label ?? 'Copy instructions'; }, 2000);
+  });
+</script>
