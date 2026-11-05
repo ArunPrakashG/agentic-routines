@@ -122,7 +122,7 @@ const psql = (sql) => sh(`docker exec ${PG} psql -U postgres -At -c "${sql}"`).s
 let visitor = 0;
 const post = (path, body, ip = `10.0.${visitor >> 8}.${visitor++ & 255}`) =>
   fetch(`${API}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-client-ip': ip }, body: JSON.stringify(body) });
-const me = (token, install) => fetch(`${API}/me`, { headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(install ? { 'x-install-id': install } : {}) } });
+const me = (token, install, ip) => fetch(`${API}/me`, { headers: { ...(ip ? { 'x-client-ip': ip } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...(install ? { 'x-install-id': install } : {}) } });
 const verifierFor = () => randomUUID() + randomUUID();
 
 function signIn(claims = {}, { key, install = randomUUID(), nonce = randomUUID(), tokenNonce, badVerifier } = {}) {
@@ -204,7 +204,7 @@ spawnSync('tmux', ['kill-session', '-t', `=${TMUX}`]);
 await sleep(500);
 start();
 check(await alive(), 'the API starts again on a migrated database');
-check(psql('SELECT count(*) FROM schema_migrations') === '3', 'each migration ran once');
+check(psql('SELECT count(*) FROM schema_migrations') === '4', 'each migration ran once');
 check((await me(keep.access_token, keepInstall)).ok, 'a session survives a restart');
 const kept = await post('/auth/refresh', { refresh_token: keep.refresh_token, install_id: keepInstall });
 check(kept.ok, 'and so does its refresh token');
@@ -270,6 +270,27 @@ await refusedPublish('a pause past the last step is refused', 'bad_pauses', rout
 await refusedPublish('a site with no dot is refused', 'bad_site', routine({ meta: { ...routine().meta, site: 'localhost' } }));
 await refusedPublish('too many steps are refused', 'bad_steps', routine({ meta: { ...routine().meta, pauses: [] }, steps: Array.from({ length: 301 }, (_, i) => step(i + 1)) }));
 check((await call(p1, 'PUT', '/routines/play-release', { meta: 1 })).status === 400, 'nonsense is refused');
+// What a routine may point at and fill in.
+const onSite = (site, url, over = {}) => routine({ meta: { ...routine().meta, site, pauses: [], ...over.meta }, steps: over.steps ?? [step(1, { action: 'navigate', url, target: undefined, page: undefined })] });
+for (const site of ['co.uk', 'github.io', 'com', '192.168.1.1', 'router.lan', 'printer.internal', 'a..example.com', '-x.example.com']) await refusedPublish(`the site "${site}" is refused: it is not one party's`, 'bad_site', onSite(site, `https://${site}/`));
+for (const [what, url] of [['plain http', 'http://play.google.com/console/'], ['a login in the address', 'https://play.google.com@evil.example/'], ['a port', 'https://play.google.com:8443/'], ['a backslash', 'https://evil.example\\@play.google.com/'], ['a script address', 'javascript://play.google.com/%0Aalert(1)'], ['a space', 'https://play.google.com/a b']])
+  await refusedPublish(`a step with ${what} is refused`, 'step_off_site', onSite('play.google.com', url));
+const fileStep = (value) => step(1, { action: 'upload', value });
+const withFile = (value, params = { doc: { type: 'file' } }, secrets = []) => routine({ meta: { ...routine().meta, params, secrets, pauses: [] }, steps: [fileStep(value)] });
+await refusedPublish('an upload that names its own file is refused', 'bad_steps', withFile('/home/user/.ssh/id_rsa'));
+await refusedPublish('an upload from a param that is not a file is refused', 'bad_steps', withFile('{{doc}}', { doc: { type: 'string' } }));
+await refusedPublish('a value that uses a param nobody declared is refused', 'bad_steps', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(1, { action: 'type', value: '{{nope}}' })] }));
+await refusedPublish('a value that uses a secret nobody declared is refused', 'bad_steps', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(1, { action: 'type', value: '{{secret:nope}}' })] }));
+await refusedPublish('a file typed into a field is refused', 'bad_steps', routine({ meta: { ...routine().meta, params: { doc: { type: 'file' } }, pauses: [] }, steps: [step(1, { action: 'type', value: '{{doc}}' })] }));
+await refusedPublish('a secret in an address is refused', 'bad_steps', routine({ meta: { ...routine().meta, secrets: ['token'], pauses: [] }, steps: [step(1, { action: 'navigate', url: 'https://play.google.com/?t={{secret:token}}', target: undefined })] }));
+for (const [what, body] of [['an upload from a file param', withFile('{{doc}}')], ['a tenant of a shared host', onSite('someone.github.io', 'https://someone.github.io/app/')]]) {
+  body.meta.name = 'accept-check';
+  res = await call(p1, 'PUT', '/routines/accept-check', body);
+  const queued = await res.json();
+  check(res.status === 202, `${what} is accepted`);
+  await call(p1, 'DELETE', `/me/submissions/${queued.id}`);
+}
+check((await call(p1, 'GET', '/me', undefined, 'not-an-address')).ok, 'a client address that is not an address is ignored');
 check(psql('SELECT count(*) FROM routines') === '0', 'nothing refused was stored');
 
 const smuggled = routine();
@@ -349,7 +370,7 @@ one = await (await call(adm, 'GET', `/admin/submissions/${pub.id}`)).json();
 check(one.status === 'approved' && one.live?.version === 2, 'a decided one shows the live copy to compare with');
 check((await call(adm, 'GET', '/admin/submissions/not-an-id')).status === 404 && (await call(adm, 'GET', '/admin/submissions?status=nope')).status === 400, 'bad ids and filters are refused');
 
-check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G9', note: 'x' }))) === 'bad_guideline', 'a rejection must name a real guideline');
+check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G99', note: 'x' }))) === 'bad_guideline', 'a rejection must name a real guideline');
 check((await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G3' })).status === 400, 'and say why');
 check((await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G3', note: 'Step 3 types a key. Take it out and use a secret.' })).ok, 'a reviewer can reject it');
 check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/approve`))) === 'not_pending', 'which cannot then be approved');
@@ -395,11 +416,24 @@ bl = await (await call(null, 'GET', '/blocklist')).json();
 check(bl.repos.includes('https://github.com/bad/repo'), 'in one normal form');
 check((await call(adm, 'PUT', '/admin/blocks', { kind: 'repo', value: 'http://github.com/x/y', reason: 'x' })).status === 400 && (await call(adm, 'PUT', '/admin/blocks', { kind: 'thing', value: 'x', reason: 'x' })).status === 400, 'and nothing else is a block');
 check((await call(adm, 'PUT', '/admin/blocks', { kind: 'routine', value: 'ptwo/play-release', reason: 'Broken.' })).ok && (await call(p2, 'PUT', '/routines/play-release', routine())).status === 403, 'a single routine can be blocked by name');
-check((await (await call(adm, 'GET', '/admin/blocks')).json()).blocks.length === 3, 'a reviewer lists the blocks');
+check((await (await call(adm, 'GET', '/admin/blocks')).json()).blocks.length === 4, 'a reviewer lists the blocks (the publisher, their account, the repository, the routine)');
 check((await call(adm, 'DELETE', '/admin/blocks?kind=user&value=pone')).status === 204 && (await call(adm, 'DELETE', '/admin/blocks?kind=user&value=pone')).status === 404, 'a block can be lifted');
 check((await call(null, 'GET', '/routines/pone/play-release')).ok, 'which brings their approved routines back');
 await call(adm, 'DELETE', '/admin/blocks?kind=repo&value=https://github.com/bad/repo');
 await call(adm, 'DELETE', '/admin/blocks?kind=routine&value=ptwo/play-release');
+// A block stays with the Google account: deleting it and signing up again under another handle does not lift it.
+{
+  const claims = { sub: 'dir-blocked', email: 'blocked@example.com', name: 'Blocked' };
+  const p3 = await person(claims);
+  await call(p3, 'PUT', '/me/handle', { handle: 'pblocked' });
+  await call(adm, 'PUT', '/admin/blocks', { kind: 'user', value: 'pblocked', reason: 'Spam.' });
+  await call(p3, 'DELETE', '/me');
+  const again = await person(claims);
+  await call(again, 'PUT', '/me/handle', { handle: 'pblocked-again' });
+  check((await call(again, 'PUT', '/routines/after-block', routine({ meta: { ...routine().meta, name: 'after-block' } }))).status === 403, 'a blocked publisher cannot start over with a new handle');
+  await call(adm, 'DELETE', '/admin/blocks?kind=user&value=pblocked');
+  await call(adm, 'DELETE', `/admin/blocks?kind=account&value=${claims.sub}`);
+}
 
 // Deleting, the trail, and the limits.
 await publishLive(p2, 'throwaway', routine({ meta: { ...routine().meta, name: 'throwaway' } }));
@@ -418,7 +452,7 @@ check((await call(p3, 'GET', '/me/submissions')).ok && (await (await call(p3, 'G
 
 // What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e.mjs, AR_CAPTURE=1).
 // Its host is the local test site, so it is moved to a real-looking one.
-const sent = JSON.parse(readFileSync(join(ROOT, 'dev/fixtures/published-routine.json'), 'utf8').replaceAll('127.0.0.1:8767', 'console.acme.example'));
+const sent = JSON.parse(readFileSync(join(ROOT, 'dev/fixtures/published-routine.json'), 'utf8').replaceAll('http://127.0.0.1:8767', 'https://console.acme.com').replaceAll('127.0.0.1:8767', 'console.acme.com'));
 const sentLive = await publishLive(p1, sent.meta.name, sent);
 check(sentLive.res.ok && sentLive.live, 'a routine as the extension compiles and sends it is accepted');
 const back = await (await call(null, 'GET', `/routines/pone/${sent.meta.name}`)).json();
@@ -443,7 +477,7 @@ const tool = async (name, args = {}) => {
 let t = await tool('routines_search', { site: 'https://play.google.com/console/x' });
 check(!t.error && t.text.includes('pone/play-release v2') && t.text.includes('Use when'), 'an agent finds a routine by the site it is on');
 t = await tool('routines_search', { query: 'nothing like this' });
-check(!t.error && /nothing in the directory/i.test(t.text), 'and is told when there is none');
+check(!t.error && /nothing installed, in the directory/i.test(t.text), 'and is told when there is none');
 t = await tool('routine_install', { id: 'pone/play-release' });
 check(!t.error && t.text.includes('Installed pone/play-release v2') && t.text.includes('asks for version_name') && t.text.includes('pauses before step 3'), 'an agent installs it and is told what it asks and where it pauses');
 const onDisk = (f) => sh(`cat '${mcpHome}/routines/pone/play-release/${f}'`).stdout;
@@ -483,12 +517,13 @@ const token = (await kept.json()).access_token;
 const t0 = performance.now();
 const times = [];
 let okCount = 0;
+let loadSent = 0;
 const seen = {};
 await Promise.all(
   Array.from({ length: 32 }, async () => {
     for (let i = 0; i < 125; i++) {
       const s = performance.now();
-      const r = await me(token, keepInstall).catch((e) => ({ ok: false, status: e.cause?.code ?? 'error' }));
+      const r = await me(token, keepInstall, `10.9.${(loadSent >> 8) & 255}.${loadSent++ & 255}`).catch((e) => ({ ok: false, status: e.cause?.code ?? 'error' }));
       okCount += r.ok ? 1 : 0;
       seen[r.status] = (seen[r.status] ?? 0) + 1;
       times.push(performance.now() - s);

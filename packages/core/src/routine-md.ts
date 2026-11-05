@@ -79,17 +79,28 @@ export function lintForPublish(meta: RoutineMeta, stepUrls: string[]): LintIssue
   for (const m of checkHooks(meta.hooks)) issues.push({ field: 'hooks', message: m });
   for (const u of stepUrls) {
     if (!onSite(u, meta.site)) {
-      issues.push({ field: 'steps', message: `A step leaves ${meta.site}: ${new URL(u).host}` });
+      issues.push({ field: 'steps', message: `A step leaves ${meta.site}: ${hostOf(u)}` });
       break;
     }
   }
   return issues;
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host || 'another address';
+  } catch {
+    return 'an address that is not valid';
+  }
+}
+
+/** Is this web address on the site, or one of its subdomains? Anything but http and https is not. */
 export function onSite(url: string, site: string): boolean {
   try {
-    const host = new URL(url).host;
-    return host === site || host.endsWith('.' + site);
+    const u = new URL(url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    if (u.username || u.password) return false;
+    return u.host === site || u.host.endsWith('.' + site);
   } catch {
     return false;
   }

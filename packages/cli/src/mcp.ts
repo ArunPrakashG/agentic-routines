@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { eventLabel, isRepoPath, lintForPublish, missingParams, onSite, urlScore, wrapAuthored, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { checkFetched, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, urlScore, wrapAuthored, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as sources from './sources.ts';
@@ -398,7 +398,7 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool(
     'routine_run',
-    { description: 'Replay a saved routine without the model. Same as its rt_ tool.', inputSchema: { name: z.string(), params: z.record(z.string()).optional() } },
+    { description: 'Replay a saved routine without the model. Same as its rt_ tool.', inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional() } },
     async ({ name, params }) => run(name, params ?? {}),
   );
 
@@ -476,7 +476,7 @@ export async function runMcp(): Promise<void> {
     {
       description:
         'Replay a draft once on the live site, with no model, to prove the refined steps work. It uses the values recorded, or params you pass (a draft of a saved routine has no recorded values, so pass them). It skips every step that pauses and never approves one, so nothing that submits, publishes, pays or deletes runs; the steps after a skipped one that do not depend on it are still checked. It says what each step did and where the tab ended up. A draft that replaces a saved routine can only be saved after a good test.',
-      inputSchema: { draft_id: z.string(), params: z.record(z.string()).optional() },
+      inputSchema: { draft_id: z.string(), params: z.record(z.string(), z.string()).optional() },
     },
     async ({ draft_id, params }) => {
       // The files and secrets the test needs come first, as for any run.
@@ -619,10 +619,14 @@ export async function runMcp(): Promise<void> {
       const [owner, name] = id.split('/');
       const f = await directory<Listing & { meta: Routine['meta']; body: string; steps: Step[] }>(`/routines/${owner}/${name}`);
       // The directory checks this too, but what runs in this browser is decided here.
-      const urls = f.steps.flatMap((s) => [s.url, s.page?.url].filter((u): u is string => !!u));
-      const issues = lintForPublish(f.meta, urls);
-      if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.map((i) => i.message).join(' ') || 'Bad owner.'}`);
       const routine: Routine = { meta: { ...f.meta, name, owner, version: f.version }, body: f.body, steps: f.steps };
+      let issues: string[];
+      try {
+        issues = checkFetched(routine);
+      } catch {
+        issues = ['The directory sent something that is not a routine.'];
+      }
+      if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.join(' ') || 'Bad owner.'}`);
       // Through the host when a browser is open, so its panel shows it at once.
       const origin = { kind: 'directory' as const, source: owner };
       const saved = await bridge.call<Routine>('store.write', { routine, owner, origin }).catch((e) => {
