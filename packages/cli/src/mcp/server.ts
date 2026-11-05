@@ -243,6 +243,22 @@ export function describeResult(r: RunResult): string {
   }
 }
 
+// Refreshes the rt_ tools when the routines folder changes. A watcher can fail at any time (recursive watch is
+// missing on some platforms and filesystems, and a folder removed under it raises an error), and an unhandled
+// error would end the server. So an error closes the watcher and the server polls instead. Host events still refresh.
+function watchRoutines(onChange: () => void) {
+  const poll = () => setInterval(onChange, 5_000).unref();
+  try {
+    const w = watch(paths.routines(), { recursive: true }, onChange);
+    w.on('error', () => {
+      w.close();
+      poll();
+    });
+  } catch {
+    poll();
+  }
+}
+
 export async function runMcp(): Promise<void> {
   const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: `${INSTRUCTIONS}\n\n${UNTRUSTED_NOTES}` });
   const routineTools = new Map<string, RegisteredTool>();
@@ -837,11 +853,7 @@ export async function runMcp(): Promise<void> {
 
   await mkdir(paths.routines(), { recursive: true });
   await refreshRoutineTools();
-  try {
-    watch(paths.routines(), { recursive: true }, scheduleRefresh);
-  } catch {
-    // Recursive watch is missing on some platforms; host events still refresh.
-  }
+  watchRoutines(scheduleRefresh);
   server.server.oninitialized = () => {
     bridge.agent = server.server.getClientVersion()?.name;
     // Lets the side panel show this agent as connected.
