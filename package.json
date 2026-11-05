@@ -5,7 +5,10 @@
   "packageManager": "pnpm@10.18.3",
   "scripts": {
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "dev:up": "dev/up.sh",
+    "dev:down": "dev/down.sh",
+    "e2e": "dev/e2e.sh"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

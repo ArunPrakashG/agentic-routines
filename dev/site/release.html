@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>New release · Acme Console</title>
+<style>body{font:14px system-ui;margin:24px;max-width:520px}label{display:block;margin:12px 0}input,textarea{display:block;width:100%}#review{display:none}</style>
+<h1>Create internal testing release</h1>
+<form onsubmit="return false">
+<label>App bundle <input type="file" id="bundle" accept=".aab"></label>
+<label>Release name <input id="rname" name="release_name"></label>
+<label>Release notes <textarea id="notes" name="notes"></textarea></label>
+<button id="next" type="button">Next</button>
+</form>
+<section id="review"><h2>Preview and confirm</h2><p id="summary"></p><button id="rollout" type="button">Start rollout to Internal testing</button></section>
+<p id="status" role="status"></p>
+<script>
+// A variant renames the Next button, to test a changed step.
+if (localStorage.variant === 'b') { const n = document.getElementById('next'); n.textContent = 'Review release'; n.id = 'review-btn'; }
+document.querySelector('form button').onclick = () => {
+  const f = document.getElementById('bundle').files[0];
+  document.getElementById('summary').textContent = `${document.getElementById('rname').value} · ${f ? f.name + ' ' + f.size + ' bytes' : 'no bundle'}`;
+  document.getElementById('review').style.display = 'block';
+};
+document.getElementById('rollout').onclick = () => {
+  document.getElementById('status').textContent = 'Rollout started: ' + document.getElementById('summary').textContent + ' · notes: ' + document.getElementById('notes').value;
+};
+</script>
