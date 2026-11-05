@@ -202,7 +202,7 @@ spawnSync('tmux', ['kill-session', '-t', `=${TMUX}`]);
 await sleep(500);
 start();
 check(await alive(), 'the API starts again on a migrated database');
-check(psql('SELECT count(*) FROM schema_migrations') === '1', 'the migration ran once');
+check(psql('SELECT count(*) FROM schema_migrations') === '2', 'each migration ran once');
 check((await me(keep.access_token, keepInstall)).ok, 'a session survives a restart');
 const kept = await post('/auth/refresh', { refresh_token: keep.refresh_token, install_id: keepInstall });
 check(kept.ok, 'and so does its refresh token');
@@ -214,6 +214,107 @@ check((await me(c.access_token, cInstall)).ok, 'signed in before signing out');
 check((await post('/auth/signout', { refresh_token: c.refresh_token })).status === 204, 'sign-out succeeds');
 check((await me(c.access_token, cInstall)).status === 401, 'sign-out ends the access token at once');
 check((await post('/auth/refresh', { refresh_token: c.refresh_token, install_id: cInstall })).status === 401, 'and the refresh token');
+
+// ---------- the directory ----------
+const person = async (claims) => {
+  const t = await (await signIn(claims)).json();
+  return { token: t.access_token, install: JSON.parse(Buffer.from(t.access_token.split('.')[1], 'base64url')).ins, id: t.user.id };
+};
+const call = (who, method, path, body, ip = `10.1.${visitor >> 8}.${visitor++ & 255}`) =>
+  fetch(`${API}${path}`, {
+    method,
+    headers: { 'x-client-ip': ip, ...(body ? { 'content-type': 'application/json' } : {}), ...(who ? { authorization: `Bearer ${who.token}`, 'x-install-id': who.install } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+const errorOf = async (res) => (await res.json()).error;
+
+const step = (n, over = {}) => ({ n, action: 'click', label: `Step ${n}`, target: { tag: 'button', name: 'Go', attrs: {}, css: 'button' }, page: { url: 'https://play.google.com/console/', landmarks: [] }, ...over });
+const routine = (over = {}) => ({
+  meta: { name: 'play-release', site: 'play.google.com', description: 'Upload a build and start the rollout. Use when the user asks to release to testing.', params: { version_name: { type: 'string', description: 'Version', example: '2.15.0 (private)' } }, secrets: [], pauses: [3] },
+  body: '## Do not use for\nProduction releases.',
+  steps: [step(1, { action: 'navigate', url: 'https://play.google.com/console/', target: undefined }), step(2), step(3, { pause: 'auto' })],
+  ...over,
+});
+
+const p1 = await person({ sub: 'dir-1', email: 'p1@example.com', name: 'P One' });
+const p2 = await person({ sub: 'dir-2', email: 'p2@example.com', name: 'P Two' });
+
+check((await call(null, 'PUT', '/routines/play-release', routine())).status === 401, 'publishing needs a signed-in account');
+check((await errorOf(await call(p1, 'PUT', '/routines/play-release', routine()))) === 'needs_handle', 'and a handle');
+for (const h of ['ab', 'Has-Caps', 'admin', 'local', '-lead', 'a'.repeat(31)]) check((await call(p1, 'PUT', '/me/handle', { handle: h })).status === 400, `the handle "${h.slice(0, 12)}" is refused`);
+res = await call(p1, 'PUT', '/me/handle', { handle: 'pone' });
+check(res.ok && (await res.json()).handle === 'pone', 'a handle can be claimed');
+check((await errorOf(await call(p1, 'PUT', '/me/handle', { handle: 'ptwo' }))) === 'handle_set', 'and only once');
+check((await errorOf(await call(p2, 'PUT', '/me/handle', { handle: 'pone' }))) === 'handle_taken', 'two people cannot share one');
+await call(p2, 'PUT', '/me/handle', { handle: 'ptwo' });
+
+const refusedPublish = async (what, code, body, path = '/routines/play-release') => check((await errorOf(await call(p1, 'PUT', path, body))) === code, what);
+await refusedPublish('a description without "Use when" is refused', 'bad_description', routine({ meta: { ...routine().meta, description: 'Uploads a build and starts the rollout.' } }));
+await refusedPublish('a step that leaves the site is refused', 'step_off_site', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(1, { action: 'navigate', url: 'https://evil.example/' })] }));
+await refusedPublish('a step on a look-alike host is refused', 'step_off_site', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(1, { action: 'navigate', url: 'https://notplay.google.com.evil.example/' })] }));
+await refusedPublish('a recorded page on another site is refused', 'step_off_site', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(1, { page: { url: 'https://evil.example/', landmarks: [] } })] }));
+await refusedPublish('a name that differs from the path is refused', 'bad_name', routine(), '/routines/other-name');
+await refusedPublish('an unknown action is refused', 'bad_steps', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(1, { action: 'eval' })] }));
+await refusedPublish('steps out of order are refused', 'bad_steps', routine({ meta: { ...routine().meta, pauses: [] }, steps: [step(2)] }));
+await refusedPublish('a pause past the last step is refused', 'bad_pauses', routine({ meta: { ...routine().meta, pauses: [9] } }));
+await refusedPublish('a site with no dot is refused', 'bad_site', routine({ meta: { ...routine().meta, site: 'localhost' } }));
+await refusedPublish('too many steps are refused', 'bad_steps', routine({ meta: { ...routine().meta, pauses: [] }, steps: Array.from({ length: 301 }, (_, i) => step(i + 1)) }));
+check((await call(p1, 'PUT', '/routines/play-release', { meta: 1 })).status === 400, 'nonsense is refused');
+check(psql('SELECT count(*) FROM routines') === '0', 'nothing refused was stored');
+
+const smuggled = routine();
+smuggled.steps[1].evil = '<script>';
+smuggled.steps[1].target.attrs = { id: 'go' };
+smuggled.meta.owner = 'someone-else';
+res = await call(p1, 'PUT', '/routines/play-release', smuggled);
+let pub = await res.json();
+check(res.ok && pub.owner === 'pone' && pub.version === 1, 'a routine can be published');
+res = await call(p1, 'PUT', '/routines/play-release', routine());
+check((await res.json()).version === 2, 'publishing it again makes the next version');
+
+// Anyone can read the directory, signed in or not.
+res = await call(null, 'GET', '/routines/pone/play-release');
+const got = await res.json();
+check(res.ok && got.owner === 'pone' && got.version === 2 && got.steps.length === 3 && got.meta.pauses[0] === 3, 'anyone can read a routine in full');
+check(!JSON.stringify(got).includes('private') && !JSON.stringify(got).includes('p1@example.com'), 'the example value and the email are not in it');
+check(!('evil' in got.steps[1]) && !('owner' in got.meta), 'fields nobody asked for are not kept');
+check((await errorOf(await call(null, 'GET', '/routines/pone/nope'))) === 'not_found', 'an unknown routine is a 404');
+await call(p2, 'PUT', '/routines/play-release', routine({ meta: { ...routine().meta, description: 'Another take on the release. Use when asked to ship to testing.' } }));
+await call(p2, 'PUT', '/routines/gmail-label', routine({ meta: { ...routine().meta, name: 'gmail-label', site: 'mail.google.com', pauses: [], description: 'Label a thread. Use when the user asks to file mail.' }, steps: [step(1, { action: 'navigate', url: 'https://mail.google.com/mail/', page: { url: 'https://mail.google.com/mail/', landmarks: [] } })] }));
+
+res = await call(null, 'GET', '/routines?q=rollout');
+let found = (await res.json()).routines;
+check(found.length === 1 && found[0].owner === 'pone' && !('steps' in found[0]), 'search finds by words and lists without the steps');
+found = (await (await call(null, 'GET', '/routines?site=console.play.google.com')).json()).routines;
+check(found.length === 2 && found.every((x) => x.site === 'play.google.com'), 'search by the site a person is on includes its parent site');
+found = (await (await call(null, 'GET', '/routines?site=google.com')).json()).routines;
+check(found.length === 0, 'but not a sibling site');
+found = (await (await call(null, 'GET', '/routines?q=%25')).json()).routines;
+check(found.length === 0, 'a percent sign in a search is just a character');
+found = (await (await call(null, 'GET', '/routines')).json()).routines;
+check(found.length === 3, 'with nothing asked it lists everything');
+
+check((await call(null, 'POST', '/routines/pone/play-release/installs')).status === 204, 'an install can be counted');
+check((await (await call(null, 'GET', '/routines/pone/play-release')).json()).installs === 1, 'and shows');
+found = (await (await call(null, 'GET', '/routines')).json()).routines;
+check(found[0].name === 'play-release' && found[0].installs === 1, 'the most installed comes first');
+check((await call(null, 'POST', '/routines/pone/nope/installs')).status === 404, 'counting an unknown routine is a 404');
+
+res = await call(p1, 'GET', '/me/routines');
+check((await res.json()).routines.length === 1, 'someone sees their own routines');
+check((await call(null, 'GET', '/me/routines')).status === 401, 'and nobody else does');
+check((await call(p2, 'DELETE', '/routines/play-release')).status === 204 && (await call(null, 'GET', '/routines/ptwo/play-release')).status === 404, 'a routine can be taken down');
+check((await call(p2, 'DELETE', '/routines/play-release')).status === 404, 'only once');
+check((await call(null, 'GET', '/routines/pone/play-release')).ok, "and taking down yours leaves nobody else's");
+
+let writes = [];
+for (let i = 0; i < 25; i++) writes.push((await call(p1, 'PUT', '/routines/play-release', routine(), '10.8.8.8')).status);
+check(writes.includes(429), 'publishing is rate limited');
+
+// Deleting an account removes what it published.
+check((await call(p2, 'DELETE', '/me')).status === 204, 'an account can be deleted');
+check((await call(p2, 'GET', '/me')).status === 401, 'and it is signed out at once');
+check((await call(null, 'GET', '/routines/ptwo/gmail-label')).status === 404 && psql("SELECT count(*) FROM users WHERE email = 'p2@example.com'") === '0', 'with its routines and its sign-in');
 
 // ---------- rate limit ----------
 let limited = false;

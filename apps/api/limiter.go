@@ -30,6 +30,11 @@ func newLimiter(url string, limit int, window time.Duration) (*limiter, error) {
 }
 
 func (l *limiter) allow(ctx context.Context, group, visitor string) bool {
+	return l.within(ctx, group, visitor, l.limit)
+}
+
+// within is allow with a limit of its own, for groups that need more or fewer calls than sign-in does.
+func (l *limiter) within(ctx context.Context, group, visitor string, limit int64) bool {
 	key := "br:rl:" + group + ":" + visitorKey(visitor)
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
@@ -40,7 +45,7 @@ func (l *limiter) allow(ctx context.Context, group, visitor string) bool {
 		slog.Warn("rate limit check failed", "err", err)
 		return true
 	}
-	return n.Val() <= l.limit
+	return n.Val() <= limit
 }
 
 // An IPv6 visitor can pick any address in their /64, so they count as one.
