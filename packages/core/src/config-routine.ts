@@ -1,4 +1,5 @@
 import { isMap, isScalar, isSeq, LineCounter, parseDocument, type YAMLMap } from 'yaml';
+import { checkUrls, MAX_URLS } from './urls.ts';
 import { HOOK_EVENTS, HOOK_LIMITS, isHookEvent, type Hooks } from './hooks.ts';
 
 // `config.routine` in the root of a repository says what routines it holds. YAML, version 1:
@@ -29,6 +30,8 @@ export interface RepoRoutine {
   instructions?: string;
   /** Hosts the routine works on. When set, the routine file's site must be one of them or under one. */
   sites?: string[];
+  /** The pages the routine applies to, as globs. Replaces the ones the routine file has or works out. */
+  urls?: string[];
   /** What each value is for, as the author words it. The routine file decides which values exist. */
   params?: Record<string, { description?: string; type?: 'string' | 'file' }>;
   hooks?: Hooks;
@@ -67,7 +70,7 @@ const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$|
 /** A file in the repository: letters, digits, dots, dashes and underscores in each part, no `..`, at most 5 folders deep. */
 export const REPO_PATH = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,60}\/){0,5}[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.md$/;
 const FIELDS = ['version', 'name', 'description', 'instructions', 'routines'];
-const ROUTINE_FIELDS = ['name', 'description', 'path', 'instructions', 'sites', 'params', 'hooks'];
+const ROUTINE_FIELDS = ['name', 'description', 'path', 'instructions', 'sites', 'urls', 'params', 'hooks'];
 const PARAM_FIELDS = ['description', 'type'];
 
 export const isRepoPath = (p: string) => p.length <= 160 && REPO_PATH.test(p) && !p.split('/').some((part) => part === '..' || part === '.');
@@ -179,6 +182,22 @@ export function parseConfigRoutine(text: string, file = CONFIG_FILE): { config: 
         }
       }
 
+      let urls: string[] | undefined;
+      const up = pair(item, 'urls');
+      if (up) {
+        if (!isSeq(up.value)) bad(up, `${at}.urls`, 'Must be a list of pages like console.acme.test/releases/*.');
+        else {
+          urls = [];
+          if (up.value.items.length === 0 || up.value.items.length > MAX_URLS) bad(up, `${at}.urls`, `List 1 to ${MAX_URLS} pages.`);
+          up.value.items.forEach((u, j) => {
+            const g = isScalar(u) && typeof u.value === 'string' ? u.value.trim().toLowerCase().replace(/\/+$/, '') : '';
+            const why = g ? checkUrls([g], g.split('/')[0])[0] : 'Must be text.';
+            if (why) bad(u, `${at}.urls[${j}]`, why);
+            else urls!.push(g);
+          });
+        }
+      }
+
       let params: RepoRoutine['params'];
       const pp = pair(item, 'params');
       if (pp) {
@@ -244,6 +263,7 @@ export function parseConfigRoutine(text: string, file = CONFIG_FILE): { config: 
           path,
           ...(rinst ? { instructions: rinst } : {}),
           ...(sites?.length ? { sites } : {}),
+          ...(urls?.length ? { urls } : {}),
           ...(params && Object.keys(params).length ? { params } : {}),
           ...(hooks && Object.keys(hooks).length ? { hooks } : {}),
         });

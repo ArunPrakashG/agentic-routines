@@ -1,6 +1,7 @@
 import { isIrreversible, isItemUrl, isNavigation, shortUrl, siteOf, stepBuilder, targetLabel } from './compile.ts';
 import { checkHooks } from './hooks.ts';
 import { onSite } from './routine-md.ts';
+import { deriveUrls } from './urls.ts';
 import { pageSimilarity, SAME_PAGE, urlPattern } from './match.ts';
 import type { ParamSpec, RecordedEvent, Routine, RoutineMeta, Run, Step } from './types.ts';
 
@@ -38,7 +39,7 @@ export interface Draft extends Snapshot {
   /** Set when this refines a routine that is already saved. */
   base?: { owner: string; name: string; version: number };
   /** What the person’s own routine carries that edits do not touch: notes for the agent, hooks. Never taken from someone else’s routine. */
-  keep?: Pick<RoutineMeta, 'instructions' | 'hooks' | 'requires' | 'returns'>;
+  keep?: Pick<RoutineMeta, 'instructions' | 'hooks' | 'requires' | 'returns' | 'urls' | 'surface'>;
   history: Snapshot[];
   /** The proposal as first made, for reset. */
   initial: Snapshot;
@@ -210,6 +211,12 @@ function buildFromRun(run: Run, meta: { name: string; description: string; doNot
 }
 
 /** A draft of a routine that is already saved, to refine it. What each step did is read from the page the next one began on. */
+/** Urls the author wrote, as opposed to the ones worked out from the steps, which are worked out again. */
+function declaredUrls(r: Routine): string[] | undefined {
+  const worked = deriveUrls(r.steps, r.meta.site).join('\n');
+  return r.meta.urls && r.meta.urls.join('\n') !== worked ? r.meta.urls : undefined;
+}
+
 export function draftFromRoutine(r: Routine & { owner?: string }, meta: { name?: string; description?: string; doNotUse?: string }): Draft {
   return withInitial(buildFromRoutine(r, meta));
 }
@@ -235,7 +242,7 @@ function buildFromRoutine(r: Routine & { owner?: string }, meta: { name?: string
     httpHosts: httpHosts.concat(/^[\d.]+(:\d+)?$/.test(r.meta.site) ? [r.meta.site] : []),
     base: { owner: r.owner ?? r.meta.owner ?? 'local', name: r.meta.name, version: r.meta.version },
     // Notes and hooks somebody else wrote are not carried into a routine that then reads as the person's own.
-    ...((r.owner ?? r.meta.owner ?? 'local') === 'local' ? { keep: { instructions: r.meta.instructions, hooks: r.meta.hooks, requires: r.meta.requires, returns: r.meta.returns } } : {}),
+    ...((r.owner ?? r.meta.owner ?? 'local') === 'local' ? { keep: { instructions: r.meta.instructions, hooks: r.meta.hooks, requires: r.meta.requires, returns: r.meta.returns, urls: declaredUrls(r), surface: r.meta.surface } } : {}),
     steps,
     params: structuredClone(r.meta.params),
     secrets: [...r.meta.secrets],
@@ -608,6 +615,7 @@ export function finalize(d: Draft, draftedBy?: string): { routine: Routine; pinn
       params,
       secrets,
       pauses: steps.filter((s) => s.pause).map((s) => s.n),
+      urls: d.keep?.urls ?? deriveUrls(steps, d.site),
       drafted_by: draftedBy,
       ...Object.fromEntries(Object.entries(d.keep ?? {}).filter(([, v]) => v !== undefined)),
     },

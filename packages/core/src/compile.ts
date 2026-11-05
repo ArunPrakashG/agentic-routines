@@ -1,4 +1,5 @@
 import { urlPattern } from './match.ts';
+import { deriveUrls } from './urls.ts';
 import type { Locator, ParamSpec, RecordedEvent, Routine, Run, Step } from './types.ts';
 
 const IRREVERSIBLE =
@@ -180,6 +181,7 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
       params: b.params,
       secrets: b.secrets,
       pauses: steps.filter((s) => s.pause).map((s) => s.n),
+      urls: deriveUrls(steps, siteOf(workUrl)),
       returns: opts.returns,
       drafted_by: opts.draftedBy,
     },

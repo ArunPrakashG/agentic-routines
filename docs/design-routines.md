@@ -85,3 +85,7 @@ routines:
 ## Order and what each part proves
 
 A: e2e records a run with a modal and a click-through, proposes, applies the hint, refuses an unsafe edit, tests, saves, replays. B: the e2e installs a fixture repo with a `config.routine`, and `config.routine` errors are checked with file and line. C: the e2e runs a routine with a filling hook, a noting hook and a misbehaving hook, and walks the approval and re-prompt on change.
+
+## Finding and preferring routines
+
+A routine records the pages it applies to (`urls`, globs worked out from the recorded pages, or written by the author or in `config.routine`). `routines_search` takes the page the agent is on, ranks a closer path match above a bare site match and, among equals, the routine that works without the model. `navigate` and `read_page` add a fixed one-line hint when an installed routine handles the page; the CLI does the matching, so the extension only has to report the tab's address. Per-routine run stats stay in the routine's folder. `surface` (`browser`, reserved `desktop`) is validated and nothing else: desktop control is not built.
