@@ -1,128 +1,143 @@
 {
   "v": 3,
-  "createdOnFiles": {
-    "v": 1,
-    "at": "2026-11-05T01:20:00Z"
+  "attachments": {},
+  "boards": {
+    "Admin.dc.html": {
+      "h": 1000,
+      "title": "Admin \u00b7 Review",
+      "w": 1440,
+      "x": 6095,
+      "y": 0
+    },
+    "AdminLive.dc.html": {
+      "h": 800,
+      "title": "Admin \u00b7 Live and blocked",
+      "w": 1440,
+      "x": 6095,
+      "y": 1120
+    },
+    "Agent.dc.html": {
+      "h": 844,
+      "title": "Agent \u00b7 one tool call",
+      "w": 960,
+      "x": 2960,
+      "y": 930
+    },
+    "Directory.dc.html": {
+      "h": 1024,
+      "title": "Site \u00b7 Directory",
+      "w": 1440,
+      "x": 4040,
+      "y": 6912
+    },
+    "Foundations.dc.html": {
+      "h": 4414,
+      "title": "Foundations",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "InstallGit.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Install from Git",
+      "w": 400,
+      "x": 6615,
+      "y": 2040
+    },
+    "Library.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Routines (dark)",
+      "w": 400,
+      "x": 1520,
+      "y": 930
+    },
+    "Main.dc.html": {
+      "h": 810,
+      "title": "Hero \u00b7 record, compile, replay (14s loop)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Onboarding.dc.html": {
+      "h": 844,
+      "title": "First run \u00b7 Google sign-in, connect agent",
+      "w": 880,
+      "x": 2480,
+      "y": 1894
+    },
+    "Profile.dc.html": {
+      "h": 720,
+      "title": "Site \u00b7 Profile, signed in",
+      "w": 1440,
+      "x": 4040,
+      "y": 6072
+    },
+    "Replay.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Replay, paused",
+      "w": 400,
+      "x": 2480,
+      "y": 930
+    },
+    "Save.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Save routine",
+      "w": 400,
+      "x": 2000,
+      "y": 930
+    },
+    "Site.dc.html": {
+      "h": 5952,
+      "title": "Site \u00b7 desktop",
+      "w": 1440,
+      "x": 4040,
+      "y": 0
+    },
+    "SiteMobile.dc.html": {
+      "h": 7431,
+      "title": "Site \u00b7 mobile",
+      "w": 375,
+      "x": 5600,
+      "y": 0
+    },
+    "Sources.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Sources",
+      "w": 400,
+      "x": 6095,
+      "y": 2040
+    },
+    "States.dc.html": {
+      "h": 844,
+      "title": "States \u00b7 empty, broken",
+      "w": 880,
+      "x": 1520,
+      "y": 1894
+    },
+    "Submit.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Submit for review",
+      "w": 400,
+      "x": 7135,
+      "y": 2040
+    },
+    "Submissions.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Your submissions",
+      "w": 400,
+      "x": 7655,
+      "y": 2040
+    }
   },
-  "title": "Browser Routines",
+  "createdOnFiles": {
+    "at": "2026-11-05T01:20:00Z",
+    "v": 1
+  },
+  "designSystems": [],
   "launch": {
     "view": "canvas"
   },
-  "pages": [],
-  "boards": {
-    "Main.dc.html": {
-      "x": 1520,
-      "y": 0,
-      "w": 1440,
-      "h": 810,
-      "title": "Hero \u00b7 record, compile, replay (14s loop)"
-    },
-    "Foundations.dc.html": {
-      "x": 0,
-      "y": 0,
-      "w": 1440,
-      "h": 4414,
-      "title": "Foundations"
-    },
-    "Library.dc.html": {
-      "x": 1520,
-      "y": 930,
-      "w": 400,
-      "h": 844,
-      "title": "Side panel \u00b7 Routines (dark)"
-    },
-    "Save.dc.html": {
-      "x": 2000,
-      "y": 930,
-      "w": 400,
-      "h": 844,
-      "title": "Side panel \u00b7 Save routine"
-    },
-    "Replay.dc.html": {
-      "x": 2480,
-      "y": 930,
-      "w": 400,
-      "h": 844,
-      "title": "Side panel \u00b7 Replay, paused"
-    },
-    "Agent.dc.html": {
-      "x": 2960,
-      "y": 930,
-      "w": 960,
-      "h": 844,
-      "title": "Agent \u00b7 one tool call"
-    },
-    "States.dc.html": {
-      "x": 1520,
-      "y": 1894,
-      "w": 880,
-      "h": 844,
-      "title": "States \u00b7 empty, broken"
-    },
-    "Onboarding.dc.html": {
-      "x": 2480,
-      "y": 1894,
-      "w": 880,
-      "h": 844,
-      "title": "First run \u00b7 Google sign-in, connect agent"
-    },
-    "Site.dc.html": {
-      "x": 4040,
-      "y": 0,
-      "w": 1440,
-      "h": 5952,
-      "title": "Site \u00b7 desktop"
-    },
-    "SiteMobile.dc.html": {
-      "x": 5600,
-      "y": 0,
-      "w": 375,
-      "h": 7431,
-      "title": "Site \u00b7 mobile"
-    },
-    "Directory.dc.html": {
-      "x": 4040,
-      "y": 6912,
-      "w": 1440,
-      "h": 1024,
-      "title": "Site \u00b7 Directory"
-    },
-    "Profile.dc.html": {
-      "x": 4040,
-      "y": 6072,
-      "w": 1440,
-      "h": 720,
-      "title": "Site \u00b7 Profile, signed in"
-    },
-    "Admin.dc.html": {
-      "x": 6095,
-      "y": 0,
-      "w": 1440,
-      "h": 1000,
-      "title": "Admin \u00b7 Review"
-    },
-    "AdminLive.dc.html": {
-      "x": 6095,
-      "y": 1120,
-      "w": 1440,
-      "h": 800,
-      "title": "Admin \u00b7 Live and blocked"
-    },
-    "Sources.dc.html": {
-      "x": 6095,
-      "y": 2040,
-      "w": 400,
-      "h": 844,
-      "title": "Side panel \u00b7 Sources"
-    },
-    "InstallGit.dc.html": {
-      "x": 6615,
-      "y": 2040,
-      "w": 400,
-      "h": 844,
-      "title": "Side panel \u00b7 Install from Git"
-    }
-  },
+  "notes": {},
   "order": [
     "Foundations.dc.html",
     "Main.dc.html",
@@ -135,8 +150,14 @@
     "Site.dc.html",
     "SiteMobile.dc.html",
     "Directory.dc.html",
-    "Profile.dc.html"
+    "Profile.dc.html",
+    "Admin.dc.html",
+    "AdminLive.dc.html",
+    "Sources.dc.html",
+    "InstallGit.dc.html",
+    "Submit.dc.html",
+    "Submissions.dc.html"
   ],
-  "notes": {},
-  "designSystems": []
+  "pages": [],
+  "title": "Browser Routines"
 }
