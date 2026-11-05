@@ -12,4 +12,6 @@ DEV_DIR=$DIR AGENTIC_ROUTINES_HOME=$DIR/store node "$ROOT/dev/e2e.mjs" "$@" || c
 AR_DEV_DIR=$DIR/panel "$ROOT/dev/up.sh" --headless --no-claude --no-build >/dev/null
 node "$ROOT/dev/e2e-panel.mjs" || code=$?
 "$ROOT/dev/down.sh"
+# Installing from Git sources and config.routine: the built CLI against a stand-in for GitHub, no browser.
+node "$ROOT/dev/e2e-sources.mjs" || code=$?
 exit ${code:-0}

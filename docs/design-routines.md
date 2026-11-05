@@ -61,8 +61,9 @@ routines:
 
 - Parsed in `packages/core/src/config-routine.ts` with a hand-written schema that reports file, line and field (`config.routine:14 routines[1].path: ...`). It uses the `yaml` document API for line numbers.
 - Fallback: a repo without the file lists `routines/*.md` as today, and a repo with a single `ROUTINE.md` in its root is one routine.
-- The listing in `sources.ts` (CLI) and the Sources panel (`lib/git.ts`) read the file first. Fields in `config.routine` describe and gate what is listed; the routine file stays the source of the steps. Where both give a value, `config.routine` is shown and the routine file is what runs.
-- Repo and routine `instructions` reach the agent in `routines_search`, in the tool description and in `routine_describe`, always inside the untrusted-content envelope, since they were written by someone else.
+- The listing in `core/src/sources.ts` (shared by the GitHub source and the folder source) reads the file first. Fields in `config.routine` describe and gate what is listed; the routine file stays the source of the steps. At install, the entry's `description` replaces the file's, `instructions` and the repository's name and instructions are stored with the routine (`meta.instructions`, `meta.repo`), so what the person read in the panel is what the agent reads. `sites` gates: a routine whose site is not listed is left out. A `config.routine` that is there but wrong is an error with file, line and field, never a reason to guess another layout.
+- `agentic-routines sources check <folder>` runs the same reader for authors.
+- Repo and routine `instructions` reach the agent in `routines_search`, in the tool description, in `routine_describe` and after a replay, always inside an envelope with a boundary the text could not have known, since they were written by someone else. `core/src/envelope.ts` is a small stand-alone version; the fuller cleaning of text from websites (another branch) can replace its body.
 
 ## Part C: hooks and instructions
 

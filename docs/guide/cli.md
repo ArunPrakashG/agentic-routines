@@ -10,6 +10,7 @@ npx agentic-routines <command>
 | `doctor` | Checks what is connected and what is not. |
 | `sources` | Lists the places routines can come from. |
 | `sources add <address>` | Adds a GitHub repository, such as `github.com/owner/repository`. Nothing is installed until you click Install in the side panel. |
+| `sources check <folder>` | Reads a folder the way a source would and prints every problem in its `config.routine`, with the file, line and field. Run it before you push a [routine repository](/docs/repositories). |
 | `sources remove <address>` | Removes a source. |
 | `sources on <address>` / `off <address>` | Turns a source on or off. |
 | `export <routine>` | Prints a routine as one file, ready to commit under a repository's `routines/` folder. |

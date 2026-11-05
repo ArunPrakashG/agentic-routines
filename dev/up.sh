@@ -50,7 +50,7 @@ STORE=$DEV/store
 BHOME=$DEV/home-$(sha256sum "$EXT/background.js" | cut -c1-8)
 PROFILE=$BHOME/.config/chromium
 mkdir -p "$PROFILE" "$STORE" "$DEV/workspace"
-cp "$ROOT"/dev/fixtures/* "$DEV/workspace/"
+cp -r "$ROOT"/dev/fixtures/* "$DEV/workspace/"
 
 # Real setup against the throwaway home, with no agent on PATH to edit.
 env HOME="$BHOME" AGENTIC_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/bin:/bin" "$NODE" "$CLI" setup >/dev/null

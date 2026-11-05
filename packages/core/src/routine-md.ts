@@ -3,6 +3,12 @@ import type { RoutineMeta } from './types.ts';
 
 const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
+function repoOf(v: unknown): RoutineMeta['repo'] {
+  const o = v as { name?: unknown; instructions?: unknown } | undefined;
+  if (!o || typeof o !== 'object' || typeof o.name !== 'string') return undefined;
+  return { name: o.name.slice(0, 63), ...(typeof o.instructions === 'string' && o.instructions ? { instructions: o.instructions.slice(0, 4000) } : {}) };
+}
+
 export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string } {
   const m = FENCE.exec(text);
   if (!m) throw new Error('ROUTINE.md has no frontmatter');
@@ -20,6 +26,8 @@ export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string 
     requires: raw.requires,
     returns: raw.returns,
     drafted_by: raw.drafted_by ? String(raw.drafted_by) : undefined,
+    instructions: raw.instructions ? String(raw.instructions).slice(0, 4000) : undefined,
+    repo: repoOf(raw.repo),
   };
   return { meta, body: text.slice(m[0].length).trim() };
 }

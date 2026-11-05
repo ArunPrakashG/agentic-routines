@@ -80,6 +80,10 @@ export interface RoutineMeta {
   returns?: string;
   /** The agent that wrote the description, e.g. "claude-code". */
   drafted_by?: string;
+  /** Text for the agent from the routine's author: what to check, what to avoid. Untrusted when the author is someone else. */
+  instructions?: string;
+  /** The repository the routine came from and what its config.routine tells the agent about the repository as a whole. */
+  repo?: { name: string; instructions?: string };
 }
 
 export interface Routine {

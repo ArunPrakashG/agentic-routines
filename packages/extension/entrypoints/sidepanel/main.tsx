@@ -304,11 +304,20 @@ function Sources({ back }: { back: () => void }) {
                   <div class="entries">
                     {!found && <span class="meta">Reading…</span>}
                     {found?.error && <span class="err">{found.error}</span>}
+                    {found?.repo && (
+                      <div class="stack" style={{ gap: '2px' }}>
+                        <span class="name">{found.repo.name}</span>
+                        <span class="meta" style={{ whiteSpace: 'normal' }}>{found.repo.description}</span>
+                      </div>
+                    )}
+                    {found?.problems?.map((p) => (
+                      <span class="err mono" key={p} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{p}</span>
+                    ))}
                     {found?.entries.map((e) => (
                       <div class="entry" key={e.path}>
                         <div class="stack" style={{ flex: 1 }}>
                           <span class="name">{e.name}</span>
-                          <span class="meta">{e.site}</span>
+                          <span class="meta">{e.site}{e.hooks ? ` · ${e.hooks} ${e.hooks === 1 ? 'hook' : 'hooks'}` : ''}</span>
                         </div>
                         <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'gitPreview', source: x.id, path: e.path }).then(back, (er) => setError(er.message))}>
                           Review
@@ -334,7 +343,7 @@ function Sources({ back }: { back: () => void }) {
             </button>
           </form>
           <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
-            A GitHub repository or a folder on this computer. Routines are plain <code>.md</code> files in a <code>routines</code> folder.
+            A GitHub repository or a folder on this computer. A <code>config.routine</code> file in its root lists the routines, or they are <code>.md</code> files in a <code>routines</code> folder.
           </span>
           <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
             Only the Directory is reviewed by us. For anything else, you see every step before it installs.
@@ -394,6 +403,20 @@ function InstallGit({ card }: { card: GitCard }) {
             </button>
           )}
         </section>
+        {(card.instructions || card.repoInstructions) && (
+          <div class="stack" style={{ gap: '6px' }}>
+            <span class="meta">Notes the author wrote for your agent</span>
+            {card.repoInstructions && (
+              <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+                {card.repoName ? `${card.repoName}: ` : ''}{card.repoInstructions}
+              </span>
+            )}
+            {card.instructions && (
+              <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{card.instructions}</span>
+            )}
+            <span class="meta" style={{ whiteSpace: 'normal' }}>Your agent sees these marked as written by someone else.</span>
+          </div>
+        )}
         {blocked ? (
           <div class="warnbox bad" role="alert">
             <span class="wt">It can’t be installed</span>

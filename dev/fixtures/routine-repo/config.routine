@@ -1,0 +1,26 @@
+# An example repository of routines. `agentic-routines sources check dev/fixtures/routine-repo` reads it.
+version: 1
+name: acme-console-routines
+description: Routines for the Acme Console, kept by the Acme release team.
+instructions: |
+  These routines run in the user's signed-in browser. Ask the user which build to release
+  before you run any of them, and never type a password.
+
+routines:
+  - name: acme-release
+    description: >-
+      Start a rollout of a build to internal testing on the Acme Console.
+      Use when the user asks to release, roll out or ship a build to testers.
+    path: routines/acme-release.md
+    sites: [console.acme.test]
+    instructions: Check that the version name matches the changelog before you run it.
+    params:
+      version_name: The version to release, like 2.14.0.
+      release_notes:
+        description: What changed, in a sentence.
+        type: string
+
+  - name: acme-export-history
+    description: Export the release history as a CSV. Use when the user wants the list of past releases.
+    path: routines/acme-export-history.md
+    sites: [console.acme.test]

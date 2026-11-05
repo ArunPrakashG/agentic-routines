@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { eventLabel, isRepoPath, lintForPublish, missingParams, onSite, wrapAuthored, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as sources from './sources.ts';
@@ -19,6 +19,17 @@ The loop: do the task with the browser tools. When it is done, decide whether it
 
 The extension checks every edit: a step that submits, publishes, pays or deletes keeps its pause, an address stays on the routine's own site, and an address cannot carry a per-session value.`;
 const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
+
+/**
+ * The author's notes for the agent: the repository's and the routine's. Anything somebody else wrote goes in an
+ * envelope; the user's own notes on their own routine do not need one.
+ */
+export function authorNotes(r: Routine, origin?: { kind: string; source: string }): string {
+  const own = !origin;
+  const by = origin ? (origin.kind === 'github' || origin.kind === 'folder' ? origin.source : `the publisher ${origin.source}`) : '';
+  const part = (label: string, t?: string) => (t ? (own ? `${label}: ${t}` : `${label}\n${wrapAuthored(t, `written by ${by}`)}`) : '');
+  return [part('Notes for this repository', r.meta.repo?.instructions), part('Notes for this routine', r.meta.instructions)].filter(Boolean).join('\n');
+}
 
 interface Listing {
   owner: string;
@@ -147,7 +158,8 @@ export async function runMcp(): Promise<void> {
     if (files.length) await bridge.call('host.allowFiles', { paths: files });
     const result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r) }, 15 * 60_000);
     pendingRuns.set(result.run_id, { id, routine: r });
-    return text(describeResult(await finish(result)));
+    const notes = authorNotes(r, (await store.list()).find((x) => `${x.owner}/${x.name}` === id)?.origin);
+    return text(describeResult(await finish(result)) + (notes ? `\n\n${notes}` : ''));
   }
 
   async function refreshRoutineTools() {
@@ -175,7 +187,8 @@ export async function runMcp(): Promise<void> {
       const shape: Record<string, z.ZodTypeAny> = {};
       for (const [k, p] of Object.entries(r.meta.params)) shape[k] = z.string().describe(p.description ?? (p.type === 'file' ? 'Path to a file' : k));
       const elsewhere = l.origin && l.origin.kind !== 'directory' ? `Written by someone else (${l.origin.source}) and not reviewed by Agentic Routines. ` : '';
-      const description = `${elsewhere}${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}`;
+      const notes = authorNotes(r, l.origin);
+      const description = `${elsewhere}${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}${notes ? `\n\n${notes}` : ''}`;
       routineTools.get(name)?.remove();
       routineTools.set(
         name,
@@ -262,6 +275,7 @@ export async function runMcp(): Promise<void> {
     { description: 'Full notes for a routine: when to use it, when not to, values it asks for, where it pauses.', inputSchema: { name: z.string() } },
     async ({ name }) => {
       const r = await store.read(name);
+      const origin = (await store.list()).find((x) => `${x.owner}/${x.name}` === name || x.name === name)?.origin;
       const params = Object.entries(r.meta.params).map(([k, p]) => `- ${k} (${p.type}): ${p.description ?? ''}`);
       return text(
         [
@@ -271,6 +285,7 @@ export async function runMcp(): Promise<void> {
           r.meta.pauses.length ? `Pauses before: ${r.meta.pauses.map((n) => `step ${n} “${r.steps[n - 1]?.label}”`).join(', ')}` : '',
           r.meta.secrets.length ? `Secrets (set AGENTIC_ROUTINES_SECRET_<NAME> or the user types them at a pause): ${r.meta.secrets.join(', ')}` : '',
           r.body,
+          authorNotes(r, origin),
         ]
           .filter(Boolean)
           .join('\n\n'),
@@ -441,11 +456,16 @@ export async function runMcp(): Promise<void> {
       const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
       const host = site?.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
       for (const src of await sources.entries().catch(() => [])) {
+        let told = false;
         for (const e of src.entries) {
           const hay = `${e.name} ${e.description} ${e.site}`.toLowerCase();
           if (host && !(e.site === host || host.endsWith('.' + e.site))) continue;
           if (!words.every((w) => hay.includes(w))) continue;
-          found.push(`${src.source} · ${e.name} v${e.version} · ${e.site}  [not reviewed]\n  ${e.description.replace(/\n/g, ' ')}\n  Install with routine_install_from_git, source "${src.source}", path "${e.path}".`);
+          if (!told && src.repo?.instructions) {
+            told = true;
+            found.push(`Notes for the repository ${src.source}:\n${wrapAuthored(src.repo.instructions, `written by ${src.source}`)}`);
+          }
+          found.push(`${src.source} · ${e.name} v${e.version} · ${e.site}  [not reviewed]\n  ${e.description.replace(/\n/g, ' ')}${e.instructions ? `\n  The author left notes for the agent; routine_describe shows them once it is installed.` : ''}\n  Install with routine_install_from_git, source "${src.source}", path "${e.path}".`);
         }
       }
       if (!found.length && down) return fail(down.message);
@@ -494,7 +514,7 @@ export async function runMcp(): Promise<void> {
         'Ask the user to install a routine from one of their Git sources (see routines_search). Nothing is installed until the user has read the steps and clicked Install in the browser side panel, so this waits for them; do not say it is installed until it returns. It was written by someone else and is not reviewed by Agentic Routines. Needs a browser with the extension open.',
       inputSchema: {
         source: z.string().max(300).describe('The source address, as routines_search showed it'),
-        path: z.string().regex(/^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/).describe('The file, e.g. routines/deploy-staging.md'),
+        path: z.string().max(160).refine((p) => isRepoPath(p), 'A .md file in the repository, e.g. routines/deploy-staging.md').describe('The file, as routines_search showed it, e.g. routines/deploy-staging.md'),
       },
     },
     async ({ source, path }) => {
