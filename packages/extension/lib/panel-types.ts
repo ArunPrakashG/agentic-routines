@@ -1,17 +1,20 @@
 import type { RecordedEvent } from '@agentic-routines/core';
 import type { Account } from './auth';
 import type { PublishCard } from './directory';
+import type { Hooks, HookState } from '@agentic-routines/core';
 import type { GitCard } from './git';
 
 export interface PanelState {
   account?: Account;
   connected: boolean;
   agents: string[];
-  routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; lastRun?: number; changed?: number[]; draftedBy?: string; published?: { as: string; version: number }; origin?: { kind: 'directory' | 'github' | 'folder'; source: string; ref?: string }; blocked?: string }[];
+  routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; lastRun?: number; changed?: number[]; draftedBy?: string; published?: { as: string; version: number }; origin?: { kind: 'directory' | 'github' | 'folder'; source: string; ref?: string }; blocked?: string; hooks?: { count: number; state: HookState; reason?: string } }[];
   runs: { id: string; source: string; startedAt: number; updatedAt: number; events: RecordedEvent[] }[];
   recording?: string;
   publish?: PublishCard;
   install?: GitCard;
+  /** Hook code the person is reading to decide whether it may run. */
+  hooksReview?: { id: string; name: string; hooks: Hooks; state: HookState; busy?: boolean; error?: string };
   replay?: {
     id: string;
     name: string;
@@ -39,7 +42,9 @@ export type PanelCommand =
   | { t: 'sourceSet'; id: string; enabled: boolean }
   | { t: 'sourceEntries'; id: string; fresh?: boolean }
   | { t: 'gitPreview'; source: string; path: string }
-  | { t: 'gitDecide'; approve: boolean }
+  | { t: 'gitDecide'; approve: boolean; hooks?: boolean }
+  | { t: 'hooksReview'; id: string }
+  | { t: 'hooksDecide'; approve: boolean }
   | { t: 'enable'; id: string; enabled: boolean }
   | { t: 'submissions' }
   | { t: 'withdraw'; id: string }

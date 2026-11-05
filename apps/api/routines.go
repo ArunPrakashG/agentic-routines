@@ -53,6 +53,38 @@ type routineMeta struct {
 	Pauses      []int                `json:"pauses"`
 	Returns     string               `json:"returns,omitempty"`
 	DraftedBy   string               `json:"drafted_by,omitempty"`
+	// Text for the agent that runs the routine, shown to it inside the untrusted-content envelope.
+	Instructions string `json:"instructions,omitempty"`
+	// Code on events, run by the extension in a sandbox with no network. Event name to source.
+	Hooks map[string]string `json:"hooks,omitempty"`
+}
+
+// hookEvents is the list the extension and the CLI accept (packages/core/src/hooks.ts).
+var hookEvents = map[string]bool{
+	"run.start": true, "run.end": true, "step.before": true, "step.after": true,
+	"action.click.before": true, "action.click.after": true, "action.type.before": true, "action.type.after": true,
+	"action.select.before": true, "action.select.after": true, "action.upload.before": true, "action.upload.after": true,
+	"action.navigate.before": true, "action.navigate.after": true, "action.press.before": true, "action.press.after": true,
+	"action.read.before": true, "action.read.after": true, "page.load": true, "step.changed": true,
+	"pause.reached": true, "pause.approved": true, "error": true,
+}
+
+const (
+	maxHookCode  = 8000
+	maxHookTotal = 32000
+	maxNotes     = 4000
+)
+
+// checkHooks is the same rule the extension and the CLI apply to a routine's hooks.
+func checkHooks(h map[string]string) bool {
+	total := 0
+	for ev, code := range h {
+		if !hookEvents[ev] || strings.TrimSpace(code) == "" || len(code) > maxHookCode {
+			return false
+		}
+		total += len(code)
+	}
+	return total <= maxHookTotal
 }
 
 type locator struct {
@@ -138,6 +170,8 @@ func (r *routineIn) check(name string) string {
 		return "body_too_long"
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
 		return "bad_steps"
+	case len(m.Instructions) > maxNotes || !checkHooks(m.Hooks):
+		return "bad_hooks"
 	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512 || len(m.DraftedBy) > 40:
 		return "bad_meta"
 	}

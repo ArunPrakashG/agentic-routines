@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hooks review, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+@supports not selector(::-webkit-scrollbar){.t-light *,.t-dark *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}}
+.t-light ::-webkit-scrollbar,.t-dark ::-webkit-scrollbar{width:10px;height:10px}
+.t-light ::-webkit-scrollbar-track,.t-dark ::-webkit-scrollbar-track,.t-light ::-webkit-scrollbar-corner,.t-dark ::-webkit-scrollbar-corner{background:transparent}
+.t-light ::-webkit-scrollbar-thumb,.t-dark ::-webkit-scrollbar-thumb{background:var(--border-strong);border:3px solid transparent;background-clip:content-box;border-radius:8px}
+.t-light ::-webkit-scrollbar-thumb:hover,.t-dark ::-webkit-scrollbar-thumb:hover{background:var(--text-3);background-clip:content-box}
+.sp,.sp *{box-sizing:border-box}
+.btn{height:36px;padding:0 14px;border-radius:8px;font:500 13px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:var(--surface-1);color:var(--text-1);border-color:var(--border-strong)}
+.icon-btn{width:44px;height:44px;border-radius:8px;border:0;background:transparent;color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.arrive{animation:arrive .42s var(--ease-out) .3s both}
+@keyframes arrive{0%{opacity:0;transform:translateY(-8px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.sp *{animation:none !important}}
+
+.mk,.mk *{box-sizing:border-box}
+.chip{height:30px;padding:0 12px;border-radius:15px;border:1px solid var(--border-strong);background:transparent;color:var(--text-2);font:500 13px/1 var(--font-sans);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--text-1);color:var(--bg);border-color:var(--text-1)}
+.tag{height:22px;padding:0 8px;border-radius:6px;font:500 12px/1 var(--font-sans);display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);color:var(--text-2)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.ok{background:var(--accent-soft);color:var(--accent-ink)}
+.tag.bad{background:var(--danger-soft);color:var(--danger)}
+.tab{height:44px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;font:500 14px/1 var(--font-sans);color:var(--text-2);text-decoration:none;border-bottom:2px solid transparent}
+.tab[aria-current=page]{color:var(--text-1);border-bottom-color:var(--accent)}
+.tab em{font-style:normal;font:500 12px var(--font-mono);color:var(--text-3)}
+.q{display:flex;flex-direction:column;gap:7px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer}
+.q[aria-current=true]{background:var(--surface-1);box-shadow:inset 2px 0 0 var(--accent)}
+.sw{width:36px;height:20px;border-radius:10px;background:var(--surface-3);position:relative;flex:none;display:inline-block;border:0;padding:0;cursor:pointer}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-3);transition:transform .2s var(--ease-out)}
+.sw[aria-checked=true]{background:var(--accent)}
+.sw[aria-checked=true]::after{transform:translateX(16px);background:var(--on-accent)}
+.step{display:grid;grid-template-columns:28px 72px minmax(0,1fr) auto;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:6px;font:400 12px var(--font-mono);color:var(--text-2)}
+.step.flag{background:var(--warn-soft)}
+.step .n{color:var(--text-3)}.step .t{color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.field{border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-1);color:var(--text-1);font:400 13px var(--font-sans)}
+.h3{margin:0;font-size:12px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3)}
+.danger-btn{height:36px;padding:0 12px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--danger);font:500 13px/1 var(--font-sans);cursor:pointer}
+@media (prefers-reduced-motion: reduce){.sw::after{transition:none}}
+.hook{display:flex;flex-direction:column;gap:4px;min-width:0}.hook .ev{font:400 12px var(--font-mono);color:var(--accent-ink)}.hook pre{margin:0;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font:400 12px/18px var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-1)}
+</style>
+</helmet>
+<div class="sp t-dark" style="width: 400px; height: 844px; display: flex; flex-direction: column; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); border-left: 1px solid var(--border);">
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; padding: 0 16px 0 6px; gap: 4px; border-bottom: 1px solid var(--border);"><button class="icon-btn" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"/></svg></button><h1 style="margin: 0; font-size: 15px; font-weight: 500;">Hooks</h1></header>
+  <main style="flex: 1; overflow: hidden; padding: 16px 16px 0; display: flex; flex-direction: column; gap: 16px; position: relative;">
+    <span class="mono" style="font-size: 14px; font-weight: 500;">acme-release</span>
+    <div style="border: 1px solid var(--warn-a); background: var(--warn-soft); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 13px; font-weight: 500; color: var(--warn);">Code written by someone else</span><span style="font-size: 12px; line-height: 18px; color: var(--text-2);">Hooks run on events while this routine replays. They run in a sandbox with no network, and can only ask the extension to skip a step, fill a value, click, type, wait, go to a page on this site, leave a note, stop or pause. They cannot approve a pause.</span></div>
+    <span style="font-size: 12px; color: var(--text-3);">Off until you allow them. If the code changes, you are asked again.</span>
+    <div class="hook"><span class="ev">step.before</span><pre>if (!ctx.step || ctx.step.action !== 'type') return;<br>const m = /Suggested name: &lt;b[^&gt;]*&gt;([^&lt;]+)&lt;/.exec(ctx.dom.html);<br>return m ? [{ do: 'set', value: m[1] }] : [];</pre></div>
+    <div class="hook"><span class="ev">step.after</span><pre>if (ctx.step.action !== 'click') return;<br>return { do: 'note', text: 'Saved at ' + ctx.url };</pre></div>
+    <div class="hook"><span class="ev">run.end</span><pre>return { do: 'note', text: 'Done on ' + ctx.url };</pre></div>
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px; padding: 12px 16px 16px; background: var(--bg); border-top: 1px solid var(--border);"><button class="btn btn-secondary" type="button" style="height: 44px; justify-content: center; font-size: 14px; background: transparent; border-color: transparent;">Keep off</button><button class="btn btn-primary" type="button" style="height: 44px; justify-content: center; font-size: 14px;">Allow these hooks</button></div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

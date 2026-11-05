@@ -31,6 +31,7 @@ const MESSAGES: Record<string, string> = {
   step_off_site: 'A step leaves the routine’s site, so it cannot be published.',
   body_too_long: 'The notes are too long.',
   bad_steps: 'The steps are not in a shape the directory takes.',
+  bad_hooks: 'The hooks or the notes for the agent are too long, or a hook is on an event that does not exist.',
   too_many_routines: 'You have reached the limit of published routines. Take one down first.',
   blocked: 'This account cannot send routines to the directory.',
   too_many_waiting: 'You have ten waiting for review. Wait for a decision or withdraw one.',
@@ -60,8 +61,8 @@ export function problems(r: Routine): string[] {
 /** The routine as the directory takes it. Example values and the owner stay behind. */
 function payload(r: Routine, agentRaw?: string) {
   const params = Object.fromEntries(Object.entries(r.meta.params).map(([k, p]) => [k, { type: p.type, description: p.description, accept: p.accept }]));
-  const { name, site, description, secrets, pauses, returns, drafted_by } = r.meta;
-  return { meta: { name, site, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw }, body: r.body, steps: r.steps };
+  const { name, site, description, secrets, pauses, returns, drafted_by, instructions, hooks } = r.meta;
+  return { meta: { name, site, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw, instructions, hooks }, body: r.body, steps: r.steps };
 }
 
 /** Sends the routine for review. Nothing is public until a person approves it. */

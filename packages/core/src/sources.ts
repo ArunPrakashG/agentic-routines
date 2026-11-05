@@ -208,6 +208,7 @@ export function withRepo(f: Pick<Fetched, 'routine' | 'repo' | 'entry'>): Routin
       ...routine.meta,
       description: entry.description,
       instructions: entry.instructions ?? routine.meta.instructions,
+      ...(entry.hooks ? { hooks: entry.hooks } : {}),
       repo: { name: repo.name, ...(repo.instructions ? { instructions: repo.instructions } : {}) },
     },
   };

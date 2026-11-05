@@ -18,10 +18,10 @@ interface Row {
   guideline: string | null; note: string | null; submitted_at: string; steps: number;
   live_version: number | null; new_publisher: boolean; tags: Check[];
 }
-interface Step { n: number; action: string; label: string; url?: string; value?: string; pause?: string }
+interface Step { n: number; action: string; label: string; url?: string; value?: string; pause?: string; instructions?: string }
 interface Detail extends Omit<Row, 'steps' | 'tags'> {
-  steps: Step[]; meta: { pauses: number[] }; checks: Check[];
-  live: { version: number; steps: Step[] } | null;
+  steps: Step[]; meta: { pauses: number[]; hooks?: Record<string, string>; instructions?: string }; checks: Check[];
+  live: { version: number; steps: Step[]; meta?: { hooks?: Record<string, string> } } | null;
   publisher: { handle: string; joined: string; live: number; approved: number; rejected: number; blocked: boolean };
 }
 interface Live { owner: string; name: string; version: number; installs: number; disabled: boolean; disabled_reason: string | null; publisher_blocked: boolean }
@@ -29,7 +29,7 @@ interface Block { kind: 'user' | 'repo' | 'routine'; value: string; reason: stri
 interface Entry { admin: string; action: string; target: string; detail: Record<string, unknown>; at: string }
 
 const REJECT = [
-  ['G1', 'Unclear job'], ['G2', 'Leaves its site'], ['G3', 'Personal or secret'], ['G4', 'No pause'], ['G5', 'Harmful or deceptive'], ['G7', 'Imitates someone'],
+  ['G1', 'Unclear job'], ['G2', 'Leaves its site'], ['G3', 'Personal or secret'], ['G4', 'No pause'], ['G5', 'Harmful or deceptive'], ['G7', 'Imitates someone'], ['G9', 'Hooks or notes'],
 ] as const;
 const KIND: Record<Block['kind'], string> = { user: 'Publisher', repo: 'Repository', routine: 'Routine' };
 
@@ -228,6 +228,28 @@ function Review({ onCount }: { onCount: (n: number) => void }) {
               ))}
             </div>
           </div>
+          {(detail.meta.instructions || detail.steps.some((s) => s.instructions)) && (
+            <div class="ad-sec">
+              <h3 class="h3">Notes for the installer's agent · shown to it as written by the publisher</h3>
+              <div class="codes">
+                {detail.meta.instructions && <pre class="code">{detail.meta.instructions}</pre>}
+                {detail.steps.filter((s) => s.instructions).map((s) => <pre class="code" key={s.n}>{`Step ${s.n}: ${s.instructions}`}</pre>)}
+              </div>
+            </div>
+          )}
+          {detail.meta.hooks && Object.keys(detail.meta.hooks).length > 0 && (
+            <div class="ad-sec">
+              <h3 class="h3">Hooks · code that runs on installers' machines, in a sandbox with no network</h3>
+              <div class="codes">
+                {Object.entries(detail.meta.hooks).map(([ev, code]) => (
+                  <div key={ev} class="codeblock">
+                    <span class="mono ev">{ev}{detail.live && detail.live.meta?.hooks?.[ev] !== code ? ' · changed' : ''}</span>
+                    <pre class="code">{code}</pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {detail.status === 'pending' ? (
             <>
               <div class="ad-reject">

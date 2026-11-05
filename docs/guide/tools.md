@@ -42,8 +42,8 @@ At most 30 routine tools are exposed at once. The rest are reached with `routine
 | Tool | What it does |
 |---|---|
 | `routines_search` | Search the public directory by words, or by the site a person is on. No account needed. |
-| `routine_install` | Install `owner/name` from the directory. It is checked again on this side. |
-| `routine_install_from_git` | Ask to install from a GitHub repository. The side panel shows every step, and Install is the person's click. |
+| `routine_install` | Install `owner/name` from the directory. It is checked again on this side. Any hooks it has stay off until the person reads and allows them in the side panel. |
+| `routine_install_from_git` | Ask to install from a GitHub repository. The side panel shows every step and any hook code, and Install is the person's click. Hooks are off unless the person switches them on there. |
 | `routine_publish` | Ask to send a routine for review. The person approves in the side panel. An agent can't publish by itself. |
 | `routine_submissions` | Where each submission stands: waiting, rejected with the guideline, live or turned off. Read only. |
 
