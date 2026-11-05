@@ -2,6 +2,7 @@ import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'nod
 import { open } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, join } from 'node:path';
+import { checkUpload, MAX_STREAM, mb } from './files.ts';
 import { paths, socketPath } from '../paths.ts';
 import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from '../protocol.ts';
 import * as sources from '../store/sources.ts';
@@ -11,7 +12,8 @@ import * as store from '../store/routines.ts';
 // stdout belongs to the browser, so all logging goes to a file.
 
 // Native messages to the browser are capped at 1 MB; base64 adds a third.
-const CHUNK = 640 * 1024;
+// A multiple of three, so the pieces of a file join as base64 without re-encoding.
+const CHUNK = 639 * 1024;
 
 function log(...a: unknown[]) {
   try {
@@ -71,9 +73,31 @@ export function runHost(): void {
   // Files an agent asked to upload. The extension can read only these.
   const allowed = new Map<string, number>();
 
+  /** Checks each path, then lets the browser read it for an hour. Nothing is allowed unless every path passes. */
+  async function allowFiles(list: string[]) {
+    if (!Array.isArray(list) || list.length > 20) throw new Error('Up to 20 files at a time.');
+    const ok = [];
+    for (const p of list) ok.push({ asked: String(p), ...(await checkUpload(String(p))) });
+    for (const c of ok) {
+      allowed.set(c.path, Date.now() + 60 * 60_000);
+      allowed.set(c.asked, Date.now() + 60 * 60_000);
+    }
+    return ok.map((c) => ({ name: c.name, size: c.size }));
+  }
+
+  /** The browser asks before reading a file: is it allowed, and how big. */
+  async function fileInfo(p: { path: string }) {
+    const until = allowed.get(p.path);
+    if (!until || until < Date.now()) throw new Error(`${p.path} was not named by the user or the agent for this upload, so the browser will not read it.`);
+    const c = await checkUpload(p.path);
+    return { name: c.name, size: c.size, tooBigToStream: c.size > MAX_STREAM, label: mb(c.size), limit: mb(MAX_STREAM) };
+  }
+
   async function readChunk(p: { path: string; offset: number }) {
     const until = allowed.get(p.path);
     if (!until || until < Date.now()) throw new Error(`Not allowed to read ${p.path}`);
+    const c = await checkUpload(p.path);
+    if (c.size > MAX_STREAM) throw new Error(`${c.name} is ${mb(c.size)}. Without a DevTools session files over ${mb(MAX_STREAM)} cannot be sent through the host. Use a Chromium browser, or a smaller file.`);
     const fh = await open(p.path, 'r');
     try {
       const { size } = await fh.stat();
@@ -118,8 +142,10 @@ export function runHost(): void {
           return;
         }
         if (m.method === 'host.allowFiles') {
-          for (const p of (m.params as { paths: string[] }).paths) allowed.set(p, Date.now() + 60 * 60_000);
-          toClient(client, { id: m.id, result: true });
+          allowFiles((m.params as { paths: string[] }).paths).then(
+            (result) => toClient(client, { id: m.id, result }),
+            (e) => toClient(client, { id: m.id, error: (e as Error).message }),
+          );
           return;
         }
         const id = nextId++;
@@ -152,6 +178,21 @@ export function runHost(): void {
           browser = String((req.params as any)?.browser ?? 'unknown');
           writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, startedAt: Date.now() }), { mode: 0o600 });
           toBrowser({ id: req.id, result: { pid: process.pid, version: process.env.npm_package_version ?? '0.1.0' } });
+          return;
+        }
+        if (req.method === 'fs.info') {
+          fileInfo(req.params as { path: string }).then(
+            (result) => toBrowser({ id: req.id, result }),
+            (e) => toBrowser({ id: req.id, error: (e as Error).message }),
+          );
+          return;
+        }
+        // The person typed this path in the panel to run a routine; the same checks apply.
+        if (req.method === 'host.allowFiles') {
+          allowFiles((req.params as { paths: string[] }).paths).then(
+            (result) => toBrowser({ id: req.id, result }),
+            (e) => toBrowser({ id: req.id, error: (e as Error).message }),
+          );
           return;
         }
         if (req.method === 'fs.readChunk') {

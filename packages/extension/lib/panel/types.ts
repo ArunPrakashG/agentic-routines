@@ -29,6 +29,11 @@ export interface PanelState {
     /** Steps the model matched again on this run; saved as the next version. */
     fixed: number[];
     error?: string;
+    /** Set when the page is a very different size from the one the routine was recorded at. */
+    viewportNote?: string;
+    /** Written by someone else. */
+    foreign?: boolean;
+    pauseKind?: 'asked' | 'forced';
   };
 }
 
@@ -49,7 +54,7 @@ export type PanelCommand =
   | { t: 'submissions' }
   | { t: 'withdraw'; id: string }
   | { t: 'discard'; runId: string }
-  | { t: 'run'; id: string; params: Record<string, string> }
+  | { t: 'run'; id: string; params: Record<string, string>; fit?: boolean }
   | { t: 'decide'; id: string; approve: boolean }
   | { t: 'stop'; id: string }
   | { t: 'dismiss' }

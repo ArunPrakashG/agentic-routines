@@ -1,0 +1,7 @@
+# Acme Console
+
+> The test console used by the Agentic Routines checks.
+
+## Pages
+- [Release](/release.html): create a release
+- [Docs](/docs.html): how the console works

@@ -11,6 +11,7 @@ export const pages = [
   { slug: 'routines', title: 'Routine format', summary: 'ROUTINE.md, parameters, pauses and the steps behind a routine.' },
   { slug: 'hooks', title: 'Hooks and instructions', summary: 'Notes for the agent, and code that runs on events during a replay, with what it may do and how it is approved.' },
   { slug: 'tools', title: 'Agent tools', summary: 'Every tool the MCP server gives your agent.' },
+  { slug: 'safety', title: 'Untrusted content', summary: 'What an agent should not trust, and what the extension enforces.' },
   { slug: 'cli', title: 'Command line', summary: 'setup, doctor, sources and export.' },
   { slug: 'repositories', title: 'Routine repositories', summary: 'config.routine: what a Git repository of routines says about itself, with a full example.' },
   { slug: 'sharing', title: 'Sharing and publishing', summary: 'The directory, GitHub repositories and what review involves.' },

@@ -1,0 +1,4 @@
+# Acme Console, in full
+
+Acme Console is a fake release console. It has an apps list, a release page and a docs page.
+FULL-TEXT-MARKER

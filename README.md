@@ -111,8 +111,8 @@ Inside the larger ones:
 
 | Path | What it is |
 |---|---|
-| `packages/extension/lib/` | `agent/` runs, drafts and the native host line · `replay/` the replay engine · `page/` dom, overlay and tab helpers · `remote/` sign-in, directory and Git sources · `panel/` side panel messages · `platform/` Chromium and Gecko |
-| `packages/cli/src/` | `mcp/` the MCP server · `host/` the native host · `commands/` `setup`, `doctor`, `agents` and `sources` · `store/` routines and sources on disk |
+| `packages/extension/lib/` | `agent/` runs, drafts and the native host line · `replay/` the replay engine · `page/` dom, overlay, hidden-text and tab helpers · `remote/` sign-in, directory and Git sources · `panel/` side panel messages · `platform/` Chromium and Gecko |
+| `packages/cli/src/` | `mcp/` the MCP server · `host/` the native host and the upload checks · `commands/` `setup`, `doctor`, `agents` and `sources` · `store/` routines and sources on disk |
 | `dev/` | `env/` the local environment · `e2e/` the end-to-end checks · `images/` the README screenshots · `fixtures/` and `site/` the test data and the test site · `bench/` the benchmark |
 
 ## Development
