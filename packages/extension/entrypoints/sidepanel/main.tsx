@@ -210,6 +210,11 @@ function Account({ account }: { account: AccountInfo }) {
       {open && (
         <div class="account-menu">
           <span class="email">{account.email}</span>
+          {account.admin && (
+            <button class="btn btn-secondary sm" type="button" onClick={() => browser.tabs.create({ url: browser.runtime.getURL('/admin.html' as any) })}>
+              Review submissions
+            </button>
+          )}
           <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
             Sign out
           </button>

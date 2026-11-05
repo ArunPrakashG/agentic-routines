@@ -221,6 +221,8 @@ type checkResult struct {
 	ID    string `json:"id"`
 	Level string `json:"level"` // pass, warn or fail
 	Text  string `json:"text"`
+	// Tag is the short form for the queue. Empty when the check passed.
+	Tag string `json:"tag,omitempty"`
 }
 
 var checkText = map[string]string{
@@ -235,14 +237,14 @@ func autoChecks(name string, in routineIn) []checkResult {
 	out := []checkResult{}
 	code := in.check(name)
 	if code == "" {
-		out = append(out, checkResult{"shape", "pass", "Shape, size and description are valid."})
+		out = append(out, checkResult{"shape", "pass", "Shape, size and description are valid.", ""})
 	} else {
-		out = append(out, checkResult{"shape", "fail", checkText[code]})
+		out = append(out, checkResult{"shape", "fail", checkText[code], "Invalid"})
 	}
 	if code != "step_off_site" {
-		out = append(out, checkResult{"site", "pass", "Every step stays on " + in.Meta.Site + "."})
+		out = append(out, checkResult{"site", "pass", "Every step stays on " + in.Meta.Site + ".", ""})
 	} else {
-		out = append(out, checkResult{"site", "fail", checkText[code]})
+		out = append(out, checkResult{"site", "fail", checkText[code], "Leaves its site"})
 	}
 	var typed, secrets, unpaused []string
 	paused := map[int]bool{}
@@ -263,28 +265,31 @@ func autoChecks(name string, in routineIn) []checkResult {
 		}
 	}
 	if len(secrets) > 0 {
-		out = append(out, checkResult{"secrets", "fail", "Steps " + strings.Join(secrets, ", ") + " type something that looks like a key or token."})
+		out = append(out, checkResult{"secrets", "fail", "Steps " + strings.Join(secrets, ", ") + " type something that looks like a key or token.", "Looks like a key"})
 	} else {
-		out = append(out, checkResult{"secrets", "pass", "Nothing typed looks like a key, token or password."})
+		out = append(out, checkResult{"secrets", "pass", "Nothing typed looks like a key, token or password.", ""})
 	}
 	if len(typed) > 0 {
-		out = append(out, checkResult{"typed", "warn", "Steps " + strings.Join(typed, ", ") + " type a fixed value that every installer will send. Check it is public."})
+		out = append(out, checkResult{"typed", "warn", "Steps " + strings.Join(typed, ", ") + " type a fixed value that every installer will send. Check it is public.", plural(len(typed), "public value")})
 	} else {
-		out = append(out, checkResult{"typed", "pass", "Every typed value is filled in by the person who runs it."})
+		out = append(out, checkResult{"typed", "pass", "Every typed value is filled in by the person who runs it.", ""})
 	}
 	if len(unpaused) > 0 {
-		out = append(out, checkResult{"pauses", "warn", "Steps " + strings.Join(unpaused, ", ") + " read like a final action and do not pause first."})
+		out = append(out, checkResult{"pauses", "warn", "Steps " + strings.Join(unpaused, ", ") + " read like a final action and do not pause first.", "No pause before a final step"})
 	} else {
-		out = append(out, checkResult{"pauses", "pass", "Nothing that reads like a final action runs without a pause."})
+		out = append(out, checkResult{"pauses", "pass", "Nothing that reads like a final action runs without a pause.", ""})
 	}
 	return out
 }
 
 type adminRow struct {
 	submissionRow
-	Email  string `json:"publisher_email"`
-	Steps  int    `json:"steps"`
-	Checks string `json:"checks"` // worst level of the automatic checks
+	Email string `json:"publisher_email"`
+	Steps int    `json:"steps"`
+	// LiveVersion is the version this would replace, nil for a first submission.
+	LiveVersion  *int          `json:"live_version"`
+	NewPublisher bool          `json:"new_publisher"`
+	Tags         []checkResult `json:"tags"`
 }
 
 func (s *store) adminList(ctx context.Context, status string, limit, offset int) ([]adminRow, error) {
@@ -293,7 +298,11 @@ func (s *store) adminList(ctx context.Context, status string, limit, offset int)
 		order = "s.submitted_at ASC"
 	}
 	rows, err := s.db.Query(ctx, `
-		SELECT `+submissionCols+`, u.email, jsonb_array_length(s.steps) FROM submissions s JOIN users u ON u.id = s.owner_id
+		SELECT `+submissionCols+`, u.email, jsonb_array_length(s.steps),
+		  (SELECT version FROM routines WHERE owner_id = s.owner_id AND name = s.name),
+		  NOT EXISTS (SELECT 1 FROM submissions o WHERE o.owner_id = s.owner_id AND o.status = 'approved'),
+		  s.meta, s.body, s.steps
+		FROM submissions s JOIN users u ON u.id = s.owner_id
 		WHERE ($1 = 'all' OR s.status = $1) ORDER BY `+order+` LIMIT $2 OFFSET $3`, status, limit, offset)
 	if err != nil {
 		return nil, err
@@ -302,9 +311,19 @@ func (s *store) adminList(ctx context.Context, status string, limit, offset int)
 	out := []adminRow{}
 	for rows.Next() {
 		var x adminRow
-		x.submissionRow, err = scanSubmission(rows, &x.Email, &x.Steps)
+		var meta, steps json.RawMessage
+		var in routineIn
+		x.submissionRow, err = scanSubmission(rows, &x.Email, &x.Steps, &x.LiveVersion, &x.NewPublisher, &meta, &in.Body, &steps)
 		if err != nil {
 			return nil, err
+		}
+		x.Tags = []checkResult{}
+		if json.Unmarshal(meta, &in.Meta) == nil && json.Unmarshal(steps, &in.Steps) == nil {
+			for _, c := range autoChecks(x.Name, in) {
+				if c.Tag != "" {
+					x.Tags = append(x.Tags, c)
+				}
+			}
 		}
 		out = append(out, x)
 	}
@@ -830,4 +849,11 @@ func (a *app) adminAudit(w http.ResponseWriter, r *http.Request) {
 		out = append(out, x)
 	}
 	reply(w, http.StatusOK, map[string]any{"audit": out})
+}
+
+func plural(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return strconv.Itoa(n) + " " + what + "s"
 }
