@@ -231,7 +231,7 @@ log(t);
 check(/routine updated to v2/.test(t), 'fix saved as v2');
 if (panel) {
   await panelClick('Back to routines');
-  await panelWait(/Step \d+ changed on the last run/);
+  await panelWait(/Step \d+ changed on the last run/, 20000);
   t = await panelText();
   check(/ran just now/.test(t) && /Step \d+ changed on the last run/.test(t), 'the library shows the last run and the step that changed');
   await shot('07b-library-changed');

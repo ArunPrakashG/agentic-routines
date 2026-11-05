@@ -4,6 +4,8 @@ Your agent does a browser task once. Agentic Routines records it, and next time 
 
 Repeat chores run up to 3.5 times faster and cost up to 83% less, and your agent's context stays free of page snapshots. It works with Claude Code, Codex, GitHub Copilot and OpenCode, in Chrome, Edge and Firefox.
 
+Agentic Routines is free and open source (MIT). There is no paid tier, and the directory of shared routines is free to publish to and install from.
+
 Website and docs: <https://agenticroutines.arunprakashg.com>
 
 ## Install

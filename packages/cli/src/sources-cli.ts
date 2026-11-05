@@ -2,7 +2,7 @@ import { checkFetched, stringifyRoutineFile } from '@agentic-routines/core';
 import * as sources from './sources.ts';
 import * as store from './store.ts';
 
-// agentic-routines sources [add <address> | remove <address> | on <address> | off <address>]
+// agentic-routines sources [add <address> | remove <address> | on <address> | off <address> | check <folder>]
 // agentic-routines export <routine>
 // Installing from a source is not here: it needs the person's click in the browser.
 
@@ -14,11 +14,21 @@ export async function runSources(args: string[]): Promise<void> {
     for (const s of all) {
       const state = !s.enabled ? 'off' : s.error ? `could not be read: ${s.error}` : `${s.routines ?? 0} routines`;
       console.log(`${s.id} · ${s.kind === 'folder' ? 'local folder' : 'GitHub'} · not reviewed · ${state}`);
+      for (const p of s.problems ?? []) console.log(`  ${p}`);
     }
     console.log('\nAdd one with: agentic-routines sources add github.com/owner/repository');
     return;
   }
   if (!address) throw new Error(`Usage: agentic-routines sources ${cmd} <address>`);
+  if (cmd === 'check') {
+    // For the author of a repository: what a reader would make of this folder, with file, line and field.
+    const l = await sources.checkFolder(address);
+    for (const e of l.entries) console.log(`ok  ${e.path} · ${e.name} · ${e.site}${e.hooks ? ` · ${e.hooks} hooks` : ''}`);
+    for (const p of l.problems ?? []) console.log(`bad ${p}`);
+    if (!l.entries.length && !l.problems?.length) console.log('Nothing found. Add a config.routine, or a routines folder with .md files.');
+    if (l.problems?.length || !l.entries.length) process.exitCode = 1;
+    return;
+  }
   if (cmd === 'add') {
     const s = await sources.add(address);
     console.log(`Added ${s.id}. Nothing from it is installed until you click Install in the side panel.`);
@@ -39,5 +49,5 @@ export async function runExport(args: string[]): Promise<void> {
   // The same checks the person who installs it will run, so a problem is found here first.
   const problems = checkFetched(r);
   if (problems.length) throw new Error(`Fix this first: ${problems.join(' ')}`);
-  process.stdout.write(stringifyRoutineFile({ meta: { ...r.meta, owner: undefined }, body: r.body, steps: r.steps }));
+  process.stdout.write(stringifyRoutineFile({ meta: { ...r.meta, owner: undefined, repo: undefined }, body: r.body, steps: r.steps }));
 }

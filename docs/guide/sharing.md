@@ -1,6 +1,6 @@
 # Sharing and publishing
 
-There are two ways to share a routine with other people.
+There are two ways to share a routine with other people. Both are free: Agentic Routines is open source, with no paid tier, and publishing and installing cost nothing.
 
 ## The directory
 
@@ -17,9 +17,9 @@ You need to sign in with Google to publish. Installing needs no account.
 
 ## A GitHub repository
 
-Put routines in a repository as single files under `routines/`. Anyone can add it with `npx agentic-routines sources add github.com/owner/repository` and install from it in the side panel.
+Put routines in a repository and describe them in a `config.routine` file in its root, or as single files under `routines/`. See [Routine repositories](/docs/repositories) for the file and a full example. Anyone can add it with `npx agentic-routines sources add github.com/owner/repository` and install from it in the side panel.
 
-Routines from a repository are not reviewed by Agentic Routines. The extension says so, shows every step before installing, and pins the commit it read, so a later commit changes nothing until you look again.
+Routines from a repository are not reviewed by Agentic Routines. The extension says so, shows every step and the author's notes before installing, and pins the commit it read, so a later commit changes nothing until you look again.
 
 See [Routine format](/docs/routines) for how to export a routine as a file.
 

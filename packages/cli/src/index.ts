@@ -31,7 +31,7 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
 
   setup [--dry-run]   Connect your browsers and agents (Claude Code, Codex, Copilot, OpenCode)
   doctor              Check what is connected and what is not
-  sources             List, add, remove, turn on or off the places routines can come from
+  sources             List, add, remove, turn on or off the places routines can come from; "sources check <folder>" checks a repository
   export <routine>    Print a routine as one file to put in a Git repository's routines folder
   mcp                 Run the MCP server (agents start this)
   host                Run the native host (browsers start this)`);

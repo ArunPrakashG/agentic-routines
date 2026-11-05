@@ -1,7 +1,7 @@
 # Agentic Routines: Record Once, Replay Without the LLM
 
 **Status:** idea (logged 2026-11-05)
-**Type:** Open-source client + paid shared routine library
+**Type:** Free, open-source client + free shared routine directory
 
 ## Origin
 - Coding agents (Claude Code, Codex) repeat the same browser chores step by step every time: drafting a Play Console release, console admin, portal downloads. Each run costs the same tokens and time as the first.
@@ -20,11 +20,9 @@ Same architecture as Claude in Chrome: a custom MCP server plus a Chrome extensi
 5. **Safety:** pause before irreversible steps (submit, publish, pay); secrets stored only as `{{secret:name}}` placeholders.
 6. **Human demos:** record yourself doing a task once from the side panel; it becomes the first version of the routine.
 
-## Money
-- **Free:** the client, local routines only (open source).
-- **Paid (~$8-15/month):** shared library of maintained routines for common sites (Play Console, App Store Connect, GST portal, cloud consoles, bank statement downloads), fixes shared across users, sync across machines.
-- **Team:** private shared routines with version history.
-- **Later:** scheduled hosted runs ("do this every month"), which is the closest fit to selling convenience.
+## Cost
+- The whole project is open source and free: the client, the directory of shared routines, publishing and installing. Nothing is sold and there are no plans or tiers.
+- The directory is reviewed for safety, and routines for common sites (Play Console, App Store Connect, cloud consoles, bank statement downloads) are shared by the people who make them.
 
 ## Landscape (checked 2026-11-05)
 - Browser Use cloud "cache script": first run is a full agent run, later runs replay a script, self-heals once on failure.
@@ -44,7 +42,7 @@ Gap: none is a drop-in layer for Claude Code and Codex, and none maintains a sha
 
 ## Risks
 - **Platform risk:** Anthropic, OpenAI or Google can add record and replay to their own agents.
-- **Willingness to pay:** developers expect local tools to be free, and flat-rate plans make token savings a weak pitch.
+- **Reach:** developers expect local tools to be free and open, so the project is both and has to earn its place by working well.
 - **Not a consumer product** unless it pivots to "teach your browser once" for non-developers, where it meets Claude in Chrome, Atlas and Gemini in Chrome head on.
-- **Upkeep:** a shared library is only worth paying for if routines keep working; unmaintained routines are worse than none.
-- Plan: build open source and use it first; add the paid library only if others ask for routines.
+- **Upkeep:** a shared library is only worth using if routines keep working; unmaintained routines are worse than none.
+- Plan: build open source and use it first; grow the directory if others ask for routines.

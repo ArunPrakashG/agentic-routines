@@ -10,6 +10,7 @@ export const pages = [
   { slug: 'routines', title: 'Routine format', summary: 'ROUTINE.md, parameters, pauses and the steps behind a routine.' },
   { slug: 'tools', title: 'Agent tools', summary: 'Every tool the MCP server gives your agent.' },
   { slug: 'cli', title: 'Command line', summary: 'setup, doctor, sources and export.' },
+  { slug: 'repositories', title: 'Routine repositories', summary: 'config.routine: what a Git repository of routines says about itself, with a full example.' },
   { slug: 'sharing', title: 'Sharing and publishing', summary: 'The directory, GitHub repositories and what review involves.' },
   { slug: 'development', title: 'Development', summary: 'Repository layout, running it locally and adding a browser.' },
 ] as const;

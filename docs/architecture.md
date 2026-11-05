@@ -207,5 +207,5 @@ design/              approved mockups and tokens
 
 1. Should routines work fully without signing in, local only, or is sign-in required to use the extension at all? The mockup requires it. This design allows local use and needs sign-in only for sync and the directory.
 2. Auto-publishing a shared fix after 7 days without a reply from the owner: keep it, or always wait for the owner?
-3. Teams: private namespaces shared by a group (`team/name`) fit this model. Should they be in v1 or later?
+3. Groups: private namespaces shared by a group of people. Parked; routines can be shared through a Git repository today.
 

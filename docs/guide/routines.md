@@ -57,7 +57,7 @@ Steps are declarative: navigate, click, type, select, upload, wait and read. A r
 
 ## Share a routine through Git
 
-A routine can live in a GitHub repository as one file under `routines/`: the notes first, then the steps in a fenced `steps` block. Export one from your machine:
+A routine can live in a GitHub repository as one file: the notes first, then the steps in a fenced `steps` block. A `config.routine` in the repository root lists the files and says what each is for ([Routine repositories](/docs/repositories)); without one, the files go under `routines/`. Export one from your machine:
 
 ```bash
 npx agentic-routines export play-release > routines/play-release.md

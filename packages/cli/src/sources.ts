@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { blockedBy, checkFetched, githubSource, ownerFor, parseRoutineFile, repoKey, FILE_PATH, type BlockList, type Fetched, type Origin, type Routine, type Source, type SourceEntry } from '@agentic-routines/core';
+import { blockedBy, checkFetched, fetchRepo, githubSource, listRepo, ownerFor, repoKey, withRepo, FILE_PATH, SINGLE_PATH, type BlockList, type Fetched, type Listing, type Origin, type RepoIO, type Routine, type Source, type SourceEntry } from '@agentic-routines/core';
 import { paths } from './paths.ts';
 import * as store from './store.ts';
 
@@ -23,6 +23,8 @@ interface Config {
 }
 export interface SourceInfo extends SourceConfig {
   routines?: number;
+  /** What is wrong with config.routine or a file it lists. */
+  problems?: string[];
   checkedAt?: number;
   error?: string;
 }
@@ -47,37 +49,45 @@ const config = () => readJson<Config>('sources.json', { directory: true, sources
 
 // ---------- folder source ----------
 
+function folderIO(path: string): RepoIO {
+  return {
+    async read(p) {
+      try {
+        return await readFile(join(path, p), 'utf8');
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT' || (e as NodeJS.ErrnoException).code === 'ENOTDIR') return null;
+        throw e;
+      }
+    },
+    async fallback() {
+      const names = await readdir(join(path, 'routines')).catch(() => [] as string[]);
+      const out = names.filter((n) => FILE_PATH.test(`routines/${n}`)).map((n) => `routines/${n}`);
+      if (await stat(join(path, SINGLE_PATH)).then((s) => s.isFile(), () => false)) out.push(SINGLE_PATH);
+      return out;
+    },
+  };
+}
+
 function folderSource(path: string): Source {
   return {
     kind: 'folder',
     id: path,
     async list() {
-      const entries: SourceEntry[] = [];
-      let skipped = 0;
-      let names: string[] = [];
-      try {
-        names = (await readdir(join(path, 'routines'))).filter((n) => FILE_PATH.test(`routines/${n}`));
-      } catch {
-        throw new Error('That folder has no routines folder in it.');
-      }
-      for (const n of names.slice(0, 50)) {
-        try {
-          const { meta } = parseRoutineFile(await readFile(join(path, 'routines', n), 'utf8'));
-          if (`${meta.name}.md` !== n) throw new Error('name');
-          entries.push({ path: `routines/${n}`, name: meta.name, site: meta.site, description: meta.description, version: meta.version });
-        } catch {
-          skipped++;
-        }
-      }
-      return { entries, skipped };
+      const io = folderIO(path);
+      if (!(await io.fallback()).length && (await io.read('config.routine')) === null) throw new Error('That folder has no routines in it. Add a config.routine, or a routines folder.');
+      return listRepo(io);
     },
     async fetch(p) {
-      if (!FILE_PATH.test(p)) throw new Error('Not a routine file.');
-      const routine = parseRoutineFile(await readFile(join(path, p), 'utf8'));
-      if (`routines/${routine.meta.name}.md` !== p) throw new Error('The routine’s name does not match its file.');
-      return { routine, path: p };
+      return { ...(await fetchRepo(folderIO(path), p)), path: p };
     },
   };
+}
+
+/** Reads a folder the way a source would, without adding it. Used by the author's `sources check`. */
+export async function checkFolder(path: string): Promise<Listing> {
+  const dir = resolve(path.replace(/^~(?=$|[\\/])/, homedir()));
+  if (!(await stat(dir).then((s) => s.isDirectory(), () => false))) throw new Error('That folder does not exist.');
+  return folderSource(dir).list();
 }
 
 function open(s: SourceConfig): Source {
@@ -89,7 +99,7 @@ function open(s: SourceConfig): Source {
 
 // ---------- the list of sources ----------
 
-const listings = new Map<string, { at: number; entries: SourceEntry[]; skipped: number; ref?: string; error?: string }>();
+const listings = new Map<string, Listing & { at: number; error?: string }>();
 
 async function listing(s: SourceConfig, fresh = false) {
   const hit = listings.get(s.id);
@@ -110,7 +120,7 @@ export async function list(): Promise<{ directory: boolean; sources: SourceInfo[
     c.sources.map(async (s): Promise<SourceInfo> => {
       if (!s.enabled) return { ...s, routines: listings.get(s.id)?.entries.length };
       const l = await listing(s);
-      return { ...s, routines: l.entries.length, checkedAt: l.at, error: l.error };
+      return { ...s, routines: l.entries.length, checkedAt: l.at, error: l.error, problems: l.problems };
     }),
   );
   return { directory: c.directory, sources };
@@ -138,7 +148,7 @@ export async function add(address: string): Promise<SourceConfig> {
   // Looked at before it is kept: a wrong address or an empty repository says so now.
   const l = await listing(s, true);
   if (l.error) throw new Error(l.error);
-  if (!l.entries.length) throw new Error('There are no routines in it. Routines are .md files in a routines folder.');
+  if (!l.entries.length) throw new Error(l.problems?.length ? `Nothing could be read from it.\n${l.problems.slice(0, 5).join('\n')}` : 'There are no routines in it. List them in a config.routine, or put .md files in a routines folder.');
   await writeJson('sources.json', { ...c, sources: [...c.sources, s] });
   return s;
 }
@@ -157,7 +167,7 @@ export async function setEnabled(id: string, enabled: boolean): Promise<void> {
 }
 
 /** What the enabled sources have, for search and the panel. */
-export async function entries(id?: string, fresh = false): Promise<{ source: string; kind: SourceConfig['kind']; entries: SourceEntry[]; skipped: number; error?: string }[]> {
+export async function entries(id?: string, fresh = false): Promise<{ source: string; kind: SourceConfig['kind']; entries: SourceEntry[]; skipped: number; repo?: Listing['repo']; problems?: string[]; error?: string }[]> {
   const c = await config();
   const on = c.sources.filter((s) => s.enabled && (!id || s.id === id));
   return Promise.all(on.map(async (s) => ({ source: s.id, kind: s.kind, ...(await listing(s, fresh)) })));
@@ -248,11 +258,13 @@ export async function preview(id: string, path: string, ref?: string): Promise<P
   const s = await sourceOf(id);
   const f = await open(s).fetch(path, ref);
   const origin = originOf(s, f);
-  const problems = checkFetched(f.routine);
-  const why = blockedBy(await blockList(), origin, `${ownerFor(origin)}/${f.routine.meta.name}`);
+  // What the repository's config.routine adds is part of what the person reads and installs.
+  const routine = withRepo(f);
+  const problems = checkFetched(routine);
+  const why = blockedBy(await blockList(), origin, `${ownerFor(origin)}/${routine.meta.name}`);
   if (why) problems.unshift(why);
-  const have = (await store.list()).find((r) => r.owner === ownerFor(origin) && r.name === f.routine.meta.name);
-  return { source: id, kind: s.kind, path, ref: f.ref, routine: f.routine, problems, installed: have ? { version: have.version } : undefined };
+  const have = (await store.list()).find((r) => r.owner === ownerFor(origin) && r.name === routine.meta.name);
+  return { source: id, kind: s.kind, path, ref: f.ref, routine, problems, installed: have ? { version: have.version } : undefined };
 }
 
 /**
