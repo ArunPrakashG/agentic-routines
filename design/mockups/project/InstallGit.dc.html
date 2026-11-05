@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Install from Git, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+@supports not selector(::-webkit-scrollbar){.t-light *,.t-dark *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}}
+.t-light ::-webkit-scrollbar,.t-dark ::-webkit-scrollbar{width:10px;height:10px}
+.t-light ::-webkit-scrollbar-track,.t-dark ::-webkit-scrollbar-track,.t-light ::-webkit-scrollbar-corner,.t-dark ::-webkit-scrollbar-corner{background:transparent}
+.t-light ::-webkit-scrollbar-thumb,.t-dark ::-webkit-scrollbar-thumb{background:var(--border-strong);border:3px solid transparent;background-clip:content-box;border-radius:8px}
+.t-light ::-webkit-scrollbar-thumb:hover,.t-dark ::-webkit-scrollbar-thumb:hover{background:var(--text-3);background-clip:content-box}
+.sp,.sp *{box-sizing:border-box}
+.btn{height:36px;padding:0 14px;border-radius:8px;font:500 13px/1 var(--font-sans);border:1px solid transparent;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:var(--surface-1);color:var(--text-1);border-color:var(--border-strong)}
+.icon-btn{width:44px;height:44px;border-radius:8px;border:0;background:transparent;color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.arrive{animation:arrive .42s var(--ease-out) .3s both}
+@keyframes arrive{0%{opacity:0;transform:translateY(-8px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.sp *{animation:none !important}}
+
+.mk,.mk *{box-sizing:border-box}
+.chip{height:30px;padding:0 12px;border-radius:15px;border:1px solid var(--border-strong);background:transparent;color:var(--text-2);font:500 13px/1 var(--font-sans);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--text-1);color:var(--bg);border-color:var(--text-1)}
+.tag{height:22px;padding:0 8px;border-radius:6px;font:500 12px/1 var(--font-sans);display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);color:var(--text-2)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.ok{background:var(--accent-soft);color:var(--accent-ink)}
+.tag.bad{background:var(--danger-soft);color:var(--danger)}
+.tab{height:44px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;font:500 14px/1 var(--font-sans);color:var(--text-2);text-decoration:none;border-bottom:2px solid transparent}
+.tab[aria-current=page]{color:var(--text-1);border-bottom-color:var(--accent)}
+.tab em{font-style:normal;font:500 12px var(--font-mono);color:var(--text-3)}
+.q{display:flex;flex-direction:column;gap:7px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer}
+.q[aria-current=true]{background:var(--surface-1);box-shadow:inset 2px 0 0 var(--accent)}
+.sw{width:36px;height:20px;border-radius:10px;background:var(--surface-3);position:relative;flex:none;display:inline-block;border:0;padding:0;cursor:pointer}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-3);transition:transform .2s var(--ease-out)}
+.sw[aria-checked=true]{background:var(--accent)}
+.sw[aria-checked=true]::after{transform:translateX(16px);background:var(--on-accent)}
+.step{display:grid;grid-template-columns:28px 72px minmax(0,1fr) auto;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:6px;font:400 12px var(--font-mono);color:var(--text-2)}
+.step.flag{background:var(--warn-soft)}
+.step .n{color:var(--text-3)}.step .t{color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.field{border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-1);color:var(--text-1);font:400 13px var(--font-sans)}
+.h3{margin:0;font-size:12px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3)}
+.danger-btn{height:36px;padding:0 12px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--danger);font:500 13px/1 var(--font-sans);cursor:pointer}
+@media (prefers-reduced-motion: reduce){.sw::after{transition:none}}
+</style>
+</helmet>
+<div class="sp t-dark" style="width: 400px; height: 844px; display: flex; flex-direction: column; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); border-left: 1px solid var(--border);">
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; padding: 0 16px 0 6px; gap: 4px; border-bottom: 1px solid var(--border);"><button class="icon-btn" type="button" aria-label="Back"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"/></svg></button><h1 style="margin: 0; font-size: 15px; font-weight: 500;">Install routine</h1></header>
+
+  <main style="flex: 1; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 10px; color: var(--text-2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="flex:none;"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg><div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;"><span class="mono" style="font-size: 13px; color: var(--text-1);">acme-corp/browser-routines</span><span class="mono" style="font-size: 12px; color: var(--text-3);">routines/deploy-staging.md · a1b2c3d</span></div></div>
+    <div style="border: 1px solid var(--warn-a); background: var(--warn-soft); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 13px; font-weight: 500;">Not reviewed by Browser Routines</span><span style="font-size: 12px; line-height: 18px; color: var(--text-2);">Anyone can put a routine in a repository. Read the steps before you install.</span></div>
+    <section aria-label="Routine" style="border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;"><span class="mono" style="font-size: 15px; font-weight: 500;">deploy-staging</span><span style="font-size: 13px; line-height: 20px; color: var(--text-2);">Deploy the latest build to staging and wait for the health check. Use when asked to push to staging.</span></div>
+      <div style="display: flex; gap: 20px; font-size: 12px; color: var(--text-3);"><span><b class="mono" style="font-weight: 500; color: var(--text-1);">12</b> steps</span><span><b class="mono" style="font-weight: 500; color: var(--text-1);">1</b> pause</span><span><b class="mono" style="font-weight: 500; color: var(--text-1);">2</b> inputs: <span class="mono">version</span>, <span class="mono">notes</span></span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px;"><div class="step" style="grid-template-columns:24px 64px minmax(0,1fr);"><span class="n">1</span><span>navigate</span><span class="t">staging.acme.com/deploys</span></div><div class="step" style="grid-template-columns:24px 64px minmax(0,1fr);"><span class="n">2</span><span>click</span><span class="t">New deploy</span></div><div class="step" style="grid-template-columns:24px 64px minmax(0,1fr);"><span class="n">3</span><span>type</span><span class="t">&#123;&#123;version&#125;&#125;</span></div><div class="step" style="grid-template-columns:24px 64px minmax(0,1fr);"><span class="n">4</span><span>click</span><span class="t">Start</span></div><span style="font-size: 12px; color: var(--text-3); padding: 6px 10px 0;">8 more · <a href="#" style="color: var(--accent-ink);">Show all</a></span></div>
+    </section>
+    <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px;"><li style="display: flex; gap: 10px; font-size: 13px; line-height: 20px; color: var(--text-1);"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--accent-ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M3.5 8.5l3 3 6-7"/></svg><span>Every step stays on <span class="mono" style="font-size:12px;">staging.acme.com</span></span></li><li style="display: flex; gap: 10px; font-size: 13px; line-height: 20px; color: var(--text-1);"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--accent-ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M3.5 8.5l3 3 6-7"/></svg><span>No saved passwords or tokens</span></li><li style="display: flex; gap: 10px; font-size: 13px; line-height: 20px; color: var(--text-1);"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--warn)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.6v.1"/></svg><span>It runs in your signed-in browser, so it can do anything you can on that site</span></li></ul>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px;">
+      <button class="btn btn-primary" type="button" style="height: 44px; width: 100%; justify-content: center; font-size: 14px;">Install</button>
+      <button class="btn btn-secondary" type="button" style="height: 44px; width: 100%; justify-content: center; font-size: 14px;">Cancel</button>
+      <span style="font-size: 12px; line-height: 18px; color: var(--text-3); text-align: center;">Pinned to commit <span class="mono">a1b2c3d</span>. Later changes are never applied on their own: you will see what changed first.</span>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
