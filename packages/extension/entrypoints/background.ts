@@ -2,6 +2,7 @@ import { compileRun, type CompileOptions, type Routine } from '@agentic-routines
 import * as agent from '../lib/agent';
 import * as auth from '../lib/auth';
 import * as directory from '../lib/directory';
+import * as draft from '../lib/draft';
 import * as git from '../lib/git';
 import * as native from '../lib/native';
 import { platform } from '../lib/platform';
@@ -17,6 +18,7 @@ export default defineBackground(() => {
   // ---------- requests from the MCP server, through the host ----------
   native.onRequest(async (method, p) => {
     if (method.startsWith('browser.') || method === 'runs.get') return agent.handle(method, p);
+    if (method.startsWith('draft.')) return draft.handle(method, p);
     if (method === 'runs.markSaved') return runs.markSaved(p.run_id);
     // A rebuilt unpacked extension only runs after a reload. Waits so the answer gets out first.
     if (method === 'extension.reload') return void setTimeout(() => browser.runtime.reload(), 100);

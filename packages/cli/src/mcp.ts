@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { compileRun, eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as sources from './sources.ts';
@@ -12,6 +12,12 @@ import * as store from './store.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
 const VERSION = '0.1.0';
+
+const INSTRUCTIONS = `Agentic Routines records the browser work you do with these tools and replays it as one tool call with no model.
+
+The loop: do the task with the browser tools. When it is done, decide whether it is worth keeping. A chore the user will want again is; a one-off lookup is not. If it is, call routine_propose: it numbers every step, says what each one did, and hints at what could go. Refine with routine_edit (drop retries, replace click-through navigation and dialogs with a direct address, mark values as parameters, add notes). Call routine_test to replay the draft on the live site, then routine_save. Run a saved routine with its rt_ tool.
+
+The extension checks every edit: a step that submits, publishes, pays or deletes keeps its pause, an address stays on the routine's own site, and an address cannot carry a per-session value.`;
 const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
 
 interface Listing {
@@ -66,7 +72,18 @@ function absoluteFiles(r: Routine, params: Record<string, string>) {
   return out;
 }
 
+function describeTest(r: RunResult): string {
+  const trace = (r.trace ?? []).join('\n');
+  const where = r.final_url ? `\nThe tab ended at ${r.final_url}.` : '';
+  const skipped = r.skipped ?? [];
+  const note = skipped.length ? `\nA test never performs a step that pauses in a real run (step ${skipped.join(', ')}), and never approves one.` : '';
+  if (r.status === 'done') return `Test passed. ${r.steps_total - skipped.length} of ${r.steps_total} steps replayed on the live site with no model.${note}\n${trace}${where}\nIf this is what you expect, call routine_save.`;
+  const after = skipped.length && (r.at_step ?? 0) > Math.min(...skipped) ? `\nThis step comes after skipped step ${Math.min(...skipped)} and may need what it does. If so this is expected: steps before it are proven, the rest can only be checked by running the routine for real and approving the pause.` : '';
+  return `Test failed at step ${r.at_step ?? '?'}${r.step_label ? ` “${r.step_label}”` : ''}: ${r.error}${note}${after}\n${trace}${where}\nEdit the draft with routine_edit (undo goes back one edit, reset to the proposal) and test again.`;
+}
+
 export function describeResult(r: RunResult): string {
+  if (r.test) return describeTest(r);
   const calls = `${r.model_calls} model call${r.model_calls === 1 ? '' : 's'}`;
   switch (r.status) {
     case 'done': {
@@ -93,7 +110,7 @@ export function describeResult(r: RunResult): string {
 }
 
 export async function runMcp(): Promise<void> {
-  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } } });
+  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: INSTRUCTIONS });
   const routineTools = new Map<string, RegisteredTool>();
   let refreshTimer: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {
@@ -236,7 +253,7 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool('routines_list', { description: 'List saved routines with what each is for.' }, async () => {
     const all = await store.list();
-    if (!all.length) return text('No routines saved yet. Every browser task you do is recorded; save one with routine_save.');
+    if (!all.length) return text('No routines saved yet. Every browser task you do is recorded; when one is worth keeping, call routine_propose.');
     return text(all.map((r) => `${r.owner === store.LOCAL ? '' : r.owner + '/'}${r.name} v${r.version} · ${r.site}${r.enabled ? '' : r.blocked ? ' · off, blocked' : ' · off'}${r.origin && r.origin.kind !== 'directory' ? ` · from ${r.origin.source}` : ''}\n  ${r.description.replace(/\n/g, ' ')}`).join('\n'));
   });
 
@@ -281,10 +298,81 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool(
     'run_steps',
-    { description: 'List the recorded steps of a run, numbered, to choose what routine_save leaves out.', inputSchema: { run_id: z.string().optional().describe('Defaults to the latest run') } },
+    { description: 'List the recorded steps of a run, numbered, as recorded. routine_propose shows the same steps with what each did and what could go.', inputSchema: { run_id: z.string().optional().describe('Defaults to the latest run') } },
     async ({ run_id }) => {
       const run = await bridge.call<Run>('runs.get', { run_id });
       return text(run.events.map((e, i) => `${i + 1}. ${e.action} ${eventLabel(e)}${e.value !== undefined ? `: ${e.value}` : ''}`).join('\n'));
+    },
+  );
+
+  const stepRef = z.union([z.number().int(), z.string().regex(/^\d+-\d+$/)]);
+  const opSchema = z.discriminatedUnion('op', [
+    z.object({ op: z.literal('remove'), steps: z.array(stepRef).min(1).describe('Step numbers or ranges like "3-5"') }),
+    z.object({ op: z.literal('navigate'), from: z.number().int(), to: z.number().int(), url: z.string().max(2000).describe('Replaces steps from..to with one step that opens this address. May contain {{param}}.') }),
+    z.object({ op: z.literal('open'), before: z.number().int(), url: z.string().max(2000).describe('Adds a step that opens this address before step N') }),
+    z.object({ op: z.literal('param'), name: z.string(), step: z.number().int().optional(), value: z.string().optional().describe('Every typed step with exactly this value'), description: z.string().max(300).optional(), example: z.string().optional() }),
+    z.object({ op: z.literal('fixed'), step: z.number().int().describe('Keep the recorded value, do not ask for it') }),
+    z.object({ op: z.literal('pause'), step: z.number().int(), on: z.boolean() }),
+    z.object({ op: z.literal('note'), step: z.number().int(), text: z.string().max(1000).describe('For the agent that runs the routine: what to check at this step. Empty clears it.') }),
+    z.object({ op: z.literal('first_in_list'), step: z.number().int().describe('A click that should take whatever is first in the list next time') }),
+    z.object({ op: z.literal('describe'), name: z.string().optional(), description: z.string().max(1024).optional(), do_not_use_for: z.string().max(2000).optional() }),
+    z.object({ op: z.literal('undo') }),
+    z.object({ op: z.literal('reset') }),
+  ]);
+
+  server.registerTool(
+    'routine_propose',
+    {
+      description:
+        'After you finish a browser task, decide whether it is worth keeping as a routine: yes for a chore the user will want again, no for a one-off. If yes, call this with a name and a description ("what it does. Use when ..." in the words a user would say). It returns a draft: every recorded step, numbered, with its page, what it did and what happened after it, and hints at what could go (retries, clicks that only navigated, dialogs that were answered, steps that submit). Nothing is changed or saved by this. Refine with routine_edit, then routine_test, then routine_save. Pass from_routine to refine a routine that is already saved.',
+      inputSchema: {
+        name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).describe('Lowercase with dashes, e.g. play-release'),
+        description: z.string().min(20).describe('What it does. Use when ...'),
+        do_not_use_for: z.string().optional(),
+        run_id: z.string().optional().describe('Defaults to the latest run'),
+        from_routine: z.string().optional().describe('Refine this saved routine instead of a run'),
+      },
+    },
+    async (a) => {
+      if (!/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
+      const r = await bridge.call<{ draft_id: string; text: string }>('draft.propose', a);
+      return text(`${r.text}\n\nEdit with routine_edit (draft_id "${r.draft_id}"), then routine_test, then routine_save. Values you typed are parameters unless you fix them; use { "op": "fixed", "step": N } to keep one as typed.`);
+    },
+  );
+
+  server.registerTool(
+    'routine_edit',
+    {
+      description:
+        'Change a draft from routine_propose. ops are applied in order, all or none, and the numbered draft comes back. Ops: remove steps; navigate (replace steps from..to with one direct address, e.g. instead of clicking through menus or answering a dialog); open (add a first page); param (make a typed value a parameter, or declare one to use as {{name}} in an address); fixed; pause; note (text for whoever runs the step later); first_in_list; describe; undo; reset. The extension refuses unsafe edits: a step that submits, publishes, pays or deletes cannot be removed and keeps its pause; an address must stay on the routine\'s own site and cannot carry a per-session id or token (use {{param}} or keep the clicks). If an edit is refused, the reason says what to do instead.',
+      inputSchema: { draft_id: z.string(), ops: z.array(opSchema).min(1).max(40) },
+    },
+    async ({ draft_id, ops }) => {
+      const r = await bridge.call<{ text: string }>('draft.edit', { draft_id, ops });
+      return text(r.text);
+    },
+  );
+
+  server.registerTool(
+    'routine_test',
+    {
+      description:
+        'Replay a draft once on the live site, with no model, to prove the refined steps work. It uses the values recorded, or params you pass (a draft of a saved routine has no recorded values, so pass them). It skips every step that pauses and never approves one, so nothing that submits, publishes, pays or deletes runs; the steps after a skipped one that do not depend on it are still checked. It says what each step did and where the tab ended up. A draft that replaces a saved routine can only be saved after a good test.',
+      inputSchema: { draft_id: z.string(), params: z.record(z.string()).optional() },
+    },
+    async ({ draft_id, params }) => {
+      // The files and secrets the test needs come first, as for any run.
+      const prep = await bridge.call<{ files: string[]; needs: string[] }>('draft.test', { draft_id, params, prepare: true });
+      const files = prep.files.map((f) => (isAbsolute(f) ? f : resolvePath(process.cwd(), f)));
+      if (files.length) await bridge.call('host.allowFiles', { paths: files });
+      const secrets: Record<string, string> = {};
+      for (const n of prep.needs) {
+        const v = process.env[`AGENTIC_ROUTINES_SECRET_${n.toUpperCase()}`];
+        if (v) secrets[n] = v;
+      }
+      const r = await bridge.call<{ result?: RunResult }>('draft.test', { draft_id, params, secrets }, 15 * 60_000);
+      if (!r.result) return fail('The test did not run.');
+      return text(describeResult(r.result));
     },
   );
 
@@ -292,35 +380,34 @@ export async function runMcp(): Promise<void> {
     'routine_save',
     {
       description:
-        'Save a recorded browser run as a routine. Write description as: what it does, then "Use when ..." in the words a user would say. Pass params { name: value typed } to choose what it asks for each run; everything else stays as typed. Without params, every typed value is asked for. If you retried a step or checked your work, or if the task means "the latest" of something, read run_steps first.',
+        'Save a draft from routine_propose as a routine. Run routine_test first. The extension checks it against the same rules the directory applies, and refuses to replace a saved routine unless the latest edit tested well. Saving over a routine of the same name makes the next version.',
       inputSchema: {
-        name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).describe('Lowercase with dashes, e.g. play-release'),
-        description: z.string().min(20).describe('What it does. Use when ...'),
+        draft_id: z.string(),
+        name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
+        description: z.string().min(20).optional(),
         do_not_use_for: z.string().optional(),
-        run_id: z.string().optional().describe('Defaults to the latest run'),
-        params: z.record(z.string()).optional(),
-        fixed: z.array(z.string()).optional().describe('Auto-detected params to keep as typed'),
-        leave_out: z.array(z.number().int()).optional().describe('Numbers from run_steps that are not part of the task, like retries and checks'),
-        first_in_list: z.array(z.number().int()).optional().describe('Numbers from run_steps of clicks that should take whatever is first in the list next time, not the item clicked now'),
       },
     },
     async (a) => {
-      if (!/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
-      const run = await bridge.call<Run>('runs.get', { run_id: a.run_id });
-      const body = a.do_not_use_for ? `## Do not use for\n${a.do_not_use_for}` : '';
-      const { routine, recorded, dropped, unmatched, pinned } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, leaveOut: a.leave_out, firstInList: a.first_in_list, body, draftedBy: bridge.agent });
-      if (unmatched.length) return fail(`Not saved. These params match no value typed in this run: ${unmatched.join(', ')}. Check them against run_steps.`);
-      const saved = await bridge.call<Routine>('store.write', { routine });
-      await bridge.call('runs.markSaved', { run_id: run.id }).catch(() => {});
+      if (a.description && !/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
+      const r = await bridge.call<{
+        saved: { name: string; version: number; site: string; steps: number; params: string[]; pauses: number[]; start?: string };
+        recorded: number;
+        tested?: string;
+        warnings: string[];
+        pinned: string[];
+      }>('draft.save', a);
       scheduleRefresh();
-      const params = Object.keys(saved.meta.params);
+      const x = r.saved;
       return text(
-        `Saved ${saved.meta.name} v${saved.meta.version} · ${saved.steps.length} of ${recorded} recorded steps (${dropped} replaced by a direct URL${a.leave_out?.length ? `, ${a.leave_out.length} left out` : ''})` +
-          (params.length ? ` · asks for ${params.join(', ')}` : '') +
-          (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')}` : '') +
-          (saved.steps[0]?.url ? `\nStarts at ${saved.steps[0].url}, so it stays on what that address opens.` : '') +
-          `\nRun it with ${toolName(saved.meta.name)}.` +
-          (pinned.length ? `\nThis routine stays on one specific item: ${pinned.join(', ')}. If it should follow whatever is newest, save again with first_in_list, starting from the list page.` : ''),
+        `Saved ${x.name} v${x.version} · ${x.steps} steps from ${r.recorded} recorded` +
+          (x.params.length ? ` · asks for ${x.params.join(', ')}` : '') +
+          (x.pauses.length ? ` · pauses before step ${x.pauses.join(', ')}` : '') +
+          (x.start ? `\nStarts at ${x.start}, so it stays on what that address opens.` : '') +
+          `\n${r.tested ? `Tested: ${r.tested}.` : 'Not tested. Run it once with its rt_ tool or edit and test it again if you changed anything after the last test.'}` +
+          `\nRun it with ${toolName(x.name)}.` +
+          (r.warnings.length ? `\n${r.warnings.join(' ')}` : '') +
+          (r.pinned.length ? `\nThis routine stays on one specific item: ${r.pinned.join(', ')}. If it should follow whatever is newest, use first_in_list or a {{param}} in the address.` : ''),
       );
     },
   );

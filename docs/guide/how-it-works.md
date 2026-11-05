@@ -6,11 +6,11 @@ The extension gives your agent a small set of browser tools: open a page, read i
 
 ## Save
 
-When you save a run as a routine, three things happen:
+After a task, your agent decides whether it is worth keeping: a chore you will want again is, a one-off lookup is not. If it is, the run becomes a draft that the agent refines before anything is saved. See [Refine a routine](/docs/refine).
 
-- **Navigation is replaced.** A step that only opened a page is dropped when a direct address can replace it.
-- **Typed values become choices.** Each value you typed can become a parameter that the routine asks for each run, such as a version name or release notes. Everything else stays as recorded.
-- **Risky steps get a pause.** Steps that publish, pay, delete, submit or confirm are marked, so a replay stops before them.
+- **The agent edits, nothing is rewritten silently.** The draft numbers every recorded step and hints at what could go: retries, clicks that only navigated, a dialog that was answered. The agent applies the edits it agrees with.
+- **Typed values become choices.** Each value typed can become a parameter that the routine asks for each run, such as a version name or release notes. Everything else stays as recorded.
+- **Risky steps get a pause.** Steps that publish, pay, delete, submit or confirm are marked, so a replay stops before them. The extension does not let an edit remove one.
 
 The agent also writes a description: what the routine does, and when to use it, in the words you would say. That description is how an agent decides to use it.
 

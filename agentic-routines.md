@@ -13,7 +13,7 @@
 
 ## Product
 Same architecture as Claude in Chrome: a custom MCP server plus a Chrome extension.
-1. **MCP server (stdio, works with Claude Code and Codex):** basic browser tools, all recorded, plus `routines_list`, `routine_run(name, params)`, `routine_save(name)`.
+1. **MCP server (stdio, works with Claude Code and Codex):** basic browser tools, all recorded, plus `routines_list`, `routine_run(name, params)`, `routine_propose` / `routine_edit` / `routine_save`.
 2. **Chrome extension (MV3):** actions through `chrome.debugger`, a11y snapshots, one tab group per agent session, native messaging to the server.
 3. **Compile on save:** drop navigation that a direct URL load reproduces (checked against the recorded snapshot), turn changing values into params, add pre/post checks per step.
 4. **Replay with no LLM.** On a failed step, hand the current page back to the agent, then save the fixed run as a new version.
@@ -37,7 +37,7 @@ Gap: none is a drop-in layer for Claude Code and Codex, and none maintains a sha
 
 ## MVP (a few weeks)
 - Extension and server over native messaging, basic tools working from Claude Code
-- Auto-record, `routine_save` / `routine_run`, multi-locator element lookup, pre/post checks
+- Auto-record, `routine_propose` → `routine_edit` → `routine_save`, `routine_run`, multi-locator element lookup, pre/post checks
 - Navigation skipping, params, pause before irreversible steps
 - Side-panel demo recording
 - Ship as a Claude Code plugin plus a Codex config snippet

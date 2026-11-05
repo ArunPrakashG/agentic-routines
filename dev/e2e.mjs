@@ -120,6 +120,14 @@ const call = async (name, args = {}) => {
   return t;
 };
 const refFor = (outline, re) => outline.split('\n').find((l) => re.test(l))?.match(/ref_\d+/)?.[0];
+// The refine loop: propose a draft, apply edits, test, save.
+const draftId = (text) => text.match(/Draft (d-[a-z0-9]+)/)?.[1];
+const hintEdits = (text) => [...text.matchAll(/apply: (\{.*\})/g)].map((m) => JSON.parse(m[1]));
+const stepNo = (text, re) => Number(text.split('\n').find((l) => re.test(l))?.match(/^(\d+)\./)?.[1]);
+const tryCall = async (name, args) => {
+  const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 300_000 });
+  return { text: r.content.map((c) => c.text ?? '').join('\n'), error: !!r.isError };
+};
 
 await openPanel(process.argv.includes('--dark') ? 'dark' : 'light');
 await sleep(500);
@@ -152,12 +160,22 @@ log(status1.trim());
 check(/2\.14\.0 \(214\) · kavyam-2\.14\.0\.aab 21 bytes/.test(status1), 'manual run uploaded the real file and submitted');
 await shot('02-library-unsaved-run');
 
-// ---------- 2. save ----------
-t = await call('routine_save', {
-  name: 'acme-release',
-  description: 'Upload an app bundle to Acme internal testing and start the rollout. Use when the user asks to release a build to internal testing.',
-  params: { app_bundle: join(FIXTURES, 'kavyam-2.14.0.aab'), version_name: '2.14.0 (214)', release_notes: 'Faster search.' },
-});
+// ---------- 2. propose, refine, save ----------
+const DESC = 'Upload an app bundle to Acme internal testing and start the rollout. Use when the user asks to release a build to internal testing.';
+t = await call('routine_propose', { name: 'acme-release', description: DESC });
+log(t.split('\n').slice(0, 3).join(' | '));
+check(/^Draft d-/.test(t) && /8 steps/.test(t), 'the draft numbers every recorded step, none dropped');
+check(/2\. click “Apps”.*navigated to/.test(t), 'each step says what happened after it');
+const nav = hintEdits(t).find((e) => e.op === 'navigate' && e.from === 1);
+check(nav && nav.to === 3 && /release\.html/.test(nav.url), 'the hint offers a direct address for the click-through, and changes nothing');
+let id = draftId(t);
+t = await call('routine_edit', { draft_id: id, ops: [nav, { op: 'param', name: 'app_bundle', value: join(FIXTURES, 'kavyam-2.14.0.aab') }, { op: 'param', name: 'version_name', value: '2.14.0 (214)' }, { op: 'param', name: 'release_notes', value: 'Faster search.' }] });
+check(/^Replaced steps 1–3 with step 1: navigate .*release\.html/.test(t) && /Asks each run for: app_bundle/.test(t), 'edits applied, steps renumbered');
+t = await call('routine_test', { draft_id: id });
+log(t.split('\n').slice(0, 2).join(' | '));
+check(/Test passed/.test(t) && /skipped “Start rollout/.test(t), 'the test replays the steps and skips the one that pauses');
+check(!/Rollout started/.test(await call('read_page', { filter: 'all' })), 'and it did not start the rollout');
+t = await call('routine_save', { draft_id: id });
 log(t);
 check(/Saved acme-release v1/.test(t), 'routine saved');
 check(/pauses before step/.test(t), 'rollout step pauses');
@@ -239,7 +257,7 @@ if (panel) {
 await shot('08-library-v2');
 if (panel) {
   await panelClick('Run acme-release');
-  const asks = await panelWait(/app_bundle[\s\S]*version_name[\s\S]*release_notes/);
+  const asks = await panelWait(/(?=[\s\S]*app_bundle)(?=[\s\S]*version_name)(?=[\s\S]*release_notes)/);
   await shot('09-run-inputs');
   check(asks, 'panel asks for the values before running');
 }
@@ -285,12 +303,18 @@ if (panel) {
   await call('type', { ref: refFor(page, /“Release name”/), text: 'typo' });
   await call('type', { ref: refFor(page, /“Release name”/), text: '3.0.0' });
   await call('type', { ref: refFor(page, /“Release notes”/), text: 'Stays the same.' });
-  const steps = await call('run_steps');
-  log(steps.replace(/\n/g, ' / '));
-  const num = (re) => Number(steps.split('\n').find((l) => re.test(l))?.match(/^\d+/)?.[0]);
-  const bad = await client.callTool({ name: 'routine_save', arguments: { name: 'acme-bad', description: 'Never saved. Use when testing the check.', params: { nope: 'never typed' } } });
-  check(bad.isError && /nope/.test(bad.content[0].text), 'a param that was never typed is refused');
-  t = await call('routine_save', { name: 'acme-latest', description: 'Name a release of the first app. Use when the user asks for this.', params: { release_name: '3.0.0' }, leave_out: [num(/: typo/)], first_in_list: [num(/click .*Kavyam/)] });
+  t = await call('routine_propose', { name: 'acme-latest', description: 'Name a release of the first app. Use when the user asks for this.' });
+  log(t.split('\n').slice(0, 7).join(' / '));
+  check(/both type into “Release name”/.test(t), 'the retyped field is a hint');
+  const id7 = draftId(t);
+  const typo = stepNo(t, /type “Release name”/);
+  const notes = stepNo(t, /type “Release notes”/);
+  const kav = stepNo(t, /click “Kavyam”/);
+  const bad = await tryCall('routine_edit', { draft_id: id7, ops: [{ op: 'param', name: 'nope', value: 'never typed' }] });
+  check(bad.error && /No typed value/.test(bad.text), 'a param that was never typed is refused');
+  // Numbers are the draft's as proposed, so the removal comes last.
+  await call('routine_edit', { draft_id: id7, ops: [{ op: 'fixed', step: notes }, { op: 'first_in_list', step: kav }, { op: 'param', name: 'release_name', value: '3.0.0' }, { op: 'remove', steps: [typo] }] });
+  t = await call('routine_save', { draft_id: id7 });
   log(t.replace(/\n/g, ' '));
   const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(STORE, 'routines/local/acme-latest/steps.json'), 'utf8'));
   const list = saved.steps ?? saved;
@@ -329,6 +353,91 @@ if (panel) {
   await evalIn((u) => u.startsWith(SITE), 'delete localStorage.variant');
 }
 
+// ---------- 8b. the agent refines a routine: modal and click-through become a direct address ----------
+{
+  await call('navigate', { url: `${SITE}/tracks.html` });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Internal testing”/) });
+  page = await call('read_page');
+  await call('type', { ref: refFor(page, /“Release name”/), text: '4.0.0 (400)' });
+  await call('type', { ref: refFor(page, /“What's new”/), text: 'Fixes.' });
+  await call('click', { ref: refFor(page, /“Publish to track”/) });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Go to overview”/) });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Release history”/) });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Export CSV”/) });
+  const REFINED = 'Publish a release to the internal track and export the history. Use when the user asks to publish a release to internal testing.';
+  t = await call('routine_propose', { name: 'acme-track', description: REFINED });
+  log(t);
+  id = draftId(t);
+  check(/in dialog “Release published”/.test(t), 'the click inside the dialog is marked as one');
+  const edits = hintEdits(t);
+  const prefix = edits.find((e) => e.op === 'navigate' && /track\.html/.test(e.url));
+  const modalHint = edits.find((e) => e.op === 'navigate' && e.from === stepNo(t, /click “Go to overview”/));
+  check(prefix && /track\.html\?t=internal/.test(prefix.url), 'hint: open the track page directly');
+  check(modalHint && /history\.html$/.test(modalHint.url) && modalHint.to === modalHint.from + 1, 'hint: the dialog answer and the click-through become one address');
+  check(/Step \d+ “Publish to track” submits/.test(t), 'hint: the publish step keeps its pause');
+
+  // The extension says no, whatever the agent asks.
+  const publish = stepNo(t, /click “Publish to track”/);
+  const sid = (t.match(/overview\.html\?sid=[a-z0-9]+/) ?? [''])[0];
+  let r = await tryCall('routine_edit', { draft_id: id, ops: [{ op: 'remove', steps: [publish] }] });
+  check(r.error && /submits, publishes, pays or deletes/.test(r.text), 'a step that publishes cannot be removed');
+  r = await tryCall('routine_edit', { draft_id: id, ops: [{ op: 'pause', step: publish, on: false }] });
+  check(r.error && /pause cannot be switched off/.test(r.text), 'and its pause cannot be switched off');
+  r = await tryCall('routine_edit', { draft_id: id, ops: [{ op: 'navigate', from: 1, to: 2, url: 'https://evil.example/track' }] });
+  check(r.error && /not on 127\.0\.0\.1/.test(r.text), 'an address on another site is refused');
+  r = await tryCall('routine_edit', { draft_id: id, ops: [{ op: 'navigate', from: modalHint.from, to: modalHint.to, url: `${SITE}/${sid}` }] });
+  check(r.error && /per-session value/.test(r.text), 'an address with a session id in it is refused');
+  r = await tryCall('routine_edit', { draft_id: id, ops: [{ op: 'navigate', from: modalHint.from, to: modalHint.to, url: `${SITE}/history.html` }, { op: 'remove', steps: [publish] }] });
+  check(r.error && /none of them were applied/.test(r.text), 'edits apply all or none');
+  r = await tryCall('routine_save', { draft_id: id, description: 'Too vague' });
+  check(r.error, 'a description without "Use when" is refused');
+
+  // Apply the hints and make the typed values parameters.
+  t = await call('routine_edit', { draft_id: id, ops: [modalHint, prefix, { op: 'param', name: 'release_name', value: '4.0.0 (400)' }, { op: 'param', name: 'whats_new', value: 'Fixes.' }] });
+  log(t.split('\n').filter((l) => /^\d+\./.test(l)).join(' / '));
+  check((t.match(/^\d+\./gm) ?? []).length === 8, 'two steps are folded into addresses, eight are left');
+  check(!/overview\.html/.test(t) && /navigate .*history\.html/.test(t), 'the dialog and the session address are gone');
+  r = await tryCall('routine_edit', { draft_id: id, ops: [{ op: 'undo' }] });
+  check(!r.error && /Undid/.test(r.text), 'undo goes back one edit');
+  await call('routine_edit', { draft_id: id, ops: [{ op: 'param', name: 'whats_new', value: 'Fixes.' }, { op: 'note', step: stepNo(t, /type “Release name”/), text: 'The release name must match the changelog.' }] });
+
+  t = await call('routine_test', { draft_id: id });
+  log(t);
+  check(/Test passed/.test(t) && /skipped “Publish to track”/.test(t) && /history\.html/.test(t), 'the test ran the direct address and skipped the publish');
+  t = await call('routine_save', { draft_id: id });
+  log(t.replace(/\n/g, ' '));
+  check(/Saved acme-track v1 · 8 steps from \d+ recorded/.test(t) && /Tested:/.test(t), 'saved after a good test');
+  const track = JSON.parse(await (await import('node:fs/promises')).readFile(join(STORE, 'routines/local/acme-track/steps.json'), 'utf8'));
+  check(!JSON.stringify(track).includes('sid=') && track.some((x) => x.instructions?.includes('changelog')), 'no session id was kept, and the note was');
+  await sleep(500);
+
+  // Run it for real: the pause is approved in the panel, and the rest follows the direct address.
+  const real = call('rt_acme_track', { release_name: '5.0.0 (500)', whats_new: 'More fixes.' });
+  if (panel) {
+    for (let i = 0; i < 60 && !/Paused before step/.test(await panelText()); i++) await sleep(250);
+    check(await panelClick('Publish to track'), 'approved the publish in the panel');
+  }
+  t = await real;
+  log(t);
+  check(/^Done/.test(t), 'the refined routine ran');
+  check(/Exported 1 release: 5\.0\.0 \(500\)/.test(await call('read_page', { filter: 'all' })), 'and landed on the history with the new release');
+  if (panel) await panelClick('Back to routines');
+
+  // Refine what is saved: it is only replaced after a good test.
+  t = await call('routine_propose', { name: 'acme-track', description: REFINED, from_routine: 'acme-track' });
+  const id8 = draftId(t);
+  await call('routine_edit', { draft_id: id8, ops: [{ op: 'note', step: 1, text: 'Open the track page first.' }] });
+  r = await tryCall('routine_save', { draft_id: id8 });
+  check(r.error && /test the latest edit first/.test(r.text), 'a saved routine is not replaced before a test');
+  await call('routine_test', { draft_id: id8, params: { release_name: '6.0.0 (600)', whats_new: 'Checked.' } });
+  t = await call('routine_save', { draft_id: id8 });
+  check(/Saved acme-track v2/.test(t), 'after the test it is the next version');
+}
+
 // ---------- 9. publishing to the directory ----------
 if (panel) {
   const { createServer } = await import('node:http');
@@ -352,7 +461,7 @@ if (panel) {
       res.end('{}');
     });
   });
-  await new Promise((r) => api.listen(8787, '127.0.0.1', r));
+  await new Promise((r) => api.listen(Number(process.env.AR_API_PORT || 8787), '127.0.0.1', r));
 
   const waitText = async (re, ms = 8000) => {
     for (let i = 0; i < ms / 100; i++) {

@@ -63,6 +63,7 @@ type locator struct {
 	Attrs map[string]string `json:"attrs"`
 	CSS   string            `json:"css"`
 	Near  string            `json:"near,omitempty"`
+	Modal string            `json:"modal,omitempty"`
 }
 
 type fingerprint struct {
@@ -82,6 +83,8 @@ type step struct {
 	Crop   string       `json:"crop,omitempty"`
 	Pause  string       `json:"pause,omitempty"`
 	Pick   string       `json:"pick,omitempty"`
+	// Text for the agent that runs the routine. Shown to it inside the untrusted-content envelope.
+	Instructions string `json:"instructions,omitempty"`
 }
 
 type routineIn struct {
@@ -163,6 +166,9 @@ func (r *routineIn) check(name string) string {
 		if s.Pick != "" && s.Pick != "first" {
 			return "bad_steps"
 		}
+		if len(s.Instructions) > 1000 {
+			return "bad_steps"
+		}
 		// A step that leaves the site would send an installer's signed-in browser somewhere else.
 		if s.URL != "" && !onSite(s.URL, m.Site) {
 			return "step_off_site"
@@ -173,7 +179,7 @@ func (r *routineIn) check(name string) string {
 		if s.Action == "navigate" && s.URL == "" {
 			return "bad_steps"
 		}
-		if t := s.Target; t != nil && (len(t.Attrs) > 20 || len(t.CSS) > 600) {
+		if t := s.Target; t != nil && (len(t.Attrs) > 20 || len(t.CSS) > 600 || len(t.Modal) > 100) {
 			return "bad_steps"
 		}
 	}

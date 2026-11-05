@@ -3,3 +3,4 @@ export * from './routine-md.ts';
 export * from './compile.ts';
 export * from './match.ts';
 export * from './sources.ts';
+export * from './draft.ts';

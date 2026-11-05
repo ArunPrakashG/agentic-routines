@@ -1,6 +1,6 @@
 # Routine format
 
-A routine is a skill for the browser: a folder with notes that tell an agent when to use it, and compiled steps that the extension replays without a model.
+A routine is a skill for the browser: a folder with notes that tell an agent when to use it, and steps that the extension replays without a model.
 
 ```text
 ~/.agentic-routines/routines/<owner>/<name>/
