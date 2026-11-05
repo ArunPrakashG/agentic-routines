@@ -28,7 +28,7 @@
 	header @pages Cache-Control "public, max-age=0, s-maxage=300, must-revalidate"
 
 	# Clean URLs: /privacy serves privacy.html, and the .html address redirects to it.
-	@dothtml path_regexp dothtml ^/(directory|guidelines|privacy|r|u)\.html$
+	@dothtml path_regexp dothtml ^/(directory|docs|docs/[a-z-]+|guidelines|privacy|r|u)\.html$
 	redir @dothtml /{re.dothtml.1} permanent
 	@index path /index /index.html
 	redir @index / permanent

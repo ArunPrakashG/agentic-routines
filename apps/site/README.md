@@ -3,6 +3,7 @@
 The marketing site and the public directory. Astro, built to static files, no server.
 
 - `/` the home page. `/guidelines` and `/privacy` are built from `docs/directory-guidelines.md` and `docs/privacy.md`.
+- `/docs` and `/docs/<page>` are built from `docs/guide/*.md`. The order and summaries are in `src/lib/docs.ts`.
 - `/directory`, `/r?o=owner&n=name` and `/u?h=handle` read the public API in the browser. They are not indexed (`r` and `u`); the directory page is.
 - `PUBLIC_API_URL` points them at another API (default: the production one). `SITE_URL` sets the canonical address and the sitemap.
 
