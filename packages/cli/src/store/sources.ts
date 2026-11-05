@@ -2,8 +2,8 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { blockedBy, checkFetched, fetchRepo, githubSource, listRepo, ownerFor, repoKey, withRepo, FILE_PATH, SINGLE_PATH, type BlockList, type Fetched, type Listing, type Origin, type RepoIO, type Routine, type Source, type SourceEntry } from '@agentic-routines/core';
-import { paths } from './paths.ts';
-import * as store from './store.ts';
+import { paths } from '../paths.ts';
+import * as store from './routines.ts';
 
 // Sources the person added, the block list we fetch, and installing from either.
 // Nothing here installs on its own: install() runs only when the person clicked Install.

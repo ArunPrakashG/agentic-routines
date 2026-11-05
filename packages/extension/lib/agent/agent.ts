@@ -1,9 +1,9 @@
 import type { Locator, PageFingerprint, RecordedEvent } from '@agentic-routines/core';
-import { areaBase64, cropHash, pngBase64, type Rect } from './crop';
+import { areaBase64, cropHash, pngBase64, type Rect } from '../replay/crop';
 import * as native from './native';
-import { platform } from './platform';
+import { platform } from '../platform';
 import * as runs from './runs';
-import { agentTabId, ask, glow, settle, setAgentTab, waitLoaded } from './tabs';
+import { agentTabId, ask, glow, settle, setAgentTab, waitLoaded } from '../page/tabs';
 
 // The browser tools agents call. Each call is done and recorded.
 

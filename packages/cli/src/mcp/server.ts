@@ -6,9 +6,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { eventLabel, isRepoPath, lintForPublish, missingParams, onSite, urlScore, wrapAuthored, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
-import { paths } from './paths.ts';
-import * as sources from './sources.ts';
-import * as store from './store.ts';
+import { paths } from '../paths.ts';
+import * as sources from '../store/sources.ts';
+import * as store from '../store/routines.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
 const VERSION = '0.1.0';

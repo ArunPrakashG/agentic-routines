@@ -1,7 +1,7 @@
 // Captures the raw frames the README images are built from: the real side panel and the test site, driven by a
-// plain MCP client through the real extension. No model calls. Needs a running dev/up.sh environment.
-//   DEV_DIR=<state folder> AGENTIC_ROUTINES_HOME=<state folder>/store AR_CDP_PORT=<port> node dev/shots.mjs <out-dir> [light|dark]
-// dev/readme-images.sh runs it end to end. The site is dev/site with a stylesheet added on the way, so the
+// plain MCP client through the real extension. No model calls. Needs a running dev/env/up.sh environment.
+//   DEV_DIR=<state folder> AGENTIC_ROUTINES_HOME=<state folder>/store AR_CDP_PORT=<port> node dev/images/shots.mjs <out-dir> [light|dark]
+// dev/images/readme-images.sh runs it end to end. The site is dev/site with a stylesheet added on the way, so the
 // fixtures stay as the tests expect them.
 import { createServer } from 'node:http';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = process.argv[2];
 const SCHEME = process.argv[3] === 'dark' ? 'dark' : 'light';
-if (!OUT) throw new Error('usage: node dev/shots.mjs <out-dir> [light|dark]');
+if (!OUT) throw new Error('usage: node dev/images/shots.mjs <out-dir> [light|dark]');
 mkdirSync(OUT, { recursive: true });
 
 const CDP = `http://127.0.0.1:${process.env.AR_CDP_PORT ?? 9333}`;
@@ -19,8 +19,8 @@ const STORE = process.env.AGENTIC_ROUTINES_HOME;
 // The bundles live in a short, neutral folder, so no path of this machine shows in a screenshot.
 const FIXTURES = '/tmp/builds';
 mkdirSync(FIXTURES, { recursive: true });
-for (const f of ['kavyam-2.14.0.aab', 'kavyam-2.15.0.aab']) copyFileSync(join(HERE, 'fixtures', f), join(FIXTURES, f));
-const CLI = join(HERE, '../packages/cli');
+for (const f of ['kavyam-2.14.0.aab', 'kavyam-2.15.0.aab']) copyFileSync(join(HERE, '../fixtures', f), join(FIXTURES, f));
+const CLI = join(HERE, '../../packages/cli');
 const SDK = `${CLI}/node_modules/@modelcontextprotocol/sdk/dist/esm`;
 const { Client } = await import(`${SDK}/client/index.js`);
 const { StdioClientTransport } = await import(`${SDK}/client/stdio.js`);
@@ -60,7 +60,7 @@ const site = createServer((req, res) => {
   const path = new URL(req.url, SITE).pathname;
   if (path === '/__shots.css') return void res.writeHead(200, { 'content-type': 'text/css' }).end(CSS);
   try {
-    const html = readFileSync(join(HERE, 'site', path === '/' ? 'index.html' : path.slice(1)), 'utf8');
+    const html = readFileSync(join(HERE, '../site', path === '/' ? 'index.html' : path.slice(1)), 'utf8');
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(html.replace('<meta charset="utf-8">', '<meta charset="utf-8"><link rel="stylesheet" href="/__shots.css">'));
   } catch {
     res.writeHead(404).end('not found');

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { BROWSERS, hostManifest, type Browser, type OS } from '@agentic-routines/browsers';
-import { HOST_NAME, LEGACY_HOST_NAME, paths } from './paths.ts';
+import { HOST_NAME, LEGACY_HOST_NAME, paths } from '../paths.ts';
 
 // `npx agentic-routines setup`: register the native host with every browser
 // found, and add the MCP server to every agent found.

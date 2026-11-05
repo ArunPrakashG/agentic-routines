@@ -1,7 +1,7 @@
-// Builds the images in docs/images from the raw frames dev/shots.mjs captured (light/ and dark/ folders), and
+// Builds the images in docs/images from the raw frames dev/images/shots.mjs captured (light/ and dark/ folders), and
 // takes the website's home page from apps/site/dist. Needs Chromium (Playwright's is fine), ffmpeg and ImageMagick.
-//   node dev/readme-images.mjs <frames-dir> [out-dir]
-// dev/readme-images.sh runs the whole chain, including the captures.
+//   node dev/images/readme-images.mjs <frames-dir> [out-dir]
+// dev/images/readme-images.sh runs the whole chain, including the captures.
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,10 +10,10 @@ import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '..');
+const ROOT = resolve(HERE, '../..');
 const FRAMES = resolve(process.argv[2] ?? '');
 const OUT = resolve(process.argv[3] ?? join(ROOT, 'docs/images'));
-if (!process.argv[2]) throw new Error('usage: node dev/readme-images.mjs <frames-dir> [out-dir]');
+if (!process.argv[2]) throw new Error('usage: node dev/images/readme-images.mjs <frames-dir> [out-dir]');
 mkdirSync(OUT, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

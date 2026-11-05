@@ -1,6 +1,6 @@
 import { applyOps, draftFromRoutine, draftFromRun, EditError, finalize, renderDraft, validateRoutine, type Draft, type Op, type Routine, type RunResult } from '@agentic-routines/core';
 import * as native from './native';
-import * as replay from './replay';
+import * as replay from '../replay/replay';
 import * as runs from './runs';
 
 // Drafts of routines being refined. They live here, in the extension, and every edit is checked here:

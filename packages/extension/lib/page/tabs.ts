@@ -1,5 +1,5 @@
-import type { ContentMsg } from '../entrypoints/content';
-import { platform } from './platform';
+import type { ContentMsg } from '../../entrypoints/content';
+import { platform } from '../platform';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

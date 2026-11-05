@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { readdir, readFile, rm } from 'node:fs/promises';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
-import { paths } from './paths.ts';
-import { isEvent, isResponse, lineReader, type Event, type Response } from './protocol.ts';
+import { paths } from '../paths.ts';
+import { isEvent, isResponse, lineReader, type Event, type Response } from '../protocol.ts';
 
 // The MCP server's line to the browser: a socket to whichever native host
 // is running. Each browser with the extension starts its own host.

@@ -1,4 +1,4 @@
-// Reloads the unpacked extension in a running browser, so a new build takes effect. Usage: node dev/reload-extension.mjs <store>
+// Reloads the unpacked extension in a running browser, so a new build takes effect. Usage: node dev/env/reload-extension.mjs <store>
 import { connect } from 'node:net';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';

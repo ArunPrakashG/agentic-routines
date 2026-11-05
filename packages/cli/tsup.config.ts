@@ -5,5 +5,5 @@ const shared = { target: 'node20', platform: 'node', banner: { js: '#!/usr/bin/e
 export default defineConfig([
   { ...shared, format: ['esm'], entry: ['src/index.ts'], noExternal: ['@agentic-routines/core', '@agentic-routines/browsers'] },
   // CommonJS, as bundled dependencies use require.
-  { ...shared, format: ['cjs'], entry: ['src/host-main.ts'], noExternal: [/.*/] },
+  { ...shared, format: ['cjs'], entry: { 'host-main': 'src/host/main.ts' }, noExternal: [/.*/] },
 ]);

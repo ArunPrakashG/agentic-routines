@@ -1,6 +1,6 @@
 import { dHash } from '@agentic-routines/core';
-import { platform } from './platform';
-import { bare, rendering } from './tabs';
+import { platform } from '../platform';
+import { bare, rendering } from '../page/tabs';
 
 // The third check: a perceptual hash of the area around an element.
 // captureVisibleTab only sees the active tab, and Chrome allows two calls a second.

@@ -1,7 +1,7 @@
 // Functional check of installing from Git sources: the real built CLI (setup commands, MCP server and
 // native host) against a stand-in for GitHub and for the block list. No browser: the browser's side of
 // the native line is played by this script. Run `pnpm --filter agentic-routines build` first.
-//   node dev/e2e-sources.mjs
+//   node dev/e2e/e2e-sources.mjs
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, connect } from 'node:net';
 import { createServer as http } from 'node:http';
@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = join(ROOT, 'packages/cli');
 const GH_PORT = Number(process.env.AR_GH_PORT || 8791);
 const API_PORT = Number(process.env.AR_SOURCES_API_PORT || 8792);

@@ -1,8 +1,8 @@
 import type { RecordedEvent } from '@agentic-routines/core';
-import type { Account } from './auth';
-import type { PublishCard } from './directory';
+import type { Account } from '../remote/auth';
+import type { PublishCard } from '../remote/directory';
 import type { Hooks, HookState } from '@agentic-routines/core';
-import type { GitCard } from './git';
+import type { GitCard } from '../remote/git';
 
 export interface PanelState {
   account?: Account;

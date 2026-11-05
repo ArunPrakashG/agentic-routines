@@ -1,13 +1,13 @@
 #!/bin/sh
 # Starts the local test environment in tmux. Nothing outside the state folder is
 # touched: the browser, the routine store and the agent config all live there.
-#   dev/up.sh [--headless] [--no-claude] [--no-build]
+#   dev/env/up.sh [--headless] [--no-claude] [--no-build]
 # AR_DEV_DIR moves the state folder, AR_CHROME picks the browser, AR_MODEL the agent's model.
 # AR_TMUX_PREFIX renames the tmux sessions (default br), so two checkouts can run side by side.
 # AR_TLS_HOST and AR_TLS_PORT make https://$AR_TLS_HOST/ in that browser reach 127.0.0.1:$AR_TLS_PORT, with the
 # certificate errors ignored, for checks that need an https site (routines from Git only install for https).
 set -e
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 DEV=${AR_DEV_DIR:-$ROOT/.dev}
 P=${AR_TMUX_PREFIX:-br}
 HEADLESS=; CLAUDE=1; BUILD=1

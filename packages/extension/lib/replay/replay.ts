@@ -1,8 +1,8 @@
 import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
-import { uploadFile } from './agent';
+import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
-import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from './tabs';
+import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from '../page/tabs';
 
 // Replays compiled steps with no model. Before each step: page structure,
 // then the element, then the crop. Stops at pauses and at steps that changed.

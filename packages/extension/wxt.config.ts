@@ -14,7 +14,7 @@ export default defineConfig({
   // The source Firefox Add-ons asks for: enough of the workspace to build the extension, and nothing else.
   zip: {
     sourcesRoot: '../..',
-    excludeSources: ['**/node_modules/**', '**/.output/**', '**/.wxt/**', '**/.env*', '.git/**', '.dev/**', '.keys/**', 'apps/**', 'dev/**', 'design/**', 'releases/**', 'packages/cli/**', 'agentic-routines.md'],
+    excludeSources: ['**/node_modules/**', '**/.output/**', '**/.wxt/**', '**/.env*', '.git/**', '.dev/**', '.keys/**', 'apps/**', 'dev/**', 'design/**', 'releases/**', 'packages/cli/**', 'docs/idea.md'],
   },
   vite: () => ({ plugins: [preact()] }),
   manifest: ({ browser }) => ({

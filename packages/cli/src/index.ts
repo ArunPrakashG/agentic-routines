@@ -1,8 +1,8 @@
-import { runDoctor } from './doctor.ts';
-import { runHost } from './host.ts';
-import { runMcp } from './mcp.ts';
-import { runSetup } from './setup.ts';
-import { runExport, runSources } from './sources-cli.ts';
+import { runDoctor } from './commands/doctor.ts';
+import { runHost } from './host/host.ts';
+import { runMcp } from './mcp/server.ts';
+import { runSetup } from './commands/setup.ts';
+import { runExport, runSources } from './commands/sources.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 

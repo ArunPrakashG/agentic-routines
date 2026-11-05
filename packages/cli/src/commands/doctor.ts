@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { BROWSERS, type OS } from '@agentic-routines/browsers';
-import { HOST_NAME, paths } from './paths.ts';
+import { HOST_NAME, paths } from '../paths.ts';
 
 // `npx agentic-routines doctor`: says what is connected and what to do about what is not.
 

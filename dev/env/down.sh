@@ -1,5 +1,5 @@
 #!/bin/sh
-# Stops everything dev/up.sh started. State stays, so routines survive a restart.
+# Stops everything dev/env/up.sh started. State stays, so routines survive a restart.
 P=${AR_TMUX_PREFIX:-br}
 for s in $P-claude $P-chrome $P-site; do tmux kill-session -t "$s" 2>/dev/null; done
 CDP_PORT=${AR_CDP_PORT:-9333}

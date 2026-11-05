@@ -1,6 +1,6 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
-import { aim, glow, veil, type GlowMode } from '../lib/overlay';
-import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type } from '../lib/dom';
+import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
+import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }

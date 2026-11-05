@@ -1,5 +1,5 @@
 import { hookHash, type Hooks, type Routine, type SourceEntry } from '@agentic-routines/core';
-import * as native from './native';
+import * as native from '../agent/native';
 
 // Installing from a Git source or a folder. The host does the fetching and every check; this side
 // shows the person what was fetched and only installs after they click.

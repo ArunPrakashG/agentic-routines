@@ -1,7 +1,7 @@
 // Real-browser check of hooks and instructions: a routine from a Git source (a folder) whose author wrote hooks,
 // installed through the side panel, run by an agent. It proves a hook can fill a value from the page and add a
 // note, that a hook which misbehaves is contained, and that approval is pinned to the code the person read.
-//   dev/e2e.sh runs it against a fresh browser; AR_CDP_PORT, AR_SITE_PORT as for the other checks.
+//   dev/e2e/e2e.sh runs it against a fresh browser; AR_CDP_PORT, AR_SITE_PORT as for the other checks.
 import { createServer } from 'node:http';
 import { createServer as https } from 'node:https';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ const CDP = `http://127.0.0.1:${process.env.AR_CDP_PORT ?? 9333}`;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.DEV_DIR;
 const STORE = process.env.AGENTIC_ROUTINES_HOME;
-const CLI = join(HERE, '../packages/cli');
+const CLI = join(HERE, '../../packages/cli');
 const SDK = `${CLI}/node_modules/@modelcontextprotocol/sdk/dist/esm`;
 const { Client } = await import(`${SDK}/client/index.js`);
 const { StdioClientTransport } = await import(`${SDK}/client/stdio.js`);
@@ -119,7 +119,7 @@ const certs = mkdtempSync(join(tmpdir(), 'br-tls-'));
 const made = spawnSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes', '-keyout', join(certs, 'k.pem'), '-out', join(certs, 'c.pem'), '-subj', `/CN=${HOST}`, '-days', '2'], { encoding: 'utf8' });
 if (made.status !== 0) throw new Error('openssl: ' + made.stderr);
 const site = https({ key: readFileSync(join(certs, 'k.pem')), cert: readFileSync(join(certs, 'c.pem')) }, (req, res) => {
-  const f = join(HERE, 'site', new URL(req.url, SITE).pathname.replace(/^\/$/, '/index.html'));
+  const f = join(HERE, '../site', new URL(req.url, SITE).pathname.replace(/^\/$/, '/index.html'));
   try {
     res.setHeader('content-type', 'text/html; charset=utf-8');
     res.end(readFileSync(f));

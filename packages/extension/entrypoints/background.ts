@@ -1,16 +1,16 @@
 import { compileRun, hookHash, type CompileOptions, type Routine } from '@agentic-routines/core';
-import * as agent from '../lib/agent';
-import * as auth from '../lib/auth';
-import * as directory from '../lib/directory';
-import * as draft from '../lib/draft';
-import * as git from '../lib/git';
-import * as hooks from '../lib/hooks';
-import * as native from '../lib/native';
+import * as agent from '../lib/agent/agent';
+import * as auth from '../lib/remote/auth';
+import * as directory from '../lib/remote/directory';
+import * as draft from '../lib/agent/draft';
+import * as git from '../lib/remote/git';
+import * as hooks from '../lib/replay/hooks';
+import * as native from '../lib/agent/native';
 import { platform } from '../lib/platform';
-import * as replay from '../lib/replay';
-import * as runs from '../lib/runs';
-import { ask } from '../lib/tabs';
-import type { PanelCommand, PanelState } from '../lib/panel-types';
+import * as replay from '../lib/replay/replay';
+import * as runs from '../lib/agent/runs';
+import { ask } from '../lib/page/tabs';
+import type { PanelCommand, PanelState } from '../lib/panel/types';
 
 // When each routine last ran and which steps changed then, by owner/name.
 type LastRuns = Record<string, { id: string; at: number; changed: number[] }>;

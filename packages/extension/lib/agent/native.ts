@@ -1,6 +1,6 @@
 // The line to the native host, which the MCP server talks to.
 // An open port also keeps the service worker alive.
-import { platform } from './platform';
+import { platform } from '../platform';
 
 const HOST = 'com.agentic_routines.host';
 

@@ -1,6 +1,6 @@
 import { checkFetched, stringifyRoutineFile } from '@agentic-routines/core';
-import * as sources from './sources.ts';
-import * as store from './store.ts';
+import * as sources from '../store/sources.ts';
+import * as store from '../store/routines.ts';
 
 // agentic-routines sources [add <address> | remove <address> | on <address> | off <address> | check <folder>]
 // agentic-routines export <routine>

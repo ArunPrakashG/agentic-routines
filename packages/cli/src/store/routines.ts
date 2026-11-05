@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path';
 import { deriveUrls, hookHash, parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
 import type { Surface } from '@agentic-routines/core';
-import { paths } from './paths.ts';
+import { paths } from '../paths.ts';
 
 // Routines live at ~/.agentic-routines/routines/<owner>/<name>/{ROUTINE.md,steps.json}.
 // "local" is the owner until the user signs in and picks a handle.

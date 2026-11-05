@@ -2,10 +2,10 @@ import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, join } from 'node:path';
-import { paths, socketPath } from './paths.ts';
-import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from './protocol.ts';
-import * as sources from './sources.ts';
-import * as store from './store.ts';
+import { paths, socketPath } from '../paths.ts';
+import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from '../protocol.ts';
+import * as sources from '../store/sources.ts';
+import * as store from '../store/routines.ts';
 
 // Started by the browser through native messaging, one per browser.
 // stdout belongs to the browser, so all logging goes to a file.

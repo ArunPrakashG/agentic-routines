@@ -104,6 +104,14 @@ The [website](https://agenticroutines.arunprakashg.com) has the docs, the direct
 | [`design`](design) | Approved mockups and tokens |
 | [`dev`](dev) | Local environment, end-to-end tests, the benchmark and the README image scripts |
 
+Inside the larger ones:
+
+| Path | What it is |
+|---|---|
+| `packages/extension/lib/` | `agent/` runs, drafts and the native host line · `replay/` the replay engine · `page/` dom, overlay and tab helpers · `remote/` sign-in, directory and Git sources · `panel/` side panel messages · `platform/` Chromium and Gecko |
+| `packages/cli/src/` | `mcp/` the MCP server · `host/` the native host · `commands/` `setup`, `doctor` and `sources` · `store/` routines and sources on disk |
+| `dev/` | `env/` the local environment · `e2e/` the end-to-end checks · `images/` the README screenshots · `fixtures/` and `site/` the test data and the test site · `bench/` the benchmark |
+
 ## Development
 
 You need Node 20 or newer and pnpm.
@@ -123,7 +131,7 @@ pnpm e2e:api      # the API, on throwaway Postgres and Redis (Docker)
 AR_CDP_PORT=9444 pnpm e2e
 ```
 
-[`dev/README.md`](dev/README.md) has the local environment, [`releases/README.md`](releases/README.md) has how a release is made, and the API and site have their own READMEs in [`apps/api`](apps/api/README.md) and [`apps/site`](apps/site/README.md). The images in this file are made by `dev/shots.mjs` and `dev/readme-images.mjs`, from a real run of the extension against a small test site.
+[`dev/README.md`](dev/README.md) has the local environment, [`releases/README.md`](releases/README.md) has how a release is made, and the API and site have their own READMEs in [`apps/api`](apps/api/README.md) and [`apps/site`](apps/site/README.md). The images in this file are made by `dev/images/shots.mjs` and `dev/images/readme-images.mjs`, from a real run of the extension against a small test site.
 
 ## Contributing
 

@@ -29,8 +29,8 @@ Other options:
 
 - `pnpm dev:down` stops it all. Routines stay, so `rm -rf .dev` is the clean start.
 - A new build gets a new browser profile, because Chromium keeps the old background script in a reused one. The panel's onboarding and the page's `localStorage` start over.
-- `dev/up.sh --no-build` skips the build. `--headless` and `--no-claude` do what they say.
-- `AR_MODEL=haiku dev/up.sh` picks the model. `AR_DEV_DIR` moves the state folder. `AR_CHROME` picks the browser.
+- `dev/env/up.sh --no-build` skips the build. `--headless` and `--no-claude` do what they say.
+- `AR_MODEL=haiku dev/env/up.sh` picks the model. `AR_DEV_DIR` moves the state folder. `AR_CHROME` picks the browser.
 - `pnpm e2e` is the scripted check: fresh headless browsers and stores, with no model calls. It covers an agent over MCP, then a person recording and replaying a demo in the real side panel with input events. It replaces a running environment. Add `--shots` to save panel screenshots to `.dev/e2e-*/shots`.
 
 ## Sign-in and the API
@@ -40,3 +40,14 @@ The API is a Go service in `apps/api` on Postgres and Redis. `pnpm e2e:api` buil
 The dev scripts build the extension against `http://127.0.0.1:8787`. A plain `pnpm -C packages/extension exec wxt build` points at the deployed API instead. Set `WXT_API_URL` to override either.
 
 The Google client is in Testing status, so only its listed test users can sign in. Server setup and deploys are in `apps/api/README.md`.
+
+## What is here
+
+| Path | What it is |
+|---|---|
+| `env/` | `up.sh`, `down.sh` and `reload-extension.mjs`: the environment above |
+| `e2e/` | The end-to-end checks. `e2e.sh` runs the browser ones, `e2e-api.mjs` the API, `e2e-sources.mjs` Git sources, `e2e-hooks.sh` hooks alone |
+| `images/` | `readme-images.sh` rebuilds the README screenshots from a real run (`shots.mjs`, then `readme-images.mjs`) |
+| `fixtures/`, `site/` | The test files and the test site |
+| `bench/` | The benchmark behind the numbers on the website |
+| `check-links.mjs` | `pnpm check:links` checks the links in every Markdown file |
