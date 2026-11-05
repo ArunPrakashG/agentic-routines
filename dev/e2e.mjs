@@ -134,6 +134,11 @@ page = await call('read_page');
 await call('click', { ref: refFor(page, /“Kavyam”/) });
 page = await call('read_page');
 check(/Create internal testing release/.test(page), 'reached the release page');
+const overlayUp = async () => {
+  const r = await evalIn((u) => u.startsWith(SITE), "!!document.getElementById('agentic-routines-overlay')");
+  return r;
+};
+check(await overlayUp(), 'the page shows it is being driven while the agent works');
 t = await call('upload', { ref: refFor(page, /\(file\)/), path: join(FIXTURES, 'kavyam-2.14.0.aab') });
 log('upload:', t);
 await call('type', { ref: refFor(page, /“Release name”/), text: '2.14.0 (214)' });
@@ -177,6 +182,8 @@ if (panel) {
 t = await run1;
 log(t);
 check(/^Done/.test(t), 'replay finished');
+await sleep(900);
+check(!(await overlayUp()), 'the glow is gone when the replay ends');
 check(/user approved step 6 .* in the side panel/.test(t), 'agent is told the pause was approved in the panel');
 page = await call('read_page', { filter: 'all' });
 const status2 = page.split('\n').find((l) => /Rollout started/.test(l)) ?? '';

@@ -1,7 +1,7 @@
 import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
 import { uploadFile } from './agent';
 import { hashAt, screenshot, type Rect } from './crop';
-import { agentTabId, ask, settle, sleep, waitLoaded, wake } from './tabs';
+import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from './tabs';
 
 // Replays compiled steps with no model. Before each step: page structure,
 // then the element, then the crop. Stops at pauses and at steps that changed.
@@ -170,7 +170,19 @@ async function runStep(s: ReplayState, step: Step, ref?: string): Promise<'next'
   return 'next';
 }
 
+// The page glows for as long as the replay is driving it, amber while it waits for a person.
+const DRIVING_MS = 8000;
+const PAUSED_MS = 15 * 60_000;
+
 async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<typeof result>> {
+  try {
+    return await drive(s, choiceRef);
+  } finally {
+    await glow(s.tabId, 'off');
+  }
+}
+
+async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typeof result>> {
   s.status = 'running';
   notify(s);
   try {
@@ -186,6 +198,7 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
         }
         s.status = 'paused';
         notify(s);
+        await glow(s.tabId, 'paused', PAUSED_MS);
         const approved = await new Promise<boolean | undefined>((res) => {
           panelWaiters.set(s.id, res);
           // Runs started in the panel wait for the panel; agents get the pause back.
@@ -210,6 +223,7 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
         s.status = 'running';
         notify(s);
       }
+      await glow(s.tabId, 'run', DRIVING_MS);
       if ((await runStep(s, step, choiceRef)) === 'stop') {
         notify(s);
         return result(s);

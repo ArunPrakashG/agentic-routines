@@ -1,5 +1,4 @@
 {
-  "v": 3,
   "attachments": {},
   "boards": {
     "Admin.dc.html": {
@@ -65,6 +64,13 @@
       "x": 2480,
       "y": 1894
     },
+    "Overlay.dc.html": {
+      "h": 900,
+      "title": "Tab control \u00b7 edge glow, cursor, target",
+      "w": 1200,
+      "x": 1520,
+      "y": 2860
+    },
     "Profile.dc.html": {
       "h": 720,
       "title": "Site \u00b7 Profile, signed in",
@@ -114,18 +120,18 @@
       "x": 1520,
       "y": 1894
     },
-    "Submit.dc.html": {
-      "h": 844,
-      "title": "Side panel \u00b7 Submit for review",
-      "w": 400,
-      "x": 7135,
-      "y": 2040
-    },
     "Submissions.dc.html": {
       "h": 844,
       "title": "Side panel \u00b7 Your submissions",
       "w": 400,
       "x": 7655,
+      "y": 2040
+    },
+    "Submit.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Submit for review",
+      "w": 400,
+      "x": 7135,
       "y": 2040
     }
   },
@@ -147,6 +153,7 @@
     "Agent.dc.html",
     "States.dc.html",
     "Onboarding.dc.html",
+    "Overlay.dc.html",
     "Site.dc.html",
     "SiteMobile.dc.html",
     "Directory.dc.html",
@@ -159,5 +166,6 @@
     "Submissions.dc.html"
   ],
   "pages": [],
-  "title": "Agentic Routines"
+  "title": "Agentic Routines",
+  "v": 3
 }

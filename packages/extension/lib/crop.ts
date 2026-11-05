@@ -1,6 +1,6 @@
 import { dHash } from '@agentic-routines/core';
 import { platform } from './platform';
-import { rendering } from './tabs';
+import { bare, rendering } from './tabs';
 
 // The third check: a perceptual hash of the area around an element.
 // captureVisibleTab only sees the active tab, and Chrome allows two calls a second.
@@ -29,12 +29,17 @@ function capture(windowId: number): Promise<string> {
 
 export async function screenshot(tabId: number): Promise<ImageBitmap | null> {
   const tab = await browser.tabs.get(tabId);
-  if (!tab.active || !(await rendering(tabId))) return null;
+  if (!tab.active) return null;
+  return bare(tabId, () => shoot(tabId, tab.windowId));
+}
+
+async function shoot(tabId: number, windowId: number): Promise<ImageBitmap | null> {
+  if (!(await rendering(tabId))) return null;
   const wait = last + 520 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   last = Date.now();
   try {
-    const url = await capture(tab.windowId);
+    const url = await capture(windowId);
     const blob = await (await fetch(url)).blob();
     return await createImageBitmap(blob);
   } catch {
@@ -90,8 +95,12 @@ export async function areaBase64(tabId: number, around?: Rect): Promise<{ data: 
 export async function pngBase64(tabId: number): Promise<string> {
   const tab = await browser.tabs.get(tabId);
   if (!tab.active) await browser.tabs.update(tabId, { active: true });
+  return bare(tabId, () => grab(tabId, tab.windowId));
+}
+
+async function grab(tabId: number, windowId: number): Promise<string> {
   try {
-    const url = await capture(tab.windowId);
+    const url = await capture(windowId);
     return url.slice(url.indexOf(',') + 1);
   } catch (e) {
     // Without a DevTools session a hidden window stays an error.

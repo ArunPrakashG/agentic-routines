@@ -1,4 +1,5 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
+import { aim, glow, veil, type GlowMode } from '../lib/overlay';
 import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, role, select, type } from '../lib/dom';
 
 export type ContentMsg =
@@ -12,6 +13,8 @@ export type ContentMsg =
   | { t: 'markUpload'; ref: string }
   | { t: 'resolve'; target: Locator }
   | { t: 'first'; target: Locator }
+  | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
+  | { t: 'veil'; on: boolean }
   | { t: 'record'; on: boolean };
 
 function b64ToBytes(b64: string) {
@@ -96,41 +99,59 @@ export default defineContentScript({
           }
           case 'act': {
             const el = msg.ref ? byRef(msg.ref) : document.body;
-            switch (msg.action) {
-              case 'click':
-                click(el);
-                break;
-              case 'type':
-                type(el, msg.value ?? '');
-                break;
-              case 'clear':
-                type(el, '');
-                break;
-              case 'select':
-                select(el, msg.value ?? '');
-                break;
-              case 'press':
-                press(msg.value ?? 'Enter');
-                break;
-              case 'read':
-                send({ ok: ((el as HTMLElement).innerText ?? '').trim().slice(0, 2000) });
-                return;
-            }
-            send({ ok: true });
+            // The cursor lands on the element first, so a person watching sees what is about to happen.
+            void (async () => {
+              try {
+                if (msg.ref && msg.action !== 'read') await aim(el, msg.action);
+                switch (msg.action) {
+                  case 'click':
+                    click(el);
+                    break;
+                  case 'type':
+                    type(el, msg.value ?? '');
+                    break;
+                  case 'clear':
+                    type(el, '');
+                    break;
+                  case 'select':
+                    select(el, msg.value ?? '');
+                    break;
+                  case 'press':
+                    press(msg.value ?? 'Enter');
+                    break;
+                  case 'read':
+                    send({ ok: ((el as HTMLElement).innerText ?? '').trim().slice(0, 2000) });
+                    return;
+                }
+                send({ ok: true });
+              } catch (e) {
+                send({ err: (e as Error).message });
+              }
+            })();
             break;
           }
           case 'markUpload': {
             const input = fileInputFor(byRef(msg.ref));
             if (input) input.setAttribute('data-br-upload', '1');
-            send({ ok: !!input });
+            void aim(byRef(msg.ref), 'upload').finally(() => send({ ok: !!input }));
             break;
           }
           case 'attach': {
             const files = msg.files.map((f) => new File([b64ToBytes(f.b64)], f.name, { type: f.type }));
-            attach(byRef(msg.ref), files);
-            send({ ok: true });
+            void aim(byRef(msg.ref), 'upload').finally(() => {
+              attach(byRef(msg.ref), files);
+              send({ ok: true });
+            });
             break;
           }
+          case 'glow':
+            glow(msg.mode, msg.ttl);
+            send({ ok: true });
+            break;
+          case 'veil':
+            veil(msg.on);
+            send({ ok: true });
+            break;
           case 'record':
             recording = msg.on;
             send({ ok: true });

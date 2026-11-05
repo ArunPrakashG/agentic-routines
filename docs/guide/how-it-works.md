@@ -26,6 +26,10 @@ Before each step, the replayer checks the page, in this order, and stops at the 
 
 If they agree, the step runs. If the element is missing or matches more than one, the step has changed. The replay pauses and your agent, which is already running, picks the right element. The fix is saved for next time. If your agent can't pick, it finishes the task by hand and that run is saved as the next version.
 
+### What you see in the tab
+
+While a replay or your agent drives a tab, its edges glow, a cursor glides to each element with a label for the action, and the element is outlined as it is used. The glow turns amber when the replay waits for you at a pause, and it ends when the run does. It never takes mouse input, and it is hidden for every screenshot, so it never changes what the checks above see. With reduced motion turned on, the cursor jumps instead of gliding.
+
 ## Pauses
 
 A replay always stops before a step you can't undo: publishing, paying, deleting. It waits for you, or for your agent to approve with `routine_resume`. A routine author can add pauses. A routine can never remove one that was detected.
