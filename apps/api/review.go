@@ -246,6 +246,7 @@ func autoChecks(name string, in routineIn) []checkResult {
 	} else {
 		out = append(out, checkResult{"site", "fail", checkText[code], "Leaves its site"})
 	}
+	out = append(out, lookalikeCheck(in), textCheck(in))
 	var typed, secrets, unpaused []string
 	paused := map[int]bool{}
 	for _, n := range in.Meta.Pauses {
@@ -253,6 +254,9 @@ func autoChecks(name string, in routineIn) []checkResult {
 	}
 	for _, s := range in.Steps {
 		n := strconv.Itoa(s.N)
+		if secretShape.MatchString(s.URL) {
+			secrets = append(secrets, n)
+		}
 		if s.Value != nil && *s.Value != "" && (s.Action == "type" || s.Action == "select") {
 			if secretShape.MatchString(*s.Value) {
 				secrets = append(secrets, n)
@@ -280,6 +284,60 @@ func autoChecks(name string, in routineIn) []checkResult {
 		out = append(out, checkResult{"pauses", "pass", "Nothing that reads like a final action runs without a pause.", ""})
 	}
 	return out
+}
+
+// lookalikeCheck flags a site or step address written in punycode: it may spell a well-known name with other letters.
+func lookalikeCheck(in routineIn) checkResult {
+	hosts := []string{in.Meta.Site}
+	for _, s := range in.Steps {
+		for _, raw := range []string{s.URL, pageURL(s)} {
+			if u, err := url.Parse(raw); err == nil && raw != "" {
+				hosts = append(hosts, u.Hostname())
+			}
+		}
+	}
+	for _, h := range hosts {
+		for _, label := range strings.Split(strings.ToLower(h), ".") {
+			if strings.HasPrefix(label, "xn--") {
+				return checkResult{"lookalike", "warn", "An address uses punycode (" + h + "). It can spell a well-known name with other letters. Decode it and check it is the site the routine says.", "Lookalike address"}
+			}
+		}
+	}
+	return checkResult{"lookalike", "pass", "Every address is written in plain letters.", ""}
+}
+
+func pageURL(s step) string {
+	if s.Page == nil {
+		return ""
+	}
+	return s.Page.URL
+}
+
+// What is read by whoever installs a routine, and by their agent: the notes, the labels, the descriptions. Text
+// that talks to the agent or points elsewhere is worth a look.
+var agentBait = regexp.MustCompile(`(?i)(ignore (all |any |the )?(previous|prior|above|earlier)|disregard (the|all|any|your)|system prompt|developer message|you (must|should|need to) (now )?(run|execute|call|ignore|send|reveal|upload|visit|open)|do not (tell|mention|inform|show)|https?://|\b(curl|wget|powershell|base64)\b|</?(system|tool|instructions?)>)`)
+
+func textCheck(in routineIn) checkResult {
+	texts := []string{in.Meta.Description, in.Meta.Returns, in.Body}
+	for k, p := range in.Meta.Params {
+		texts = append(texts, k, p.Description)
+	}
+	for _, s := range in.Steps {
+		texts = append(texts, s.Label)
+	}
+	for _, t := range texts {
+		if m := agentBait.FindString(t); m != "" {
+			return checkResult{"text", "warn", "The notes or labels contain “" + short(m, 40) + "”. They are read by the installer's agent, so check this is not an instruction or a link.", "Text aimed at the agent"}
+		}
+	}
+	return checkResult{"text", "pass", "The notes and labels hold no instructions to an agent and no links.", ""}
+}
+
+func short(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "…"
+	}
+	return s
 }
 
 type adminRow struct {
@@ -485,8 +543,9 @@ func (s *store) approve(ctx context.Context, id, admin string) (owner, name stri
 		return "", "", 0, errNotPending
 	}
 	var blocked bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2))`,
-		owner, owner+"/"+name).Scan(&blocked); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2)
+		OR (kind = 'account' AND value = (SELECT google_sub FROM users WHERE id = $3::uuid)))`,
+		owner, owner+"/"+name, ownerID).Scan(&blocked); err != nil {
 		return
 	}
 	if blocked {
@@ -734,6 +793,8 @@ func (a *app) adminBlocks(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"blocks": out})
 }
 
+var subPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{6,64}$`)
+
 var routineRef = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,29}/[a-z0-9][a-z0-9-]{1,62}$`)
 
 // blockValue puts a value in the form it is stored and compared in, or says it is not one.
@@ -744,6 +805,8 @@ func blockValue(kind, value string) (string, bool) {
 		return value, handlePattern.MatchString(value)
 	case "routine":
 		return value, routineRef.MatchString(value)
+	case "account":
+		return value, subPattern.MatchString(value)
 	case "repo":
 		u, err := url.Parse(strings.ToLower(value))
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil {
@@ -779,6 +842,10 @@ func (a *app) adminBlock(w http.ResponseWriter, r *http.Request) {
 		}
 		// Blocking a person also stops what they have waiting. Their live routines are already hidden by the block.
 		if b["kind"] == "user" {
+			if _, err = tx.Exec(ctx, `INSERT INTO blocks (kind, value, reason, created_by) SELECT 'account', u.google_sub, $2, $3 FROM users u
+				WHERE u.handle = $1 ON CONFLICT (kind, value) DO NOTHING`, value, b["reason"], admin); err != nil {
+				return err
+			}
 			if _, err = tx.Exec(ctx, `UPDATE submissions s SET status = 'rejected', note = 'Publisher blocked.', decided_at = now(), decided_by = $2
 				FROM users u WHERE u.id = s.owner_id AND u.handle = $1 AND s.status = 'pending'`, value, admin); err != nil {
 				return err
@@ -811,6 +878,9 @@ func (a *app) adminUnblock(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 	t, err := tx.Exec(ctx, `DELETE FROM blocks WHERE kind = $1 AND value = $2`, q.Get("kind"), value)
+	if err == nil && q.Get("kind") == "user" {
+		_, err = tx.Exec(ctx, `DELETE FROM blocks WHERE kind = 'account' AND value IN (SELECT google_sub FROM users WHERE handle = $1)`, value)
+	}
 	if err == nil && t.RowsAffected() == 0 {
 		err = errNotFound
 	}

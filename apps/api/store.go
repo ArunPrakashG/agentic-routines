@@ -21,6 +21,9 @@ const migrationLock = 7_428_113_001
 
 var errSignedOut = errors.New("signed out")
 
+// A session lasts as long as it is used, but not past this: after a year the person signs in again.
+const sessionMaxAge = 365 * 24 * time.Hour
+
 type user struct {
 	ID      string  `json:"id"`
 	Email   string  `json:"email"`
@@ -157,18 +160,18 @@ func (s *store) rotate(ctx context.Context, used []byte, install string, next []
 	defer tx.Rollback(ctx)
 	var current []byte
 	var sessionInstall string
-	var expiry time.Time
+	var expiry, created time.Time
 	err = tx.QueryRow(ctx, `
-		SELECT id::text, user_id::text, install_id, refresh_hash, expires_at FROM sessions
+		SELECT id::text, user_id::text, install_id, refresh_hash, expires_at, created_at FROM sessions
 		WHERE refresh_hash = $1 OR previous_hash = $1 FOR UPDATE`, used).
-		Scan(&sessionID, &userID, &sessionInstall, &current, &expiry)
+		Scan(&sessionID, &userID, &sessionInstall, &current, &expiry, &created)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", errSignedOut
 	}
 	if err != nil {
 		return
 	}
-	if !bytes.Equal(current, used) || sessionInstall != install || expiry.Before(now) {
+	if !bytes.Equal(current, used) || sessionInstall != install || expiry.Before(now) || now.Sub(created) > sessionMaxAge {
 		if _, err = tx.Exec(ctx, `DELETE FROM sessions WHERE id = $1::uuid`, sessionID); err != nil {
 			return
 		}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/google", a.limited(a.signIn))
 	mux.HandleFunc("POST /api/v1/auth/refresh", a.limited(a.refresh))
 	mux.HandleFunc("POST /api/v1/auth/signout", a.limited(a.signOut))
-	mux.HandleFunc("GET /api/v1/me", a.me)
+	mux.HandleFunc("GET /api/v1/me", a.limitedTo("read", 120, a.me))
 	mux.HandleFunc("DELETE /api/v1/me", a.limitedTo("write", 10, a.deleteMe))
 	mux.HandleFunc("PUT /api/v1/me/handle", a.limitedTo("write", 10, a.setHandle))
 	mux.HandleFunc("GET /api/v1/me/routines", a.limitedTo("read", 120, a.myRoutines))
@@ -59,8 +60,13 @@ func (a *app) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		// Nothing here is for a shared cache: it is all per person. The proxy adds the security headers.
-		w.Header().Set("Cache-Control", "no-store")
+		// Nothing here is for a shared cache: it is all per person. The proxy adds the rest of the security
+		// headers; these are for a response that reaches a browser some other way. It is all JSON.
+		h := w.Header()
+		h.Set("Cache-Control", "no-store")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		h.Set("Referrer-Policy", "no-referrer")
 		// The directory and the block list are public, and the website reads them from the browser.
 		if r.Method == http.MethodGet && publicRead(r.URL.Path) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -84,10 +90,14 @@ func publicRead(path string) bool {
 	return path == "/api/v1/blocklist" || path == "/api/v1/routines" || strings.HasPrefix(path, "/api/v1/routines/")
 }
 
-// The proxy in front sets X-Client-IP from the connection it saw; the app is not reachable any other way.
+// The proxy in front sets X-Client-IP from the connection it saw, replacing whatever the visitor sent, and
+// the app is not published on any port: only containers on the proxy network can reach it. A value that is
+// not an address is not believed.
 func clientIP(r *http.Request) string {
-	if v := r.Header.Get("X-Client-IP"); v != "" {
-		return v
+	if v := strings.TrimSpace(r.Header.Get("X-Client-IP")); v != "" {
+		if _, err := netip.ParseAddr(v); err == nil {
+			return v
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

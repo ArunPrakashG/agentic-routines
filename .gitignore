@@ -11,3 +11,9 @@ dist/
 .keys/
 .dev/
 apps/api/api
+
+# keys and credentials
+*.pem
+*.key
+google-oauth-client*.json
+client_secret*.json

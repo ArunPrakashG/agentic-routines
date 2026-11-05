@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, join } from 'node:path';
@@ -200,6 +200,8 @@ export function runHost(): void {
 
   cleanup();
   server.listen(sock, () => {
+    // Only this user's programs may talk to the browser through it, whatever the umask was.
+    if (process.platform !== 'win32') chmodSync(sock, 0o600);
     log('listening', sock);
     writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, startedAt: Date.now() }), { mode: 0o600 });
   });

@@ -63,3 +63,16 @@ func visitorKey(ip string) string {
 	}
 	return a.String()
 }
+
+// once is true the first time a visitor does a thing in a window, and false for the repeats. If Redis is
+// down it says yes, as the other limits do.
+func (l *limiter) once(ctx context.Context, group, visitor, what string, window time.Duration) bool {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	ok, err := l.rdb.SetNX(ctx, "br:once:"+group+":"+visitorKey(visitor)+":"+what, 1, window).Result()
+	if err != nil {
+		slog.Warn("rate limit check failed", "err", err)
+		return true
+	}
+	return ok
+}

@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { compileRun, eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { checkFetched, compileRun, eventLabel, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as sources from './sources.ts';
@@ -263,7 +263,7 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool(
     'routine_run',
-    { description: 'Replay a saved routine without the model. Same as its rt_ tool.', inputSchema: { name: z.string(), params: z.record(z.string()).optional() } },
+    { description: 'Replay a saved routine without the model. Same as its rt_ tool.', inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional() } },
     async ({ name, params }) => run(name, params ?? {}),
   );
 
@@ -298,7 +298,7 @@ export async function runMcp(): Promise<void> {
         description: z.string().min(20).describe('What it does. Use when ...'),
         do_not_use_for: z.string().optional(),
         run_id: z.string().optional().describe('Defaults to the latest run'),
-        params: z.record(z.string()).optional(),
+        params: z.record(z.string(), z.string()).optional(),
         fixed: z.array(z.string()).optional().describe('Auto-detected params to keep as typed'),
         leave_out: z.array(z.number().int()).optional().describe('Numbers from run_steps that are not part of the task, like retries and checks'),
         first_in_list: z.array(z.number().int()).optional().describe('Numbers from run_steps of clicks that should take whatever is first in the list next time, not the item clicked now'),
@@ -378,10 +378,14 @@ export async function runMcp(): Promise<void> {
       const [owner, name] = id.split('/');
       const f = await directory<Listing & { meta: Routine['meta']; body: string; steps: Step[] }>(`/routines/${owner}/${name}`);
       // The directory checks this too, but what runs in this browser is decided here.
-      const urls = f.steps.flatMap((s) => [s.url, s.page?.url].filter((u): u is string => !!u));
-      const issues = lintForPublish(f.meta, urls);
-      if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.map((i) => i.message).join(' ') || 'Bad owner.'}`);
       const routine: Routine = { meta: { ...f.meta, name, owner, version: f.version }, body: f.body, steps: f.steps };
+      let issues: string[];
+      try {
+        issues = checkFetched(routine);
+      } catch {
+        issues = ['The directory sent something that is not a routine.'];
+      }
+      if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.join(' ') || 'Bad owner.'}`);
       // Through the host when a browser is open, so its panel shows it at once.
       const origin = { kind: 'directory' as const, source: owner };
       const saved = await bridge.call<Routine>('store.write', { routine, owner, origin }).catch((e) => {

@@ -24,7 +24,10 @@ export const isRequest = (m: Message): m is Request => 'method' in m && 'id' in 
 export const isResponse = (m: Message): m is Response => 'id' in m && !('method' in m);
 export const isEvent = (m: Message): m is Event => 'event' in m;
 
-/** Newline-delimited JSON over a stream (the unix socket). */
+/** One line from a local program is never this long; a longer one is dropped rather than kept growing. */
+const MAX_LINE = 32 << 20;
+
+/** Newline-delimited JSON over a stream (the unix socket). A line that is not JSON is skipped. */
 export function lineReader(onMessage: (m: Message) => void) {
   let buf = '';
   return (chunk: Buffer | string) => {
@@ -33,8 +36,16 @@ export function lineReader(onMessage: (m: Message) => void) {
     while ((i = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, i);
       buf = buf.slice(i + 1);
-      if (line.trim()) onMessage(JSON.parse(line));
+      if (!line.trim()) continue;
+      let m: Message;
+      try {
+        m = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (m && typeof m === 'object') onMessage(m);
     }
+    if (buf.length > MAX_LINE) buf = '';
   };
 }
 
@@ -48,7 +59,13 @@ export function nativeReader(onMessage: (m: Message) => void) {
       if (buf.length < 4 + len) break;
       const body = buf.subarray(4, 4 + len).toString('utf8');
       buf = buf.subarray(4 + len);
-      onMessage(JSON.parse(body));
+      let m: Message;
+      try {
+        m = JSON.parse(body);
+      } catch {
+        continue;
+      }
+      if (m && typeof m === 'object') onMessage(m);
     }
   };
 }

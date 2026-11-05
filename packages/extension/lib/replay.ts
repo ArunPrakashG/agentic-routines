@@ -1,4 +1,4 @@
-import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
+import { CROP_DRIFT, fill, hashDistance, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
 import { uploadFile } from './agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from './tabs';
@@ -135,7 +135,10 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
 async function runStep(s: ReplayState, step: Step, ref?: string): Promise<'next' | 'stop'> {
   const value = fill(step.value, s.params, s.secrets);
   if (step.action === 'navigate') {
-    await browser.tabs.update(s.tabId, { url: fill(step.url, s.params) });
+    // Whatever the routine says, and whatever the params fill in, it never leaves its own site.
+    const url = fill(step.url, s.params) ?? '';
+    if (!onSite(url, s.routine.meta.site)) throw new Error(`Stopped: step ${step.n} would leave ${s.routine.meta.site}`);
+    await browser.tabs.update(s.tabId, { url });
     await sleep(200);
     await waitLoaded(s.tabId);
     return 'next';
@@ -163,7 +166,12 @@ async function runStep(s: ReplayState, step: Step, ref?: string): Promise<'next'
     }
   }
   const before = (await browser.tabs.get(s.tabId)).url ?? '';
-  if (step.action === 'upload') await uploadFile(s.tabId, ref, value!);
+  if (step.action === 'upload') {
+    // The file is the person's to give: a path written into the routine is never read.
+    const param = /^\{\{([a-z0-9_]+)\}\}$/.exec(step.value ?? '')?.[1];
+    if (!param || s.routine.meta.params[param]?.type !== 'file') throw new Error(`Stopped: step ${step.n} uploads a file the routine picks`);
+    await uploadFile(s.tabId, ref, value!);
+  }
   else if (step.action === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
   else await ask(s.tabId, { t: 'act', ref, action: step.action, value });
   await settle(s.tabId, before);
