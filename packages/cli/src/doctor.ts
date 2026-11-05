@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { BROWSERS, type OS } from '@agentic-routines/browsers';
+import { agentStatus } from './agents.ts';
 import { HOST_NAME, paths } from './paths.ts';
 
 // `npx agentic-routines doctor`: says what is connected and what to do about what is not.
@@ -18,8 +19,8 @@ function alive(pid: number) {
 export function runDoctor() {
   const H = homedir();
   const lines: string[] = [];
-  const ok = (name: string, detail: string) => lines.push(`✓ ${name.padEnd(14)} ${detail}`);
-  const no = (name: string, detail: string) => lines.push(`✗ ${name.padEnd(14)} ${detail}`);
+  const ok = (name: string, detail: string) => lines.push(`✓ ${name.padEnd(22)} ${detail}`);
+  const no = (name: string, detail: string) => lines.push(`✗ ${name.padEnd(22)} ${detail}`);
 
   const host = join(paths.bin(), platform() === 'win32' ? 'host.bat' : 'host');
   if (existsSync(host)) ok('Host', 'installed');
@@ -33,6 +34,8 @@ export function runDoctor() {
       else no(b.name, 'found, but not connected. Run: npx agentic-routines setup');
     }
   }
+
+  for (const l of agentStatus()) (l.ok ? ok : no)(l.name, l.detail);
 
   const running = existsSync(paths.hosts()) ? readdirSync(paths.hosts()).filter((f) => f.endsWith('.sock') && alive(Number(f.slice(0, -5)))) : [];
   if (running.length) ok('Extension', `${running.length} browser${running.length > 1 ? 's' : ''} talking to the host right now`);

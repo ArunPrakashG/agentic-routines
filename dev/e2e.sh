@@ -14,4 +14,6 @@ node "$ROOT/dev/e2e-panel.mjs" || code=$?
 "$ROOT/dev/down.sh"
 # Installing from Git sources and config.routine: the built CLI against a stand-in for GitHub, no browser.
 node "$ROOT/dev/e2e-sources.mjs" || code=$?
+# What setup tells each agent, exclusive mode and taking it back out: the built CLI against a throwaway home, no browser.
+node "$ROOT/dev/e2e-agents.mjs" || code=$?
 exit ${code:-0}

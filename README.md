@@ -17,6 +17,8 @@ Website and docs: <https://agenticroutines.arunprakashg.com>
 npx agentic-routines setup
 ```
 
+`setup` also tells each agent to use Agentic Routines for all browser work and to try a saved routine first. Add `--exclusive` to turn off other browser tools, and `--remove` takes it all back out ([details](docs/guide/agents.md)). For Claude Code alone, the plugin installs with `/plugin install agentic-routines --marketplace ArunPrakashG/agentic-routines`.
+
 Then restart your agent and check everything is connected with `npx agentic-routines doctor`.
 
 Or paste this into your agent and let it do the work:

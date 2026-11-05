@@ -3,13 +3,16 @@ import { existsSync, realpathSync } from 'node:fs';
 import { chmod, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { BROWSERS, hostManifest, type Browser, type OS } from '@agentic-routines/browsers';
 import { HOST_NAME, LEGACY_HOST_NAME, paths } from './paths.ts';
+import { claudeGuidance, claudeRemove, codexGuidance, codexRemove, copilotGuidance, copilotRemove, loc, onPath, opencodeGuidance, opencodeRemove, readState, save, type Line, type Mode } from './agents.ts';
 
-// `npx agentic-routines setup`: register the native host with every browser
-// found, and add the MCP server to every agent found.
+// `npx agentic-routines setup`: register the native host with every browser found, add the MCP server to every
+// agent found, and tell each agent to use it. `--exclusive` also switches the other browser tools off,
+// `--remove` takes it all back out.
 
 const SERVER = 'agentic-routines';
 // What the project was called before; removed so an agent does not end up with two copies.
@@ -21,12 +24,6 @@ function mcpCommand(): string[] {
   const script = realpathSync(process.argv[1]);
   if (script.includes(`${'_npx'}`)) return ['npx', '-y', 'agentic-routines', 'mcp'];
   return [process.execPath, script, 'mcp'];
-}
-
-interface Line {
-  ok: boolean;
-  name: string;
-  detail: string;
 }
 
 async function writeHostWrapper(): Promise<string> {
@@ -101,10 +98,7 @@ async function editJson(file: string, path: (string | number)[], value: unknown,
   const before = existsSync(file) ? await readFile(file, 'utf8') : '{}\n';
   parseJsonc(before); // Throws nothing; returns undefined on garbage, which modify handles.
   const after = applyEdits(before, modify(before, path, value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
-  if (!dry && after !== before) {
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, after);
-  }
+  if (!dry && after !== before) save(file, after);
 }
 
 /** Drop the entry an earlier name left behind. */
@@ -112,16 +106,7 @@ async function dropJson(file: string, path: (string | number)[], dry: boolean) {
   if (!existsSync(file)) return;
   const before = await readFile(file, 'utf8');
   const after = applyEdits(before, modify(before, path, undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
-  if (!dry && after !== before) await writeFile(file, after);
-}
-
-function onPath(cmd: string): boolean {
-  try {
-    execFileSync(platform() === 'win32' ? 'where' : 'which', [cmd], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+  if (!dry && after !== before) save(file, after);
 }
 
 async function claudeCode(cmd: string[], dry: boolean): Promise<Line | null> {
@@ -157,17 +142,12 @@ async function codex(cmd: string[], dry: boolean): Promise<Line | null> {
   delete conf.mcp_servers[LEGACY_SERVER];
   // A replay can wait at a pause for longer than Codex's 60s default.
   conf.mcp_servers[SERVER] = { command: cmd[0], args: cmd.slice(1), tool_timeout_sec: 900 };
-  if (!dry) await writeFile(file, stringifyToml(conf) + '\n');
+  if (!dry) save(file, stringifyToml(conf) + '\n');
   return { ok: true, name: 'Codex', detail: tilde(file) };
 }
 
 async function copilot(cmd: string[], dry: boolean): Promise<Line | null> {
-  const user =
-    platform() === 'darwin'
-      ? join(H, 'Library/Application Support/Code/User')
-      : platform() === 'win32'
-        ? join(process.env.APPDATA ?? H, 'Code/User')
-        : join(H, '.config/Code/User');
+  const user = loc.vscodeUser();
   if (!existsSync(user)) return null;
   const file = join(user, 'mcp.json');
   await dropJson(file, ['servers', LEGACY_SERVER], dry);
@@ -184,26 +164,133 @@ async function opencode(cmd: string[], dry: boolean): Promise<Line | null> {
   return { ok: true, name: 'OpenCode', detail: tilde(file) };
 }
 
+// --- taking it back out ---
+
+async function removeHost(dry: boolean): Promise<Line[]> {
+  const lines: Line[] = [];
+  for (const b of BROWSERS) {
+    if (platform() === 'win32') {
+      if (!dry && b.registry) {
+        try {
+          execFileSync('reg', ['delete', `HKCU\\${b.registry}\\${HOST_NAME}`, '/f'], { stdio: 'ignore' });
+        } catch {
+          // Not registered.
+        }
+      }
+      continue;
+    }
+    const hosts = b.hosts[platform() as 'darwin' | 'linux'];
+    if (!hosts) continue;
+    for (const n of [HOST_NAME, LEGACY_HOST_NAME]) {
+      const f = join(H, hosts, `${n}.json`);
+      if (!existsSync(f)) continue;
+      if (!dry) await rm(f, { force: true });
+      lines.push({ ok: true, name: b.name, detail: `removed ${tilde(f)}` });
+    }
+  }
+  if (!dry) await rm(paths.bin(), { recursive: true, force: true });
+  return lines;
+}
+
+async function removeMcp(dry: boolean): Promise<Line[]> {
+  const out: Line[] = [];
+  const done = (name: string, file: string) => out.push({ ok: true, name, detail: `removed from ${tilde(file)}` });
+  if (onPath('claude')) {
+    if (!dry) {
+      for (const n of [SERVER, LEGACY_SERVER]) {
+        try {
+          execFileSync('claude', ['mcp', 'remove', '--scope', 'user', n], { stdio: 'ignore' });
+        } catch {
+          // Not added.
+        }
+      }
+    }
+    done('Claude Code', join(H, '.claude.json'));
+  } else if (existsSync(join(H, '.claude.json'))) {
+    for (const n of [SERVER, LEGACY_SERVER]) await dropJson(join(H, '.claude.json'), ['mcpServers', n], dry);
+    done('Claude Code', join(H, '.claude.json'));
+  }
+  if (existsSync(loc.codexConfig())) {
+    const conf = parseToml(await readFile(loc.codexConfig(), 'utf8')) as Record<string, any>;
+    if (conf.mcp_servers) {
+      delete conf.mcp_servers[SERVER];
+      delete conf.mcp_servers[LEGACY_SERVER];
+      if (!Object.keys(conf.mcp_servers).length) delete conf.mcp_servers;
+      if (!dry) save(loc.codexConfig(), stringifyToml(conf) + '\n');
+    }
+    done('Codex', loc.codexConfig());
+  }
+  if (existsSync(loc.copilotMcp())) {
+    for (const n of [SERVER, LEGACY_SERVER]) await dropJson(loc.copilotMcp(), ['servers', n], dry);
+    done('GitHub Copilot', loc.copilotMcp());
+  }
+  if (existsSync(loc.opencodeDir())) {
+    for (const n of [SERVER, LEGACY_SERVER]) await dropJson(loc.opencodeConfig(), ['mcp', n], dry);
+    done('OpenCode', loc.opencodeConfig());
+  }
+  return out;
+}
+
+// --- the command ---
+
+/** Ask once, in a terminal only. Anything scripted gets the default. */
+async function askExclusive(): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const a = await rl.question('Also turn off other browser tools (Playwright, Claude in Chrome and so on), so agents only use Agentic Routines? [y/N] ');
+    return /^y(es)?$/i.test(a.trim());
+  } finally {
+    rl.close();
+  }
+}
+
+function print(out: Line[], dry: boolean, tail: string) {
+  const w = Math.max(...out.map((l) => l.name.length));
+  for (const l of out) console.log(`${l.ok ? '✓' : '·'} ${l.name.padEnd(w)}  ${l.detail}`);
+  if (dry) console.log('\nDry run: nothing was written.');
+  else console.log(tail);
+}
+
 export async function runSetup(args: string[]): Promise<void> {
   const dry = args.includes('--dry-run');
-  const cmd = mcpCommand();
   const out: Line[] = [];
+
+  if (args.includes('--remove')) {
+    out.push(...(await removeMcp(dry)));
+    for (const fn of [claudeRemove, codexRemove, copilotRemove, opencodeRemove]) {
+      try {
+        out.push(...fn(dry));
+      } catch (e) {
+        out.push({ ok: false, name: fn.name.replace(/Remove$/, ''), detail: (e as Error).message });
+      }
+    }
+    out.push(...(await removeHost(dry)));
+    print(out, dry, '\nRemoved. Your routines are still in ' + tilde(paths.root()) + '. Restart your agent.');
+    return;
+  }
+
+  // On or off only when asked; otherwise it stays as it is, and a terminal is asked the first time.
+  let exclusive: boolean | undefined = args.includes('--exclusive') ? true : args.includes('--no-exclusive') ? false : undefined;
+  if (exclusive === undefined && !Object.values(readState()).some((v) => v?.exclusive)) exclusive = (await askExclusive()) ? true : undefined;
+  const mode: Mode = { dry, exclusive };
+
+  const cmd = mcpCommand();
   out.push(...(await registerHost(dry)));
   const agents = [
-    ['Claude Code', claudeCode],
-    ['Codex', codex],
-    ['GitHub Copilot', copilot],
-    ['OpenCode', opencode],
+    ['Claude Code', claudeCode, claudeGuidance],
+    ['Codex', codex, codexGuidance],
+    ['GitHub Copilot', copilot, copilotGuidance],
+    ['OpenCode', opencode, opencodeGuidance],
   ] as const;
-  for (const [name, fn] of agents) {
+  for (const [name, fn, guidance] of agents) {
     try {
-      out.push((await fn(cmd, dry)) ?? { ok: false, name, detail: 'not installed' });
+      const line = (await fn(cmd, dry)) ?? { ok: false, name, detail: 'not installed' };
+      out.push(line);
+      if (line.ok) out.push(...guidance(mode));
     } catch (e) {
       out.push({ ok: false, name, detail: (e as Error).message });
     }
   }
-  const w = Math.max(...out.map((l) => l.name.length));
-  for (const l of out) console.log(`${l.ok ? '✓' : '·'} ${l.name.padEnd(w)}  ${l.detail}`);
-  if (dry) console.log('\nDry run: nothing was written.');
-  else console.log('\nRestart your agent to load the browser tools.');
+  print(out, dry, '\nRestart your agent to load the browser tools.');
 }
