@@ -44,6 +44,13 @@ type paramSpec struct {
 	Accept      string `json:"accept,omitempty"`
 }
 
+// viewport is the window size a routine was recorded at: width and height in CSS pixels, and the pixel ratio.
+type viewport struct {
+	W   int     `json:"w"`
+	H   int     `json:"h"`
+	DPR float64 `json:"dpr"`
+}
+
 type routineMeta struct {
 	Name        string               `json:"name"`
 	Site        string               `json:"site"`
@@ -53,6 +60,7 @@ type routineMeta struct {
 	Pauses      []int                `json:"pauses"`
 	Returns     string               `json:"returns,omitempty"`
 	DraftedBy   string               `json:"drafted_by,omitempty"`
+	Viewport    *viewport            `json:"viewport,omitempty"`
 }
 
 type locator struct {
@@ -136,6 +144,9 @@ func (r *routineIn) check(name string) string {
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
 		return "bad_steps"
 	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512 || len(m.DraftedBy) > 40:
+		return "bad_meta"
+	}
+	if v := m.Viewport; v != nil && (v.W < 200 || v.W > 10000 || v.H < 200 || v.H > 10000 || v.DPR < 0.5 || v.DPR > 8) {
 		return "bad_meta"
 	}
 	for k, p := range m.Params {

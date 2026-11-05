@@ -1,7 +1,14 @@
 import { parse, stringify } from 'yaml';
 import type { RoutineMeta } from './types.ts';
+import type { Viewport } from './viewport.ts';
 
 const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+
+function validViewport(v: unknown): Viewport | undefined {
+  const o = v as Partial<Viewport> | undefined;
+  if (!o || !(o.w! > 0 && o.w! < 20000) || !(o.h! > 0 && o.h! < 20000)) return undefined;
+  return { w: Math.round(o.w!), h: Math.round(o.h!), dpr: o.dpr! > 0 && o.dpr! < 10 ? o.dpr! : 1 };
+}
 
 export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string } {
   const m = FENCE.exec(text);
@@ -20,6 +27,7 @@ export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string 
     requires: raw.requires,
     returns: raw.returns,
     drafted_by: raw.drafted_by ? String(raw.drafted_by) : undefined,
+    viewport: validViewport(raw.viewport),
   };
   return { meta, body: text.slice(m[0].length).trim() };
 }

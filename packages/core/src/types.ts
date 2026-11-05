@@ -1,3 +1,5 @@
+import type { Viewport } from './viewport.ts';
+
 // Shared shapes for recording, compiling and replaying routines.
 
 export type Action =
@@ -76,6 +78,8 @@ export interface RoutineMeta {
   returns?: string;
   /** The agent that wrote the description, e.g. "claude-code". */
   drafted_by?: string;
+  /** The page size when its first element step was recorded. Absent in routines saved before this was kept. */
+  viewport?: Viewport;
 }
 
 export interface Routine {
@@ -100,6 +104,8 @@ export interface RecordedEvent {
   navigatedTo?: string;
   page?: PageFingerprint;
   crop?: string;
+  /** The page size at that moment. */
+  view?: Viewport;
 }
 
 export interface Run {
@@ -138,4 +144,8 @@ export interface RunResult {
   updated_to?: number;
   /** Pauses the user approved in the side panel, which the agent otherwise cannot see. */
   approved_in_panel?: string[];
+  /** Set when the page is a very different size from the one the routine was recorded at. */
+  viewport_note?: string;
+  /** Steps that paused because they look irreversible, though the routine did not ask for it. */
+  forced_pauses?: number[];
 }

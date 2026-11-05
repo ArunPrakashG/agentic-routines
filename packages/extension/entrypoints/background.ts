@@ -25,7 +25,7 @@ export default defineBackground(() => {
     if (method === 'directory.submissions') return directory.mine();
     // An agent can ask. The person reads the steps and clicks Install in the panel; nothing is installed before that.
     if (method === 'git.install') return askToInstall(String(p.source), String(p.path), agent.agentName(p.agent));
-    if (method === 'replay.start') return replay.start(p);
+    if (method === 'replay.start') return replay.start({ ...p, foreign: isForeign(p.routine) });
     if (method === 'replay.resume') return replay.resume(p);
     if (method === 'agent.hello') {
       agents.set(p?.session, agent.agentName(p?.agent));
@@ -34,6 +34,12 @@ export default defineBackground(() => {
     }
     throw new Error(`Unknown method ${method}`);
   });
+
+  /** Written by someone else: from the directory, a Git source or a folder. The list says so, not the routine. */
+  function isForeign(r: Routine): boolean {
+    const owner = (r as Routine & { owner?: string }).owner ?? r.meta.owner ?? 'local';
+    return !!routines.find((x) => x.name === r.meta.name && x.owner === owner)?.origin;
+  }
 
   // ---------- side panel ----------
   const panels = new Set<Browser.runtime.Port>();
@@ -185,6 +191,9 @@ export default defineBackground(() => {
         handedBack: !!r.handedBack,
         fixed: Object.keys(r.fixes).map(Number),
         error: r.error,
+        viewportNote: r.viewportNote || undefined,
+        foreign: r.foreign,
+        pauseKind: r.status === 'paused' ? r.pauseKind : undefined,
       },
     };
   }
@@ -287,7 +296,10 @@ export default defineBackground(() => {
         const r = await native.call<Routine>('store.read', { id: c.id });
         // Secrets typed in the panel live only as long as this replay.
         const secrets = Object.fromEntries(r.meta.secrets.map((n) => [n, c.params[`secret:${n}`] ?? '']));
-        replay.start({ routine: r, params: c.params, secrets }).catch(() => {});
+        // The person typed these paths here; the host checks them like any other upload.
+        const files = Object.entries(r.meta.params).filter(([, sp]) => sp.type === 'file').flatMap(([k]) => (c.params[k] ?? '').split('\n').map((x) => x.trim()).filter(Boolean));
+        if (files.length) await native.call('host.allowFiles', { paths: files });
+        replay.start({ routine: r, params: c.params, secrets, foreign: isForeign(r), fit: c.fit }).catch(() => {});
         return;
       }
       case 'decide':

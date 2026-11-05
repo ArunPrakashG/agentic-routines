@@ -8,6 +8,7 @@ export const pages = [
   { slug: 'how-it-works', title: 'How it works', summary: 'What is recorded, what a save changes, and how a replay checks each step.' },
   { slug: 'routines', title: 'Routine format', summary: 'ROUTINE.md, parameters, pauses and the steps behind a routine.' },
   { slug: 'tools', title: 'Agent tools', summary: 'Every tool the MCP server gives your agent.' },
+  { slug: 'safety', title: 'Untrusted content', summary: 'What an agent should not trust, and what the extension enforces.' },
   { slug: 'cli', title: 'Command line', summary: 'setup, doctor, sources and export.' },
   { slug: 'sharing', title: 'Sharing and publishing', summary: 'The directory, GitHub repositories and what review involves.' },
   { slug: 'development', title: 'Development', summary: 'Repository layout, running it locally and adding a browser.' },

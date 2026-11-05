@@ -119,6 +119,11 @@ const call = async (name, args = {}) => {
   if (r.isError) log(`${name} error:`, t);
   return t;
 };
+// The tab list is page titles and addresses, so it arrives in the untrusted envelope.
+const listTabs = async () => {
+  const lines = (await call('tabs')).split('\n').slice(1, -1).filter((l, i) => !(i === 0 || /^Cleaning: /.test(l)));
+  return JSON.parse(lines.join('\n'));
+};
 const refFor = (outline, re) => outline.split('\n').find((l) => re.test(l))?.match(/ref_\d+/)?.[0];
 
 await openPanel(process.argv.includes('--dark') ? 'dark' : 'light');
@@ -303,7 +308,7 @@ if (panel) {
   await call('click', { ref: refFor(page, /“Swap order”/) });
   t = await call('routine_run', { name: 'acme-latest', params: { release_name: '3.0.1' } });
   log(t.split('\n')[0]);
-  const tabs = JSON.parse(await call('tabs'));
+  const tabs = await listTabs();
   check(/^Done/.test(t) && tabs.some((x) => x.active && /app=2/.test(x.url)), 'replay follows the row that is first now');
 }
 
@@ -427,6 +432,273 @@ if (panel) {
   check(opened, 'saving with the box ticked opens the card for it');
   await panelClick('Not now');
   api.close();
+}
+
+
+// ---------- 10. text from a website is data, not orders ----------
+{
+  const fsp = await import('node:fs/promises');
+  if (panel && /Back to routines/.test(await panelText())) await panelClick('Back to routines');
+  const ids = (s) => [...s.matchAll(/BEGIN UNTRUSTED DATA ([0-9a-f]{20})/g)].map((m) => m[1]);
+  const instructions = client.getInstructions() ?? '';
+  check(/untrusted data/i.test(instructions) && /BEGIN UNTRUSTED DATA/.test(instructions), 'the server tells every agent that page text is untrusted data');
+  const listed = (await client.listTools()).tools;
+  check(['read_page', 'page_llm_content', 'click', 'screenshot'].every((n) => /untrusted/i.test(listed.find((x) => x.name === n)?.description ?? '')), 'the tools that return page text say so in their descriptions');
+  const upDesc = listed.find((x) => x.name === 'upload')?.description ?? '';
+  check(/ref/.test(upDesc) && /absolute path/i.test(upDesc) && /do not click/i.test(upDesc), 'the upload description says to pass the ref of the button or input and an absolute path');
+
+  t = await call('navigate', { url: `${SITE}/injection.html` });
+  check(/⟨untrusted [0-9a-f]{20}⟩Order 4521/.test(t), 'a page title is quoted as data in the navigate result');
+  const inj1 = await call('read_page');
+  const inj2 = await call('read_page');
+  const [id1] = ids(inj1);
+  check(ids(inj1).length === 1 && !!id1 && inj1.includes(`END UNTRUSTED DATA ${id1}`), 'read_page output sits between matching BEGIN and END lines');
+  check(!!ids(inj2)[0] && ids(inj2)[0] !== id1, 'the boundary is different for every call');
+  check(/not from the user/.test(inj1), 'with a one-line reminder inside it');
+  check(!/HIDDEN-/.test(inj1), 'none of the text a person cannot see is in the output');
+  check(/Cleaning:.*left out/.test(inj1), 'and it says that hidden text was left out');
+  check(/VISIBLE-1/.test(inj1) && /⟦possible injection \(override\)/.test(inj1) && /possible injection \(exfiltration\)/.test(inj1), 'the visible attempt is shown, with its orders marked');
+  check(/⟦possible injection \(hidden-text\)/.test(inj1), 'text spelled in invisible characters is called out');
+  check(/Status: shipped/.test(inj1) && /Track parcel/.test(inj1), 'zero-width characters are removed and the real page is still readable');
+  check(/Warning: this contains text that reads like instructions/.test(inj1), 'a warning follows when anything was marked');
+  check(/very long attribute/.test(inj1), 'and a very long attribute value is cut and said so');
+  const track = refFor(inj1, /“Track parcel”/);
+  t = await call('click', { ref: track });
+  check(/⟨untrusted [0-9a-f]{20}⟩/.test(t), 'the click result quotes the element as data');
+  // A page that sets up its own end marker cannot close the envelope.
+  check(!inj1.split('\n').some((l) => /END UNTRUSTED DATA/.test(l) && !l.includes(id1)), 'nothing in the page can look like the real end line');
+  if (panel) await panelClick('Back to routines');
+}
+
+// ---------- 11. text a site publishes for models ----------
+{
+  const { createServer } = await import('node:http');
+  const big = 'A line of text that goes on and on.\n'.repeat(60_000);
+  const hostOf = (port) => `http://127.0.0.1:${port}`;
+  const PORT_A = Number(process.env.AR_SITE_PORT ?? 8765) + 11;
+  const PORT_B = PORT_A + 1;
+  const other = createServer((req, res) => {
+    const path = req.url.split('?')[0];
+    if (path === '/llms.txt' && req.socket.localPort === PORT_A) {
+      res.setHeader('content-type', 'text/plain');
+      return void res.end(big);
+    }
+    if (path === '/bare.html') {
+      res.setHeader('content-type', 'text/html');
+      // Points at the other site: it must not be read, whatever the page says.
+      return void res.end(`<!doctype html><title>Bare</title><link rel="alternate" type="text/markdown" href="${hostOf(Number(process.env.AR_SITE_PORT ?? 8765))}/docs-for-models.md"><h1>Bare</h1>`);
+    }
+    res.statusCode = 404;
+    res.end('no');
+  });
+  await new Promise((r) => other.listen(PORT_A, '127.0.0.1', r));
+  const other2 = createServer((req, res) => {
+    res.setHeader('content-type', 'text/html');
+    if (req.url.startsWith('/bare.html')) return void res.end(`<!doctype html><title>Bare</title><link rel="alternate" type="text/markdown" href="${hostOf(Number(process.env.AR_SITE_PORT ?? 8765))}/docs-for-models.md"><h1>Bare</h1>`);
+    res.statusCode = 404;
+    res.end('no');
+  });
+  await new Promise((r) => other2.listen(PORT_B, '127.0.0.1', r));
+
+  await call('navigate', { url: `${SITE}/docs.html` });
+  t = await call('page_llm_content');
+  log(t.split('\n').slice(0, 3).join(' | '));
+  check(/Found a version of this page \(link-alternate\)/.test(t) && /LINK-ALTERNATE-MARKER/.test(t), 'a <link rel="alternate" type="text/markdown"> is followed and named as the source');
+  check(/docs-for-models\.md/.test(t) && /BEGIN UNTRUSTED DATA/.test(t), 'with the address it came from, inside the untrusted envelope');
+  check(!/HIDDEN-MDCOMMENT/.test(t) && /HTML comment removed/.test(t), 'comments in the Markdown are removed, and that is said');
+  check(/possible injection/.test(t) && /Warning/.test(t), 'orders in the Markdown are marked');
+
+  await call('navigate', { url: `${SITE}/twin.html` });
+  t = await call('page_llm_content');
+  check(/\(md-twin\)/.test(t) && /MD-TWIN-MARKER/.test(t), 'a .md next to the page is found');
+
+  await call('navigate', { url: `${SITE}/index.html` });
+  t = await call('page_llm_content');
+  check(/\(llms\.txt\)/.test(t) && /not this page in particular/.test(t) && /Acme Console/.test(t), 'the site’s llms.txt is used, and said to be about the site and not this page');
+  t = await call('page_llm_content', { full: true });
+  check(/\(llms-full\.txt\)/.test(t) && /FULL-TEXT-MARKER/.test(t), 'full: true prefers llms-full.txt');
+  t = await call('page_llm_content', { scope: 'page' });
+  check(/publishes no text made for models/.test(t) && /Use read_page instead/.test(t), 'when there is none for this page it says so');
+
+  await call('navigate', { url: `${hostOf(PORT_B)}/bare.html` });
+  t = await call('page_llm_content');
+  check(/publishes no text made for models/.test(t) && /llms\.txt/.test(t), 'a site with nothing says none exists and lists what was tried');
+  check(/a different site than the tab/.test(t) && !/LINK-ALTERNATE-MARKER/.test(t), 'a link to another site is never fetched');
+
+  await call('navigate', { url: `${hostOf(PORT_A)}/bare.html` });
+  t = await call('page_llm_content', { max_chars: 1000 });
+  check(/cut by the size cap/.test(t) && t.length < 6000, 'a huge file is cut by the size cap');
+  other.close();
+  other2.close();
+}
+
+// ---------- 12. uploads ----------
+{
+  const fsp = await import('node:fs/promises');
+  const aab1 = join(FIXTURES, 'kavyam-2.14.0.aab');
+  const aab2 = join(FIXTURES, 'kavyam-2.15.0.aab');
+  const outText = () => evalIn((u) => u.startsWith(SITE), "document.getElementById('out').textContent");
+  const raw = async (name, args) => {
+    const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 300_000 });
+    return { error: !!r.isError, text: r.content.map((c) => c.text ?? '').join('\n') };
+  };
+  await call('navigate', { url: `${SITE}/upload.html` });
+  page = await call('read_page');
+  log(page.split('\n').filter((l) => /file|Choose|Drop|receipt/i.test(l)).join(' | '));
+  check(/\(file, multiple\)/.test(page), 'a hidden file input behind a button is listed, with “multiple”');
+  const pick = refFor(page, /“Choose files”/);
+  t = await call('upload', { ref: pick, paths: [aab1, aab2] });
+  log(t);
+  check(/Attached 2 files/.test(t), 'several files are attached through the button’s ref, without opening the picker');
+  check((await outText()) === 'input: kavyam-2.14.0.aab 21, kavyam-2.15.0.aab 28', 'the page received both files with their sizes');
+  t = await call('routine_save', { name: 'acme-attach', description: 'Attach files on the Acme console upload page. Use when the user asks to attach files there.', params: { attachments: `${aab1}\n${aab2}` } });
+  check(/Saved acme-attach/.test(t) && /asks for attachments/.test(t), 'a multi-file upload step becomes a parameter');
+  t = await call('routine_run', { name: 'acme-attach', params: { attachments: `${aab2}\n${aab1}` } });
+  log(t.split('\n')[0]);
+  check(/^Done/.test(t) && (await outText()) === 'input: kavyam-2.15.0.aab 28, kavyam-2.14.0.aab 21', 'the routine uploads whatever files it is given next time');
+  t = await call('routine_run', { name: 'acme-attach', params: { attachments: join(DEV, 'nope', 'missing.aab') } });
+  check(/was not started/.test(t) && /No file at/.test(t), 'a routine run with a missing file fails before anything opens, naming the file');
+
+  page = await call('read_page');
+  const zone = refFor(page, /“Drop a file here”/);
+  t = await call('upload', { ref: zone, path: aab1 });
+  log(t);
+  check((await outText()) === 'drop: kavyam-2.14.0.aab 21', 'a drop zone with no input receives the file as a drop');
+
+  const single = refFor(page, /Upload receipt/);
+  check(!!single, 'an input hidden behind a label is listed under the label’s text');
+  t = await call('upload', { ref: single, path: aab2 });
+  check((await outText()) === 'single: kavyam-2.15.0.aab 28', 'and takes a file');
+  let r = await raw('upload', { ref: single, paths: [aab1, aab2] });
+  check(r.error && /one file|single|more than one/i.test(r.text), 'two files for a one-file input is an error that says why');
+  const fileRef = refFor(page, /\(file, multiple\)/);
+  r = await raw('click', { ref: fileRef });
+  check(r.error && /upload/.test(r.text), 'clicking the input itself is refused, with a pointer to upload');
+
+  r = await raw('upload', { ref: pick, path: join(DEV, 'nope', 'missing.aab') });
+  check(r.error && /No file at/.test(r.text), 'a path that does not exist is a clear error');
+  r = await raw('upload', { ref: pick, path: join(DEV, 'workspace') });
+  check(r.error && /is a folder/.test(r.text), 'a folder is a clear error');
+  const secret = join(DEV, '.ssh', 'id_rsa');
+  await fsp.mkdir(join(DEV, '.ssh'), { recursive: true });
+  await fsp.writeFile(secret, 'not a real key\n');
+  r = await raw('upload', { ref: pick, path: secret });
+  check(r.error && /Refused to upload/.test(r.text), 'a credentials file is refused');
+  const env = join(DEV, 'workspace', '.env');
+  await fsp.writeFile(env, 'TOKEN=1\n');
+  r = await raw('upload', { ref: pick, path: env });
+  check(r.error && /Refused to upload/.test(r.text), 'so is a .env file');
+  const locked = join(DEV, 'locked.txt');
+  await fsp.writeFile(locked, 'x');
+  await fsp.chmod(locked, 0o000);
+  r = await raw('upload', { ref: pick, path: locked });
+  check(r.error && /permission denied/.test(r.text), 'a file that cannot be read says so');
+  await fsp.chmod(locked, 0o600);
+  const huge = join(DEV, 'huge.bin');
+  await fsp.writeFile(huge, '');
+  await fsp.truncate(huge, 3 * 1024 ** 3);
+  r = await raw('upload', { ref: pick, path: huge });
+  check(r.error && /limit for an upload/.test(r.text), 'a file over the size limit is refused before anything is read');
+  await fsp.rm(huge);
+  const sizable = join(DEV, 'sizable.bin');
+  await fsp.writeFile(sizable, Buffer.alloc(30 * 1024 * 1024, 1));
+  r = await raw('upload', { ref: pick, path: sizable });
+  check(!r.error && (await outText()) === 'input: sizable.bin 31457280', 'a 30 MB file goes in through the debugger path');
+  await fsp.rm(sizable);
+  if (panel && /Back to routines/.test(await panelText())) await panelClick('Back to routines');
+}
+
+// ---------- 13. what the extension holds to, whatever the routine says ----------
+{
+  const fsp = await import('node:fs/promises');
+  const aab1 = join(FIXTURES, 'kavyam-2.14.0.aab');
+  const dirOf = (n) => join(STORE, 'routines/local', n);
+  const inSite = (u) => u.startsWith(SITE);
+  const editSteps = async (n, fn) => {
+    const f = join(dirOf(n), 'steps.json');
+    const v = JSON.parse(await fsp.readFile(f, 'utf8'));
+    const list = Array.isArray(v) ? v : v.steps;
+    fn(list);
+    await fsp.writeFile(f, JSON.stringify(v, null, 2) + '\n');
+  };
+  const makeForeign = (n) => fsp.writeFile(join(dirOf(n), '.origin.json'), JSON.stringify({ kind: 'folder', source: '/tmp/someone-elses-routines' }) + '\n');
+
+  // A routine from someone else, with a step that goes to another site.
+  await call('navigate', { url: `${SITE}/index.html` });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Apps”/) });
+  t = await call('routine_save', { name: 'acme-foreign-nav', description: 'Open the apps list on the test console. Use when the user asks to look at the apps.' });
+  check(/Saved acme-foreign-nav/.test(t), 'a routine to turn into one from someone else is saved');
+  await editSteps('acme-foreign-nav', (list) => list.push({ n: list.length + 1, action: 'navigate', label: 'Open the docs', url: `http://localhost:${new URL(SITE).port}/docs.html` }));
+  await makeForeign('acme-foreign-nav');
+  t = await call('routine_run', { name: 'acme-foreign-nav' });
+  log(t);
+  check(/Stopped at step/.test(t) && /localhost/.test(t) && /only works on the site it was recorded for/.test(t), 'a step that leaves the routine’s site is refused during replay');
+  const tabsNow = await listTabs();
+  check(!tabsNow.some((x) => /^http:\/\/localhost:/.test(x.url)), 'and the tab never went there');
+
+  // Its irreversible step waits for the person, and the agent cannot approve it.
+  await call('navigate', { url: `${SITE}/release.html` });
+  page = await call('read_page');
+  await call('upload', { ref: refFor(page, /\(file\)/), path: aab1 });
+  await call('type', { ref: refFor(page, /“Release name”/), text: '7.7.7' });
+  await call('click', { ref: refFor(page, /“Next”/) });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Start rollout/) });
+  t = await call('routine_save', { name: 'acme-ship', description: 'Roll out a build to internal testing. Use when the user asks to ship a build.', params: { app_bundle: aab1, version_name: '7.7.7' } });
+  check(/Saved acme-ship/.test(t), 'a routine with an irreversible step is saved');
+  // As if the author had left out the pause.
+  await editSteps('acme-ship', (list) => list.forEach((s) => delete s.pause));
+  const md = join(dirOf('acme-ship'), 'ROUTINE.md');
+  await fsp.writeFile(md, (await fsp.readFile(md, 'utf8')).replace(/^pauses:(?:\s*\[\]|(?:\n\s+- \d+)+)/m, 'pauses: []'));
+  await makeForeign('acme-ship');
+  if (panel) {
+    const shipping = call('routine_run', { name: 'acme-ship', params: { app_bundle: aab1, version_name: '8.8.8' } });
+    check(await panelWait(/only you can approve it/, 20_000), 'the panel pauses a routine from someone else before its irreversible step');
+    await shot('15-forced-pause');
+    check(await panelClick('Start rollout'), 'and the person approves it there');
+    t = await shipping;
+    log(t.split('\n').join(' / '));
+    check(/^Done/.test(t) && /looked irreversible, so it waited for the user/.test(t), 'the agent is told it was held for the person');
+    page = await call('read_page', { filter: 'all' });
+    check(/Rollout started: 8\.8\.8/.test(page), 'after which the rollout went through');
+    await panelClick('Back to routines');
+  }
+
+  // The window is a different size than when the routine was recorded.
+  const windowOf = async (set) => {
+    const v = await (await fetch(`${CDP}/json/version`)).json();
+    const b = await cdp(v.webSocketDebuggerUrl);
+    const target = await cdpTarget(inSite);
+    const { windowId, bounds } = await b.send('Browser.getWindowForTarget', { targetId: target.id });
+    if (set) await b.send('Browser.setWindowBounds', { windowId, bounds: set });
+    const after = set ? (await b.send('Browser.getWindowForTarget', { targetId: target.id })).bounds : bounds;
+    b.close();
+    return after;
+  };
+  const wide = await windowOf();
+  const widthOf = () => evalIn(inSite, 'innerWidth');
+  const recorded = await widthOf();
+  log('recorded width', recorded, 'window', wide.width);
+  await windowOf({ windowState: 'normal', width: 520, height: 800 });
+  await sleep(400);
+  const narrow = await widthOf();
+  log('narrow width', narrow);
+  t = await call('routine_run', { name: 'acme-latest', params: { release_name: '3.0.3' } });
+  log(t.split('\n').slice(0, 3).join(' / '));
+  if (narrow < 700) {
+    check(/Note: The page is \d+px wide and the routine was recorded at \d+px/.test(t), 'a very different window size is reported in the result');
+    check(/^Done|Note:/.test(t), 'and the run still goes on, with the picture check relaxed');
+  } else {
+    log('window could not be made narrow here; skipped the size checks');
+  }
+  t = await call('routine_run', { name: 'acme-latest', params: { release_name: '3.0.4' }, match_viewport: true });
+  log(t.split('\n').slice(0, 3).join(' / '));
+  await sleep(600);
+  const back = await windowOf();
+  check(Math.abs(back.width - 520) < 20 || narrow >= 700, 'match_viewport puts the window back to the size it was');
+  await windowOf({ windowState: 'normal', width: wide.width, height: wide.height });
+  await sleep(300);
 }
 
 const wrapper = await (await import('node:fs/promises')).readFile(join(STORE, 'bin/host'), 'utf8');

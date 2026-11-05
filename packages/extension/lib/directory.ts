@@ -60,8 +60,8 @@ export function problems(r: Routine): string[] {
 /** The routine as the directory takes it. Example values and the owner stay behind. */
 function payload(r: Routine, agentRaw?: string) {
   const params = Object.fromEntries(Object.entries(r.meta.params).map(([k, p]) => [k, { type: p.type, description: p.description, accept: p.accept }]));
-  const { name, site, description, secrets, pauses, returns, drafted_by } = r.meta;
-  return { meta: { name, site, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw }, body: r.body, steps: r.steps };
+  const { name, site, description, secrets, pauses, returns, drafted_by, viewport } = r.meta;
+  return { meta: { name, site, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw, viewport }, body: r.body, steps: r.steps };
 }
 
 /** Sends the routine for review. Nothing is public until a person approves it. */

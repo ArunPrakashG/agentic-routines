@@ -1,5 +1,6 @@
-import type { Locator, PageFingerprint, RecordedEvent } from '@agentic-routines/core';
+import type { Locator, PageFingerprint, RecordedEvent, Viewport } from '@agentic-routines/core';
 import { areaBase64, cropHash, pngBase64, type Rect } from './crop';
+import * as llm from './llm';
 import * as native from './native';
 import { platform } from './platform';
 import * as runs from './runs';
@@ -13,6 +14,7 @@ interface Described {
   field: RecordedEvent['field'];
   label: string;
   page: PageFingerprint;
+  view?: Viewport;
 }
 
 // The tab an agent is working in glows while it works, and for a few seconds after its last call.
@@ -33,28 +35,74 @@ const AGENTS: Record<string, string> = {
 };
 export const agentName = (raw?: string) => (raw ? (AGENTS[raw] ?? raw) : 'Agent');
 
-/** Put a local file into a file input. With a DevTools session the path is set directly; otherwise it streams through the host. */
-export async function uploadFile(tabId: number, ref: string, path: string) {
-  if (platform.cdp && (await ask<boolean>(tabId, { t: 'markUpload', ref }))) {
-    await platform.cdp(tabId, async (send) => {
-      const { result } = await send<any>('Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]")' });
-      await send('DOM.setFileInputFiles', { files: [path], objectId: result.objectId });
-      await send('Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]").removeAttribute("data-br-upload")' });
-    });
-    return;
+const TYPES: Record<string, string> = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+  txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json', html: 'text/html', xml: 'application/xml',
+  zip: 'application/zip', mp3: 'audio/mpeg', wav: 'audio/wav', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  apk: 'application/vnd.android.package-archive', aab: 'application/octet-stream',
+};
+const typeOf = (name: string) => TYPES[name.split('.').pop()?.toLowerCase() ?? ''] ?? '';
+
+/** Paths from a step or a tool: one per line. */
+export const pathsOf = (value: string) => value.split('\n').map((p) => p.trim()).filter(Boolean);
+
+const acceptsFile = (accept: string, name: string) =>
+  !accept ||
+  accept.split(',').some((a) => {
+    const t = a.trim().toLowerCase();
+    return t.startsWith('.') ? name.toLowerCase().endsWith(t) : t.endsWith('/*') ? typeOf(name).startsWith(t.slice(0, -1)) : typeOf(name) === t;
+  });
+
+/**
+ * Put local files into a file input, or onto a drop zone. `value` is one path, or several with one per line.
+ * The host checks each path first, so a missing, unreadable, forbidden or too large file is said clearly before anything moves.
+ * With a DevTools session the browser reads the paths itself; without one the files stream through the host.
+ */
+export async function uploadFile(tabId: number, ref: string, value: string): Promise<{ names: string[]; warnings: string[] }> {
+  const files = pathsOf(value);
+  if (!files.length) throw new Error('No file path was given.');
+  const infos = [];
+  for (const path of files) infos.push(await native.call<{ name: string; size: number; tooBigToStream: boolean; label: string; limit: string }>('fs.info', { path }));
+  const warnings: string[] = [];
+  const mark = platform.cdp ? await ask<false | { multiple: boolean; accept: string }>(tabId, { t: 'markUpload', ref }) : false;
+  if (mark) {
+    try {
+      if (files.length > 1 && !mark.multiple) throw new Error('That file input takes one file. Upload them one at a time, or pass the ref of an input that allows several.');
+      for (const i of infos) if (!acceptsFile(mark.accept, i.name)) warnings.push(`${i.name} is not a kind the page accepts (${mark.accept}); the page may reject it`);
+      await platform.cdp!(tabId, async (send) => {
+        const { result } = await send<any>('Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]")' });
+        await send('DOM.setFileInputFiles', { files, objectId: result.objectId });
+        const n = await send<any>('Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]").files.length', returnByValue: true });
+        if (n.result?.value !== files.length) throw new Error('The browser did not take the files. The page may have replaced the input; call read_page and try again.');
+      });
+    } finally {
+      await ask(tabId, { t: 'unmarkUpload' }).catch(() => {});
+    }
+    return { names: infos.map((i) => i.name), warnings };
   }
-  const parts: string[] = [];
-  let offset = 0;
-  let name = path.split(/[\\/]/).pop() ?? 'file';
-  for (;;) {
-    const c = await native.call<{ name: string; size: number; data: string }>('fs.readChunk', { path, offset });
-    name = c.name;
-    parts.push(c.data);
-    offset += (c.data.length * 3) / 4 - (c.data.endsWith('==') ? 2 : c.data.endsWith('=') ? 1 : 0);
-    if (offset >= c.size || !c.data) break;
+  // No DevTools session, or a drop zone with no input behind it: the pieces go through the host.
+  const big = infos.find((i) => i.tooBigToStream);
+  const total = infos.reduce((n, i) => n + i.size, 0);
+  if (big) throw new Error(`${big.name} is ${big.label}. This browser cannot send a file over ${big.limit}; use a Chromium browser, or a smaller file.`);
+  if (total > 25 * 1024 * 1024) throw new Error(`Together the files are ${(total / 1048576).toFixed(0)} MB, over the 25 MB this browser can send at once. Upload them in smaller groups.`);
+  const out: { name: string; type: string; b64: string }[] = [];
+  for (const [i, path] of files.entries()) {
+    const parts: string[] = [];
+    let offset = 0;
+    for (;;) {
+      const c = await native.call<{ name: string; size: number; data: string }>('fs.readChunk', { path, offset });
+      parts.push(c.data);
+      offset += (c.data.length * 3) / 4 - (c.data.endsWith('==') ? 2 : c.data.endsWith('=') ? 1 : 0);
+      if (offset >= c.size || !c.data) break;
+    }
+    // The pieces are a multiple of three bytes, so they join without re-encoding.
+    out.push({ name: infos[i].name, type: typeOf(infos[i].name), b64: parts.join('') });
   }
-  const bin = parts.map((p) => atob(p)).join('');
-  await ask(tabId, { t: 'attach', ref, files: [{ name, type: '', b64: btoa(bin) }] });
+  const how = await ask<'input' | 'drop'>(tabId, { t: 'attach', ref, files: out });
+  if (how === 'drop') warnings.push('There was no file input behind that element, so the files were dropped on it; check the page took them');
+  return { names: infos.map((i) => i.name), warnings };
 }
 
 // The element a default screenshot centres on.
@@ -64,7 +112,9 @@ async function act(source: string, session: string | undefined, tabId: number, r
   const d = await ask<Described>(tabId, { t: 'describe', ref });
   const crop = d.field === 'password' ? undefined : await cropHash(tabId, d.rect);
   const before = (await browser.tabs.get(tabId)).url ?? '';
-  if (action === 'upload') await uploadFile(tabId, ref, value!);
+  let uploaded: Awaited<ReturnType<typeof uploadFile>> | undefined;
+  if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!);
+  else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
   else await ask(tabId, { t: 'act', ref, action, value });
   const after = await settle(tabId, before);
   // A new address can reuse refs for other elements.
@@ -80,10 +130,11 @@ async function act(source: string, session: string | undefined, tabId: number, r
     value: d.field === 'password' ? undefined : value,
     page: d.page,
     crop,
+    view: d.view,
     navigatedTo: after !== before ? after : undefined,
     ...extra,
   }, session);
-  return { d, after, changed: after !== before };
+  return { d, after, changed: after !== before, uploaded };
 }
 
 export async function handle(method: string, p: any): Promise<unknown> {
@@ -112,7 +163,13 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.read': {
       const tabId = await working(p.tab_id);
-      return ask<string>(tabId, { t: 'read', filter: p.filter });
+      // Text and what was left out of it, so the MCP server can say so.
+      return ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter });
+    }
+    case 'browser.llm': {
+      const tabId = await working(p.tab_id);
+      const out = await llm.find(tabId, { scope: p.scope, full: p.full, maxBytes: p.max_bytes });
+      return { ...out, page: (await browser.tabs.get(tabId)).url };
     }
     case 'browser.click': {
       const tabId = await working(p.tab_id);
@@ -132,8 +189,9 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.upload': {
       const tabId = await working(p.tab_id);
-      const { d } = await act(source, p?.session, tabId, p.ref, 'upload', p.path, { field: 'file' });
-      return `Attached ${p.path.split(/[\\/]/).pop()} to “${d.label || d.loc.name}”.`;
+      const { d, uploaded } = await act(source, p?.session, tabId, p.ref, 'upload', p.path, { field: 'file' });
+      const names = uploaded!.names;
+      return `Attached ${names.length === 1 ? names[0] : `${names.length} files (${names.join(', ')})`} to “${d.label || d.loc.name}”.${uploaded!.warnings.length ? ` Note: ${uploaded!.warnings.join('. ')}.` : ''}`;
     }
     case 'browser.press': {
       const tabId = await working(p.tab_id);

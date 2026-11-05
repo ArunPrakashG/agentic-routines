@@ -1,16 +1,19 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
 import { aim, glow, veil, type GlowMode } from '../lib/overlay';
-import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, role, select, type } from '../lib/dom';
+import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, role, select, type, viewport } from '../lib/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
   | { t: 'read'; filter?: 'interactive' | 'all' }
   | { t: 'fingerprint' }
+  | { t: 'alternates' }
+  | { t: 'viewport' }
   | { t: 'describe'; ref: string }
   | { t: 'rendering' }
   | { t: 'act'; ref?: string; action: string; value?: string }
   | { t: 'attach'; ref: string; files: { name: string; type: string; b64: string }[] }
   | { t: 'markUpload'; ref: string }
+  | { t: 'unmarkUpload' }
   | { t: 'resolve'; target: Locator }
   | { t: 'first'; target: Locator }
   | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
@@ -28,7 +31,7 @@ let recording = false;
 
 function human(event: Omit<RecordedEvent, 'ts' | 'url' | 'page'>) {
   if (!recording) return;
-  browser.runtime.sendMessage({ t: 'human', event: { ...event, ts: Date.now(), url: location.href, page: fingerprint() } }).catch(() => {});
+  browser.runtime.sendMessage({ t: 'human', event: { ...event, ts: Date.now(), url: location.href, page: fingerprint(), view: viewport() } }).catch(() => {});
 }
 
 function onClick(e: MouseEvent) {
@@ -72,20 +75,27 @@ export default defineContentScript({
           case 'read':
             send({ ok: outline(msg.filter) });
             break;
+          case 'viewport':
+            send({ ok: viewport() });
+            break;
+          case 'alternates':
+            // <link rel="alternate" type="text/markdown">, resolved against the page.
+            send({ ok: Array.from(document.querySelectorAll('link[rel~="alternate"][type="text/markdown"][href]')).slice(0, 5).map((l) => (l as HTMLLinkElement).href) });
+            break;
           case 'fingerprint':
             send({ ok: fingerprint() });
             break;
           case 'describe': {
             const el = byRef(msg.ref);
-            send({ ok: { loc: describe(el), rect: rectOf(el), field: fieldKind(el), label: accessibleName(el), page: fingerprint() } });
+            send({ ok: { loc: describe(el), rect: rectOf(el), field: fieldKind(el), label: accessibleName(el), page: fingerprint(), view: viewport() } });
             break;
           }
           case 'resolve': {
             const els = interactive();
             const res = resolve(msg.target, els.map((el) => ({ item: el, loc: describe(el) })));
             const cand = (r: { item: Element; score: number }) => ({ ref: refOf(r.item), role: describe(r.item).role, name: accessibleName(r.item), score: r.score, rect: rectOf(r.item) });
-            if (res.kind === 'found') send({ ok: { kind: 'found', disabled: res.item.hasAttribute('disabled') || res.item.getAttribute('aria-disabled') === 'true', ...cand({ item: res.item, score: res.score }) } });
-            else send({ ok: { kind: res.kind, candidates: res.ranked.map(cand) } });
+            if (res.kind === 'found') send({ ok: { kind: 'found', view: viewport(), disabled: res.item.hasAttribute('disabled') || res.item.getAttribute('aria-disabled') === 'true', ...cand({ item: res.item, score: res.score }) } });
+            else send({ ok: { kind: res.kind, view: viewport(), candidates: res.ranked.map(cand) } });
             break;
           }
           case 'first': {
@@ -93,8 +103,8 @@ export default defineContentScript({
             const shape = (l: Locator) => `${l.tag}|${l.role}|${(l.css ?? '').replace(/:nth-of-type\(\d+\)/g, '')}`;
             const want = shape(msg.target);
             const el = interactive().find((c) => shape(describe(c)) === want);
-            if (el) send({ ok: { kind: 'found', disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true', ref: refOf(el), role: role(el), name: accessibleName(el), score: 0, rect: rectOf(el) } });
-            else send({ ok: { kind: 'missing', candidates: [] } });
+            if (el) send({ ok: { kind: 'found', view: viewport(), disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true', ref: refOf(el), role: role(el), name: accessibleName(el), score: 0, rect: rectOf(el) } });
+            else send({ ok: { kind: 'missing', view: viewport(), candidates: [] } });
             break;
           }
           case 'act': {
@@ -132,15 +142,23 @@ export default defineContentScript({
           }
           case 'markUpload': {
             const input = fileInputFor(byRef(msg.ref));
+            for (const old of Array.from(document.querySelectorAll('[data-br-upload]'))) old.removeAttribute('data-br-upload');
             if (input) input.setAttribute('data-br-upload', '1');
-            void aim(byRef(msg.ref), 'upload').finally(() => send({ ok: !!input }));
+            void aim(byRef(msg.ref), 'upload').finally(() => send({ ok: input ? { multiple: input.multiple, accept: input.accept } : false }));
             break;
           }
+          case 'unmarkUpload':
+            for (const old of Array.from(document.querySelectorAll('[data-br-upload]'))) old.removeAttribute('data-br-upload');
+            send({ ok: true });
+            break;
           case 'attach': {
             const files = msg.files.map((f) => new File([b64ToBytes(f.b64)], f.name, { type: f.type }));
             void aim(byRef(msg.ref), 'upload').finally(() => {
-              attach(byRef(msg.ref), files);
-              send({ ok: true });
+              try {
+                send({ ok: attach(byRef(msg.ref), files) });
+              } catch (e) {
+                send({ err: (e as Error).message });
+              }
             });
             break;
           }
