@@ -14,6 +14,11 @@
 body{margin:0}
 .t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
 .t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+@supports not selector(::-webkit-scrollbar){.t-light *,.t-dark *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}}
+.t-light ::-webkit-scrollbar,.t-dark ::-webkit-scrollbar{width:10px;height:10px}
+.t-light ::-webkit-scrollbar-track,.t-dark ::-webkit-scrollbar-track,.t-light ::-webkit-scrollbar-corner,.t-dark ::-webkit-scrollbar-corner{background:transparent}
+.t-light ::-webkit-scrollbar-thumb,.t-dark ::-webkit-scrollbar-thumb{background:var(--border-strong);border:3px solid transparent;background-clip:content-box;border-radius:8px}
+.t-light ::-webkit-scrollbar-thumb:hover,.t-dark ::-webkit-scrollbar-thumb:hover{background:var(--text-3);background-clip:content-box}
 .fd,.fd *{box-sizing:border-box}
 .fd h2{margin:0 0 32px;font-size:13px;font-weight:500;color:var(--text-3);letter-spacing:0}
 .fd section{padding:72px 0;border-top:1px solid var(--border)}
@@ -132,6 +137,8 @@ kbd{font-family:var(--font-mono);font-size:11px;padding:1px 5px;border-radius:4p
           <div style="height: 56px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; font-size: 13px; color: var(--text-2);"><span class="mono">e0</span>&nbsp;· page</div>
           <div style="height: 56px; border-radius: 12px; background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-1); display: flex; align-items: center; padding: 0 16px; font-size: 13px; color: var(--text-2);"><span class="mono">e1</span>&nbsp;· surface-1, lists and cards</div>
           <div style="height: 56px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2); display: flex; align-items: center; padding: 0 16px; font-size: 13px; color: var(--text-2);"><span class="mono">e2</span>&nbsp;· surface-2, pause card only</div>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;"><span class="mono" style="font-size: 12px; color: var(--text-2);">scrollbar · 10px, thumb border-strong, hover text-3</span>
+          <div style="height: 96px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); padding: 12px 16px; font-size: 13px; line-height: 20px; color: var(--text-2);">Thin, rounded and quiet, so it belongs to the page instead of the operating system. It shows the same tokens as everything else and never competes with content. Scroll this box to see it. Scroll this box to see it. Thin, rounded and quiet, so it belongs to the page instead of the operating system.</div></div>
         </div>
       </div>
     </div>
