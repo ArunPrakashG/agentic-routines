@@ -10,6 +10,7 @@ import { compileRun, siteOf, type ParamSpec } from '@browser-routines/core';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Account as AccountInfo } from '../../lib/auth';
+import type { LiveRoutine, Submission } from '../../lib/directory';
 import type { PanelCommand, PanelState } from '../../lib/panel-types';
 
 // ---------- connection to the background ----------
@@ -126,7 +127,7 @@ const Pips = ({ colors, label }: { colors?: string[]; label: string }) => (
 
 // ---------- views ----------
 
-type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string };
+type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' };
 
 function RecordButton({ on }: { on: boolean }) {
   return (
@@ -184,7 +185,7 @@ function SignIn() {
   );
 }
 
-function Account({ account }: { account: AccountInfo }) {
+function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -210,6 +211,11 @@ function Account({ account }: { account: AccountInfo }) {
       {open && (
         <div class="account-menu">
           <span class="email">{account.email}</span>
+          {go && (
+            <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'submissions' }); }}>
+              Your submissions
+            </button>
+          )}
           {account.admin && (
             <button class="btn btn-secondary sm" type="button" onClick={() => browser.tabs.create({ url: browser.runtime.getURL('/admin.html' as any) })}>
               Review submissions
@@ -291,10 +297,12 @@ function PublishCard({ card }: { card: NonNullable<PanelState['publish']> }) {
   const bad = card.needsHandle && !/^[a-z0-9][a-z0-9-]{2,29}$/.test(handle.trim().toLowerCase());
   if (card.done) {
     return (
-      <section class="pubcard" aria-label="Published">
+      <section class="pubcard" aria-label="Sent for review">
         <div class="stack" style={{ gap: '6px' }}>
-          <span class="title">Published as {card.done.as}</span>
-          <span class="meta">Version {card.done.version}. Anyone can find it in the directory and install it.</span>
+          <span class="title">Sent for review</span>
+          <span class="meta">
+            {card.done.as} v{card.done.version} is private until it is approved. You will see the decision under Your submissions.
+          </span>
         </div>
         <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'publishDecide', approve: false })}>
           Done
@@ -303,12 +311,12 @@ function PublishCard({ card }: { card: NonNullable<PanelState['publish']> }) {
     );
   }
   return (
-    <section class="pubcard" aria-label="Publish to the directory">
+    <section class="pubcard" aria-label="Submit for review">
       <div class="stack" style={{ gap: '6px' }}>
-        <span class="k">{card.by ? `${card.by} wants to publish` : 'Publish to the directory'}</span>
+        <span class="k">{card.by ? `${card.by} wants to submit` : 'Submit for review'}</span>
         <span class="title mono">{card.name}</span>
         <span class="meta">
-          {card.site} · {card.steps} steps. Anyone can see and install it.
+          {card.site} · {card.steps} steps. We read every submission against the guidelines before it is listed. Until then it stays private.
         </span>
       </div>
       {card.shown.length > 0 ? (
@@ -340,10 +348,110 @@ function PublishCard({ card }: { card: NonNullable<PanelState['publish']> }) {
           Not now
         </button>
         <button class="btn btn-primary" type="button" disabled={card.busy || bad} onClick={() => send({ t: 'publishDecide', approve: true, handle })}>
-          {card.busy ? 'Publishing…' : 'Publish'}
+          {card.busy ? 'Sending…' : 'Submit for review'}
         </button>
       </div>
     </section>
+  );
+}
+
+const GUIDELINES: Record<string, string> = {
+  G1: 'One clear job',
+  G2: 'Stay on one site',
+  G3: 'Nothing personal or secret',
+  G4: 'Pause before what cannot be undone',
+  G5: 'No harm or deception',
+  G6: 'Respect the site and the person',
+  G7: 'Be honest about who made it',
+  G8: 'Keep it working',
+};
+
+function Submissions({ s, back }: { s: PanelState; back: () => void }) {
+  const [data, setData] = useState<{ routines: LiveRoutine[]; submissions: Submission[] }>();
+  const [error, setError] = useState('');
+  const load = () => send<{ routines: LiveRoutine[]; submissions: Submission[] }>({ t: 'submissions' }).then(setData, (e) => setError(e.message));
+  useEffect(() => void load(), []);
+  const mine = new Set(s.routines.filter((r) => r.owner === 'local').map((r) => r.name));
+  const fix = (name: string) => {
+    send({ t: 'publish', id: `local/${name}` }).catch(() => {});
+    back();
+  };
+
+  // What is waiting or was turned down, newest per routine, and only if it is newer than what is live.
+  const latest = new Map<string, Submission>();
+  for (const x of data?.submissions ?? []) if (!latest.has(x.name) && x.status !== 'withdrawn') latest.set(x.name, x);
+  const live = new Map((data?.routines ?? []).map((r) => [r.name, r]));
+  const open = [...latest.values()].filter((x) => x.status === 'pending' || (x.status === 'rejected' && x.version > (live.get(x.name)?.version ?? 0)));
+  const rows = (data?.routines ?? []).filter((r) => !latest.get(r.name) || !open.includes(latest.get(r.name)!));
+
+  return (
+    <div class="panel">
+      <header class="bar back">
+        <button class="icon-btn" type="button" aria-label="Back to routines" onClick={back}>
+          <Back />
+        </button>
+        <h1>Your submissions</h1>
+      </header>
+      <main class="form">
+        <p class="meta" style={{ margin: 0, whiteSpace: 'normal' }}>
+          What you sent to the directory, and where each one stands. A rejection names the guideline and says what to change.
+        </p>
+        {error && (
+          <span class="err" role="alert">
+            {error}
+          </span>
+        )}
+        {data && open.length + rows.length === 0 && <span class="meta">Nothing sent yet. Submit a saved routine from the library.</span>}
+        <section class="subs" aria-label="Submissions">
+          {open.map((x) => {
+            const waiting = x.status === 'pending';
+            return (
+              <div class="sub" key={x.id}>
+                <span class="top">
+                  <span class="name">{x.name} <small>v{x.version}</small></span>
+                  <span class={waiting ? 'tag warn' : 'tag bad'}>{waiting ? 'Waiting for review' : 'Rejected'}</span>
+                </span>
+                <span class="meta">
+                  {waiting
+                    ? `Submitted ${ago(Date.parse(x.submitted_at))}${live.has(x.name) ? ` · v${live.get(x.name)!.version} stays listed` : ''}`
+                    : `${x.guideline} ${GUIDELINES[x.guideline ?? ''] ?? ''} · ${ago(Date.parse(x.decided_at ?? x.submitted_at))}`}
+                </span>
+                <span class="desc">{waiting ? 'We read every submission before it is listed.' : x.note}</span>
+                {waiting ? (
+                  <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'withdraw', id: x.id }).then(load, (e) => setError(e.message))}>
+                    Withdraw
+                  </button>
+                ) : (
+                  mine.has(x.name) && (
+                    <button class="btn btn-secondary sm" type="button" onClick={() => fix(x.name)}>
+                      Fix and resubmit
+                    </button>
+                  )
+                )}
+              </div>
+            );
+          })}
+          {rows.map((r) => (
+            <div class="sub" key={r.name}>
+              <span class="top">
+                <span class="name">{r.name} <small>v{r.version}</small></span>
+                <span class={r.disabled ? 'tag bad' : 'tag ok'}>{r.disabled ? 'Turned off' : 'Live'}</span>
+              </span>
+              <span class="meta">{r.disabled ? 'Not listed, and it stopped installing.' : `${r.installs} installs`}</span>
+              {r.disabled && <span class="desc">{r.disabled_reason}</span>}
+              {r.disabled && mine.has(r.name) && (
+                <button class="btn btn-secondary sm" type="button" onClick={() => fix(r.name)}>
+                  Fix and resubmit
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+        <span class="meta" style={{ whiteSpace: 'normal' }}>
+          Every submission is read against the directory guidelines before it is listed.
+        </span>
+      </main>
+    </div>
   );
 }
 
@@ -359,7 +467,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
         </div>
         <div class="bar-end">
           {(!empty || recording) && <RecordButton on={recording} />}
-          {s.account && <Account account={s.account} />}
+          {s.account && <Account account={s.account} go={go} />}
         </div>
       </header>
       {empty && !recording ? (
@@ -409,7 +517,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                     <span class="meta">
                       {r.site} · v{r.version}
                       {r.draftedBy ? ` · drafted by ${r.draftedBy}` : ''}
-                      {r.published ? ` · published v${r.published.version}` : ''}
+                      {r.published ? ` · sent for review v${r.published.version}` : ''}
                       {r.lastRun ? ` · ran ${ago(r.lastRun)}` : ''}
                     </span>
                     {!!r.changed?.length && (
@@ -419,8 +527,8 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                     )}
                   </div>
                   {r.owner === 'local' && !s.publish && (
-                    <button class="btn btn-ghost sm" type="button" aria-label={`Publish ${r.name}`} onClick={() => send({ t: 'publish', id: `local/${r.name}` })}>
-                      Publish
+                    <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => send({ t: 'publish', id: `local/${r.name}` })}>
+                      Submit
                     </button>
                   )}
                   <button
@@ -577,7 +685,7 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
       <footer class="foot2">
         <label class="check" style={{ gridColumn: '1 / -1' }}>
           <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.currentTarget.checked)} style={{ width: '16px', height: '16px', margin: 0, accentColor: 'var(--accent)' }} />
-          Publish to the directory
+          Submit to the directory for review
         </label>
         <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'discard', runId }).then(back)}>
           Discard
@@ -905,6 +1013,7 @@ function App() {
 
   if (view.v === 'save') return <Save s={s} runId={view.runId} back={back} />;
   if (view.v === 'inputs') return <Inputs id={view.id} name={view.name} back={back} />;
+  if (view.v === 'submissions') return <Submissions s={s} back={back} />;
   return <Library s={s} go={setView} />;
 }
 

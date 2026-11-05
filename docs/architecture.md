@@ -102,11 +102,12 @@ Rules, borrowed from how skills work:
 | `routines_list()` | Routines list |
 | `routines_search(query, site?)` | Directory search |
 | `routine_install(owner/name)` | Add to my routines |
-| `routine_publish(name)` | Share on the directory |
+| `routine_publish(name)` | Send to the directory for review |
+| `routine_submissions()` | Where what was sent stands (read only) |
 
 Results are short text: steps run, model calls, pauses, time. No page snapshots come back from a replay.
 
-**Directory tools.** `routines_search` and `routine_install` read the public directory and need no account; install writes the routine under its owner and checks it again on this side (description, every step on the routine's own site) whatever the directory said. `routine_publish` only asks: the side panel shows what becomes public, including typed values and addresses with details, and the person approves there. An agent cannot publish on its own. The session lives in the extension, so publishing always goes through it.
+**Directory tools.** `routines_search` and `routine_install` read the public directory and need no account; install writes the routine under its owner and checks it again on this side (description, every step on the routine's own site) whatever the directory said. `routine_publish` only asks: the side panel shows what becomes public, including typed values and addresses with details, and the person approves there. An agent cannot publish on its own. The session lives in the extension, so publishing always goes through it. What is sent is a submission: a person reads every one against `docs/directory-guidelines.md` before it is listed, and an update leaves the approved version live meanwhile. `routine_submissions` reads where each one stands; withdrawing is only in the side panel.
 
 ## Replay and the page checks
 

@@ -353,12 +353,13 @@ func (s *store) search(ctx context.Context, q, host string, limit, offset int) (
 
 type mineRow struct {
 	summary
-	Disabled bool `json:"disabled"`
+	Disabled       bool    `json:"disabled"`
+	DisabledReason *string `json:"disabled_reason"`
 }
 
 func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT `+summaryCols+`, r.disabled FROM routines r JOIN users u ON u.id = r.owner_id
+		SELECT `+summaryCols+`, r.disabled, r.disabled_reason FROM routines r JOIN users u ON u.id = r.owner_id
 		WHERE r.owner_id = $1::uuid ORDER BY r.updated_at DESC`, ownerID)
 	if err != nil {
 		return nil, err
@@ -367,7 +368,7 @@ func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 	out := []mineRow{}
 	for rows.Next() {
 		var x mineRow
-		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Disabled); err != nil {
+		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Disabled, &x.DisabledReason); err != nil {
 			return nil, err
 		}
 		out = append(out, x)

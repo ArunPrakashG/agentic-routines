@@ -51,6 +51,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border-r
 /* Publishing */
 .pubcard { border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); padding: 16px; display: flex; flex-direction: column; gap: 14px; animation: arrive var(--dur-slow) var(--ease-out) both; }
 .pubcard .k { font-size: 12px; color: var(--warn); }
+.pubcard .meta { white-space: normal; overflow: visible; text-overflow: clip; line-height: 18px; }
 .publine { font-size: 12px; line-height: 18px; color: var(--text-2); overflow-wrap: anywhere; }
 
 /* Empty and onboarding */
@@ -144,3 +145,12 @@ textarea.input { height: 84px; resize: none; padding: 10px 12px; font: 400 13px/
 .pause .b { font-size: 13px; color: var(--text-2); }
 .toast { position: absolute; left: 16px; right: 16px; bottom: 16px; padding: 12px 14px; border-radius: 10px; background: var(--surface-3); color: var(--text-1); font-size: 13px; box-shadow: var(--shadow-2); animation: card var(--dur-base) var(--ease-out) both; }
 .toast.bad { color: var(--danger); }
+
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.bad { background: var(--danger-soft); color: var(--danger); }
+.subs { display: flex; flex-direction: column; }
+.sub { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.sub .top { align-self: stretch; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sub .name { font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+.sub .name small { color: var(--text-3); font-weight: 400; font-size: 12px; }
+.sub .desc { font-size: 13px; line-height: 18px; color: var(--text-2); overflow-wrap: anywhere; }

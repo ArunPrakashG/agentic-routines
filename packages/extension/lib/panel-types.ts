@@ -31,6 +31,8 @@ export type PanelCommand =
   | { t: 'save'; runId: string; name: string; description: string; fixed?: string[]; publish?: boolean }
   | { t: 'publish'; id: string }
   | { t: 'publishDecide'; approve: boolean; handle?: string }
+  | { t: 'submissions' }
+  | { t: 'withdraw'; id: string }
   | { t: 'discard'; runId: string }
   | { t: 'run'; id: string; params: Record<string, string> }
   | { t: 'decide'; id: string; approve: boolean }
