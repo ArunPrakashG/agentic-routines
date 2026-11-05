@@ -1,5 +1,5 @@
 import type { Locator, PageFingerprint, RecordedEvent } from '@browser-routines/core';
-import { cropHash, pngBase64, type Rect } from './crop';
+import { areaBase64, cropHash, pngBase64, type Rect } from './crop';
 import * as native from './native';
 import * as runs from './runs';
 import { agentTabId, ask, settle, setAgentTab, waitLoaded } from './tabs';
@@ -52,13 +52,18 @@ export async function uploadFile(tabId: number, ref: string, path: string) {
   await ask(tabId, { t: 'attach', ref, files: [{ name, type: '', b64: btoa(bin) }] });
 }
 
-async function act(source: string, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}) {
+// The element a default screenshot centres on.
+let lastActed: { tabId: number; ref: string } | undefined;
+
+async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}) {
   const d = await ask<Described>(tabId, { t: 'describe', ref });
   const crop = d.field === 'password' ? undefined : await cropHash(tabId, d.rect);
   const before = (await browser.tabs.get(tabId)).url ?? '';
   if (action === 'upload') await uploadFile(tabId, ref, value!);
   else await ask(tabId, { t: 'act', ref, action, value });
   const after = await settle(tabId, before);
+  // A new address can reuse refs for other elements.
+  lastActed = after === before ? { tabId, ref } : undefined;
   await runs.record(source, {
     action,
     url: before,
@@ -72,7 +77,7 @@ async function act(source: string, tabId: number, ref: string, action: RecordedE
     crop,
     navigatedTo: after !== before ? after : undefined,
     ...extra,
-  });
+  }, session);
   return { d, after, changed: after !== before };
 }
 
@@ -96,7 +101,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       await new Promise((r) => setTimeout(r, 200));
       await waitLoaded(tabId);
       const t = await browser.tabs.get(tabId);
-      await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() });
+      await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() }, p?.session);
       return { url: t.url, title: t.title, tab_id: tabId };
     }
     case 'browser.read': {
@@ -105,23 +110,23 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.click': {
       const tabId = await agentTabId(p.tab_id);
-      const { d, after, changed } = await act(source, tabId, p.ref, 'click');
+      const { d, after, changed } = await act(source, p?.session, tabId, p.ref, 'click');
       return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}`;
     }
     case 'browser.type': {
       const tabId = await agentTabId(p.tab_id);
-      const { d } = await act(source, tabId, p.ref, 'type', p.text);
-      if (p.submit) await act(source, tabId, p.ref, 'press', 'Enter');
+      const { d } = await act(source, p?.session, tabId, p.ref, 'type', p.text);
+      if (p.submit) await act(source, p?.session, tabId, p.ref, 'press', 'Enter');
       return `Typed into “${d.label || d.loc.name || d.loc.tag}”.`;
     }
     case 'browser.select': {
       const tabId = await agentTabId(p.tab_id);
-      const { d } = await act(source, tabId, p.ref, 'select', p.value);
+      const { d } = await act(source, p?.session, tabId, p.ref, 'select', p.value);
       return `Picked “${p.value}” in “${d.label}”.`;
     }
     case 'browser.upload': {
       const tabId = await agentTabId(p.tab_id);
-      const { d } = await act(source, tabId, p.ref, 'upload', p.path, { field: 'file' });
+      const { d } = await act(source, p?.session, tabId, p.ref, 'upload', p.path, { field: 'file' });
       return `Attached ${p.path.split(/[\\/]/).pop()} to “${d.label || d.loc.name}”.`;
     }
     case 'browser.press': {
@@ -129,13 +134,19 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const before = (await browser.tabs.get(tabId)).url ?? '';
       await ask(tabId, { t: 'act', action: 'press', value: p.key });
       const after = await settle(tabId, before);
-      await runs.record(source, { action: 'press', url: before, value: p.key, ts: Date.now(), navigatedTo: after !== before ? after : undefined });
+      await runs.record(source, { action: 'press', url: before, value: p.key, ts: Date.now(), navigatedTo: after !== before ? after : undefined }, p?.session);
       return `Pressed ${p.key}.`;
     }
-    case 'browser.screenshot':
-      return pngBase64(await agentTabId(p.tab_id));
+    case 'browser.screenshot': {
+      const tabId = await agentTabId(p.tab_id);
+      if (p.full) return { data: await pngBase64(tabId), note: 'The whole tab.' };
+      const ref: string | undefined = p.ref ?? (lastActed?.tabId === tabId ? lastActed.ref : undefined);
+      const d = ref ? await ask<Described>(tabId, { t: 'describe', ref }).catch((e) => { if (p.ref) throw e; }) : undefined;
+      const { data, area } = await areaBase64(tabId, d?.rect);
+      return { data, note: area ? `The area around “${d!.label || d!.loc.name || d!.loc.tag}”. Pass full: true for the whole tab.` : 'The whole tab at half size, as no element was acted on here. Pass full: true for full size.' };
+    }
     case 'runs.get':
-      return runs.get(p?.run_id);
+      return runs.get(p?.run_id, p?.session);
     default:
       throw new Error(`Unknown method ${method}`);
   }

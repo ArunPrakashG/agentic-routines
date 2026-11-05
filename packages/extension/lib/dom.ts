@@ -68,7 +68,13 @@ export function accessibleName(el: Element): string {
     return labelFor(el) || clean(el.getAttribute('placeholder')) || clean(el.getAttribute('title'));
   }
   if (tag === 'img') return clean(el.getAttribute('alt'));
-  return clean((el as HTMLElement).innerText ?? el.textContent) || clean(el.getAttribute('title'));
+  return clean((el as HTMLElement).innerText ?? el.textContent) || clean(el.getAttribute('title')) || wrappingLabel(el);
+}
+
+/** Custom checkboxes often sit inside a label that names them, which aria does not see. */
+function wrappingLabel(el: Element): string {
+  const label = el.closest('label');
+  return label && Array.from(label.querySelectorAll(INTERACTIVE)).filter(visible).length === 1 ? clean((label as HTMLElement).innerText) : '';
 }
 
 function nearestHeading(el: Element): string {

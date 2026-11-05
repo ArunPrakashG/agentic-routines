@@ -37,11 +37,14 @@ export function score(rec: Locator, live: Locator): number {
 }
 
 /** Role, tag and position fit many elements. Only a name or a stable attribute says it is this one. */
-function sameElement(rec: Locator, live: Locator): boolean {
-  const stable = STABLE.filter((k) => k !== 'type' && rec.attrs[k] && !(k === 'id' && isVolatileId(rec.attrs[k]!)));
+function sameElement(rec: Locator, live: Locator, all: Locator[]): boolean {
+  // A value many elements share, like the id #checkbox on every row of a list, identifies none of them.
+  const unique = (k: string) => all.filter((l) => l.attrs[k] === rec.attrs[k]).length <= 1;
+  const stable = STABLE.filter((k) => k !== 'type' && rec.attrs[k] && !(k === 'id' && isVolatileId(rec.attrs[k]!)) && unique(k));
   const rn = norm(rec.name);
-  if (!rn && !stable.length) return true;
   const ln = norm(live.name);
+  if (!rn && ln) return false;
+  if (!rn && !stable.length) return true;
   if (rn && ln && (ln.includes(rn) || rn.includes(ln))) return true;
   return stable.some((k) => live.attrs[k] === rec.attrs[k]);
 }
@@ -60,9 +63,11 @@ export function resolve<T>(rec: Locator, live: { item: T; loc: Locator }[]): Res
     .map((c) => ({ item: c.item, loc: c.loc, score: score(rec, c.loc) }))
     .filter((c) => c.score > 0)
     .sort((a, b) => b.score - a.score);
-  const [top, second] = ranked.filter((c) => sameElement(rec, c.loc));
+  const all = live.map((c) => c.loc);
+  const same = ranked.filter((c) => sameElement(rec, c.loc, all));
+  const [top, second] = same;
   if (!top || top.score < MIN_SCORE) return { kind: 'missing', ranked: ranked.slice(0, 3) };
-  if (second && top.score - second.score < MIN_MARGIN) return { kind: 'ambiguous', ranked: ranked.slice(0, 3) };
+  if (second && top.score - second.score < MIN_MARGIN) return { kind: 'ambiguous', ranked: same.slice(0, 3) };
   return { kind: 'found', item: top.item, score: top.score };
 }
 

@@ -9,7 +9,7 @@ pnpm dev:up
 | tmux session | What it is |
 |---|---|
 | `br-claude` | Claude Code, using your login, with only this MCP server and none of your user settings or hooks |
-| `br-chrome` | Chromium from Playwright with the unpacked extension, debugging port 9333 |
+| `br-chrome` | Chromium from Playwright with the unpacked extension, debugging port 9333, or `BR_CDP_PORT` |
 | `br-site` | The test site on http://127.0.0.1:8765 |
 
 ```bash

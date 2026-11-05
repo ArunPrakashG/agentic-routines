@@ -25,6 +25,23 @@ export async function ask<T = unknown>(tabId: number, msg: ContentMsg): Promise<
   return res.ok as T;
 }
 
+// A window on a hidden workspace stops drawing, and a page waiting for a frame stops with it.
+export const rendering = (tabId: number) => ask<boolean>(tabId, { t: 'rendering' }).catch(() => true);
+
+/** Draws one frame if the window has stopped drawing. Firefox has no debugger API, so it stays as it is. */
+export async function wake(tabId: number) {
+  if (!browser.debugger || (await rendering(tabId))) return;
+  const target = { tabId };
+  try {
+    await browser.debugger.attach(target, '1.3');
+    await browser.debugger.sendCommand(target, 'Page.captureScreenshot', { format: 'jpeg', quality: 1 });
+  } catch {
+    // Something else is attached, or the page is restricted.
+  } finally {
+    await browser.debugger.detach(target).catch(() => {});
+  }
+}
+
 export async function waitLoaded(tabId: number, timeoutMs = 30_000) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
@@ -50,6 +67,7 @@ export async function settle(tabId: number, beforeUrl: string): Promise<string> 
     await waitLoaded(tabId);
     t = await browser.tabs.get(tabId);
   }
+  await wake(tabId);
   await sleep(150);
   return t.url ?? beforeUrl;
 }
