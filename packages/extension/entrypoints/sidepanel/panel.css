@@ -189,3 +189,13 @@ textarea.input { height: 84px; resize: none; padding: 10px 12px; font: 400 13px/
 @media (prefers-reduced-motion: reduce) { .sw::after { transition: none; } }
 .h3 { margin: 0; font-size: 12px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
 .entries .btn-ghost { padding-left: 0; }
+
+.hooks { display: flex; flex-direction: column; gap: 10px; }
+.hook { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hook .ev { font-size: 12px; color: var(--accent-ink); }
+.hook pre { margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.allow { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer; }
+.row .hooklink { all: unset; box-sizing: border-box; cursor: pointer; font-size: 12px; text-align: left; color: var(--text-3); text-decoration: underline; text-underline-offset: 2px; }
+.row .hooklink.off { color: var(--warn); }
+.row .hooklink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.foot2.sticky { position: sticky; bottom: 0; margin: 0 -16px -16px; padding: 12px 16px 16px; background: var(--bg); border-top: 1px solid var(--border); }

@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
+import { hookHash, parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
 import { paths } from './paths.ts';
 
 // Routines live at ~/.agentic-routines/routines/<owner>/<name>/{ROUTINE.md,steps.json}.
@@ -20,6 +20,8 @@ export interface Listed {
   origin?: Origin;
   /** Why it was turned off by a block, when it was. */
   blocked?: string;
+  /** Its hooks: how many events have code, and the hash approval is pinned to. */
+  hooks?: { count: number; hash: string };
 }
 
 function dir(owner: string, name: string) {
@@ -59,7 +61,8 @@ export async function list(): Promise<Listed[]> {
         const disabled = await readFile(join(paths.routines(), owner, name, '.disabled'), 'utf8').then(() => true, () => false);
         const origin = await readJson<Origin>(join(paths.routines(), owner, name, '.origin.json'));
         const blocked = (await readJson<{ reason: string }>(join(paths.routines(), owner, name, '.blocked.json')))?.reason;
-        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked });
+        const n = Object.keys(meta.hooks ?? {}).length;
+        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked, hooks: n ? { count: n, hash: await hookHash(meta.hooks) } : undefined });
       } catch {
         // Not a routine folder.
       }

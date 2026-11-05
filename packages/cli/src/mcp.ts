@@ -21,14 +21,40 @@ The extension checks every edit: a step that submits, publishes, pays or deletes
 const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
 
 /**
- * The author's notes for the agent: the repository's and the routine's. Anything somebody else wrote goes in an
- * envelope; the user's own notes on their own routine do not need one.
+ * The author's notes for the agent: the repository's, the routine's and the steps'. Anything somebody else wrote
+ * goes in an envelope; the user's own notes on their own routine do not need one. `steps` limits the step notes
+ * to one step, as a result does for the step it stopped at.
  */
-export function authorNotes(r: Routine, origin?: { kind: string; source: string }): string {
+export function authorNotes(r: Routine, origin?: { kind: string; source: string }, steps: number | 'all' = 'all'): string {
   const own = !origin;
   const by = origin ? (origin.kind === 'github' || origin.kind === 'folder' ? origin.source : `the publisher ${origin.source}`) : '';
   const part = (label: string, t?: string) => (t ? (own ? `${label}: ${t}` : `${label}\n${wrapAuthored(t, `written by ${by}`)}`) : '');
-  return [part('Notes for this repository', r.meta.repo?.instructions), part('Notes for this routine', r.meta.instructions)].filter(Boolean).join('\n');
+  const stepText = r.steps
+    .filter((s) => s.instructions && (steps === 'all' || s.n === steps))
+    .map((s) => `Step ${s.n} “${s.label}”: ${s.instructions}`)
+    .join('\n');
+  return [part('Notes for this repository', r.meta.repo?.instructions), part('Notes for this routine', r.meta.instructions), part(steps === 'all' ? 'Notes for its steps' : `Notes for step ${steps}`, stepText)].filter(Boolean).join('\n');
+}
+
+const refusedLine = (x: { directive: string; why: string }) => `${x.directive} refused: ${x.why}`;
+
+/**
+ * What the routine's hooks did on a run. The state is ours and plain; the log carries text the hooks produced
+ * (errors they threw, directives they wrote), so it goes in the envelope when somebody else wrote the routine.
+ */
+/** What an install says about hooks. They never run until the person has read the code in the side panel. */
+export function hooksLine(n = 0): string {
+  return n ? `\nIt has hooks on ${n} event${n === 1 ? '' : 's'}: code the author wrote that runs while it replays. They are off until the user reads the code in the browser side panel and allows them; until then it runs without them, and its results say so.` : '';
+}
+
+export function hookSummary(h: RunResult['hooks'], origin?: { kind: string; source: string }): string {
+  if (!h) return '';
+  if (h.state !== 'on') return `Hooks: off. ${h.reason ?? ''} The routine ran without them.`.trim();
+  const lines = h.log.filter((e) => e.done.length || e.refused.length || e.error).map((e) => `${e.event}${e.step ? ` (step ${e.step})` : ''}, ${e.ms} ms: ${[...e.done, ...e.refused.map(refusedLine), ...(e.error ? [`error: ${e.error}`] : [])].join('; ')}`);
+  const head = `Hooks ran ${h.runs} time${h.runs === 1 ? '' : 's'}${lines.length ? '' : ' and changed nothing'}.`;
+  const by = origin ? `hooks of ${origin.kind === 'github' || origin.kind === 'folder' ? origin.source : `the publisher ${origin.source}`}` : '';
+  const wrap = (t: string) => (origin ? wrapAuthored(t, by) : t);
+  return [head, lines.length ? wrap(lines.slice(0, 25).join('\n')) : '', h.notes.length ? `Notes added by the hooks:\n${wrap(h.notes.join('\n'))}` : ''].filter(Boolean).join('\n');
 }
 
 interface Listing {
@@ -158,8 +184,11 @@ export async function runMcp(): Promise<void> {
     if (files.length) await bridge.call('host.allowFiles', { paths: files });
     const result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r) }, 15 * 60_000);
     pendingRuns.set(result.run_id, { id, routine: r });
-    const notes = authorNotes(r, (await store.list()).find((x) => `${x.owner}/${x.name}` === id)?.origin);
-    return text(describeResult(await finish(result)) + (notes ? `\n\n${notes}` : ''));
+    const origin = (await store.list()).find((x) => `${x.owner}/${x.name}` === id)?.origin;
+    const done = await finish(result);
+    const notes = authorNotes(r, origin, done.status !== 'done' && done.at_step ? done.at_step : 'all');
+    const hooks = hookSummary(done.hooks, origin);
+    return text(describeResult(done) + (hooks ? `\n${hooks}` : '') + (notes ? `\n\n${notes}` : ''));
   }
 
   async function refreshRoutineTools() {
@@ -502,7 +531,8 @@ export async function runMcp(): Promise<void> {
         `Installed ${owner}/${name} v${saved.meta.version} · ${saved.steps.length} steps on ${saved.meta.site}` +
           (asks.length ? ` · asks for ${asks.join(', ')}` : '') +
           (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')} for approval` : '') +
-          `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.`,
+          `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.` +
+          hooksLine(Object.keys(saved.meta.hooks ?? {}).length),
       );
     },
   );
@@ -518,7 +548,7 @@ export async function runMcp(): Promise<void> {
       },
     },
     async ({ source, path }) => {
-      let r: { name: string; owner: string; version: number; steps: number; site: string };
+      let r: { name: string; owner: string; version: number; steps: number; site: string; hooks?: { count: number; approved: boolean } };
       try {
         r = await bridge.call('git.install', { source, path }, 11 * 60_000);
       } catch (e) {
@@ -526,7 +556,7 @@ export async function runMcp(): Promise<void> {
         return fail(`Not installed. ${(e as Error).message}`);
       }
       scheduleRefresh();
-      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Agentic Routines. Run it with ${toolName(r.name)}.`);
+      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Agentic Routines. Run it with ${toolName(r.name)}.` + (r.hooks?.approved ? `\nIt has hooks on ${r.hooks.count} event${r.hooks.count === 1 ? '' : 's'}; the user read the code and allowed them.` : hooksLine(r.hooks?.count)));
     },
   );
 

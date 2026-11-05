@@ -1,5 +1,7 @@
 // Shared shapes for recording, compiling and replaying routines.
 
+import type { HookReport, Hooks } from './hooks.ts';
+
 export type Action =
   | 'navigate'
   | 'click'
@@ -84,6 +86,8 @@ export interface RoutineMeta {
   instructions?: string;
   /** The repository the routine came from and what its config.routine tells the agent about the repository as a whole. */
   repo?: { name: string; instructions?: string };
+  /** Code that runs on events during a replay, in a sandbox, and answers with directives. Off until the person approves it. */
+  hooks?: Hooks;
 }
 
 export interface Routine {
@@ -154,4 +158,8 @@ export interface RunResult {
   trace?: string[];
   /** Test only: where the tab ended up. */
   final_url?: string;
+  /** Present when the routine has hooks: whether they ran, and what they did. */
+  hooks?: HookReport;
+  /** Notes the author left on the steps the run stopped at or changed, for the agent. */
+  step_notes?: { n: number; label: string; text: string }[];
 }

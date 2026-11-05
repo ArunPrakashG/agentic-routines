@@ -1,4 +1,5 @@
 import { parse, stringify } from 'yaml';
+import { checkHooks, readHooks } from './hooks.ts';
 import type { RoutineMeta } from './types.ts';
 
 const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -28,6 +29,7 @@ export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string 
     drafted_by: raw.drafted_by ? String(raw.drafted_by) : undefined,
     instructions: raw.instructions ? String(raw.instructions).slice(0, 4000) : undefined,
     repo: repoOf(raw.repo),
+    hooks: readHooks((raw as { hooks?: unknown }).hooks),
   };
   return { meta, body: text.slice(m[0].length).trim() };
 }
@@ -62,6 +64,8 @@ export function lintForPublish(meta: RoutineMeta, stepUrls: string[]): LintIssue
   if (meta.description.length > 1024)
     issues.push({ field: 'description', message: 'Keep it under 1024 characters.' });
   if (!meta.site) issues.push({ field: 'site', message: 'No site set.' });
+  if ((meta.instructions?.length ?? 0) > 4000) issues.push({ field: 'instructions', message: 'Keep the notes for the agent under 4000 characters.' });
+  for (const m of checkHooks(meta.hooks)) issues.push({ field: 'hooks', message: m });
   for (const u of stepUrls) {
     if (!onSite(u, meta.site)) {
       issues.push({ field: 'steps', message: `A step leaves ${meta.site}: ${new URL(u).host}` });

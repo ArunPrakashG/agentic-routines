@@ -47,13 +47,15 @@ Production releases. This routine only covers testing tracks.
 | `params` | The values asked for on each run. Types are `string` and `file`. |
 | `pauses` | Step numbers where the replay stops before going on. |
 | `returns` | What the routine gives back. |
+| `instructions` | Notes for the agent that runs it, up to 4000 characters. See [Hooks and instructions](/docs/hooks). |
+| `hooks` | Code on events, one function per event. Off until the person allows it. See [Hooks and instructions](/docs/hooks). |
 | `version` | Goes up with every save. A fixed step is saved as the next version. |
 
-Agents see only `name`, `description` and `params` up front. The body comes back from `routine_describe`, and the steps never reach the agent.
+Agents see only `name`, `description` and `params` up front. The body comes back from `routine_describe`, and the steps never reach the agent, apart from the notes an author wrote on a step, which come back in a run's result inside a marked block.
 
 ## Steps
 
-Steps are declarative: navigate, click, type, select, upload, wait and read. A routine cannot contain a script. Each step carries the locators the replayer checks and a label for people to read.
+Steps are declarative: navigate, click, type, select, upload, wait and read. A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
 
 ## Share a routine through Git
 
