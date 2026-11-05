@@ -12,6 +12,8 @@
     "e2e": "dev/e2e.sh",
     "e2e:api": "node dev/e2e-api.mjs",
     "e2e:sources": "node dev/e2e-sources.mjs",
+    "check:links": "node dev/check-links.mjs",
+    "readme:images": "dev/readme-images.sh",
     "check:store": "node releases/scripts/check-store.mjs",
     "release": "node releases/scripts/build.mjs",
     "release:version": "node releases/scripts/version.mjs"
