@@ -38,7 +38,7 @@ ssh "$HOST" "set -e; cd $DIR && \
 
 # Only the pages change between releases (built files have new names), but purging the host is cheap.
 if command -v cf >/dev/null; then
-  cf cache purge --zone arunprakashg.com --force --body '{"hosts":["browserroutines.arunprakashg.com"]}' >/dev/null 2>&1 \
+  CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-cbbf132b853042edad6f8b315e5690a1} cf cache purge --zone arunprakashg.com --force --body '{"hosts":["browserroutines.arunprakashg.com"]}' >/dev/null 2>&1 \
     && echo "edge cache purged" || echo "could not purge the edge cache; pages refresh within five minutes"
 fi
 
