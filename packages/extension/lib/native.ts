@@ -67,6 +67,8 @@ export function connect() {
     }
   });
   p.onDisconnect.addListener(() => {
+    // Reading it marks it handled. With no host installed yet, this is the normal state.
+    void browser.runtime.lastError;
     port = undefined;
     for (const w of waiting.values()) w.reject(new Error('Host disconnected'));
     waiting.clear();

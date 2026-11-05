@@ -23,6 +23,12 @@ if curl -s --max-time 1 "127.0.0.1:$CDP_PORT/json/version" >/dev/null; then
   exit 1
 fi
 
+SITE_PORT=${BR_SITE_PORT:-8765}
+if curl -s --max-time 1 -o /dev/null "127.0.0.1:$SITE_PORT/"; then
+  echo "Port $SITE_PORT already has a server on it. Set BR_SITE_PORT to another port." >&2
+  exit 1
+fi
+
 # Branded Chrome ignores --load-extension, so this needs Chromium.
 CHROME=${BR_CHROME:-$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}
 [ -x "$CHROME" ] || { echo "No Chromium found. Run: npx playwright install chromium" >&2; exit 1; }
@@ -31,7 +37,7 @@ CLI=$ROOT/packages/cli/dist/index.js
 EXT=$ROOT/packages/extension/.output/chrome-mv3
 
 if [ -n "$BUILD" ]; then
-  (cd "$ROOT" && pnpm -r build >/dev/null)
+  (cd "$ROOT" && WXT_API_URL=${WXT_API_URL:-http://127.0.0.1:8787} pnpm -r build >/dev/null)
 fi
 [ -f "$CLI" ] && [ -d "$EXT" ] || { echo "Nothing built. Run without --no-build." >&2; exit 1; }
 
@@ -48,8 +54,8 @@ cp "$ROOT"/dev/fixtures/* "$DEV/workspace/"
 env HOME="$BHOME" BROWSER_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/bin:/bin" "$NODE" "$CLI" setup >/dev/null
 
 touch "$DEV/.started"
-tmux new-session -d -s br-site "python3 -m http.server 8765 --bind 127.0.0.1 --directory '$ROOT/dev/site'"
-tmux new-session -d -s br-chrome "env HOME='$BHOME' BROWSER_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:8765/ > '$DEV/chrome.log' 2>&1"
+tmux new-session -d -s br-site "python3 -m http.server $SITE_PORT --bind 127.0.0.1 --directory '$ROOT/dev/site'"
+tmux new-session -d -s br-chrome "env HOME='$BHOME' BROWSER_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
 
 i=0; until curl -s 127.0.0.1:$CDP_PORT/json/version >/dev/null || [ $i -gt 100 ]; do i=$((i+1)); sleep 0.2; done
 # Only a host from this browser counts: a crash leaves the old one's file behind.
@@ -66,7 +72,7 @@ JSON
   tmux new-session -d -s br-claude -c "$DEV/workspace" -x 120 -y 40 "'$(command -v claude)' --mcp-config '$DEV/mcp.json' --strict-mcp-config --setting-sources project,local --permission-mode default --allowedTools mcp__browser-routines --model '${BR_MODEL:-sonnet}'"
 fi
 
-echo "Site     http://127.0.0.1:8765/ (tmux: br-site)"
+echo "Site     http://127.0.0.1:$SITE_PORT/ (tmux: br-site)"
 echo "Browser  CDP on $CDP_PORT (tmux: br-chrome)"
 [ -n "$CLAUDE" ] && echo "Agent    tmux attach -t br-claude"
 echo "State    $DEV"

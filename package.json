@@ -8,7 +8,8 @@
     "typecheck": "pnpm -r typecheck",
     "dev:up": "dev/up.sh",
     "dev:down": "dev/down.sh",
-    "e2e": "dev/e2e.sh"
+    "e2e": "dev/e2e.sh",
+    "e2e:api": "node dev/e2e-api.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

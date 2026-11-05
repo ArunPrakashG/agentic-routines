@@ -1,12 +1,13 @@
 // Real-browser check of what a person does: the toolbar icon opens the real side panel,
 // and every click and key reaches the page as an input event, not through page script.
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CDP = `http://127.0.0.1:${process.env.BR_CDP_PORT ?? 9333}`;
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const EXT_ID = 'fafmcnlaedchfncjiimcndjlfphdfkdo';
-const SITE = 'http://127.0.0.1:8765';
+const SITE = `http://127.0.0.1:${process.env.BR_SITE_PORT ?? 8765}`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('·', ...a);
@@ -88,7 +89,12 @@ for (let i = 0; i < 40 && !panelTarget; i++) {
 check(!!panelTarget, 'the toolbar icon opens the side panel');
 if (!panelTarget) process.exit(1);
 const panel = driver(await cdp(pageWs(panelTarget.targetId)));
-await panel.until((t) => /Routines|No routines/.test(t));
+check(await panel.until((t) => /Continue with Google/.test(t)), 'signed out, the panel asks to sign in');
+// Google's own screen needs a person. dev/e2e-api.mjs covers the API behind it.
+const worker = (await targets()).find((t) => t.type === 'service_worker' && t.url.includes(EXT_ID));
+const bg = driver(await cdp(pageWs(worker.targetId)));
+await bg.evaluate(`chrome.storage.local.set({ session: { account: { email: 'test@example.com', name: 'Test' }, access: 'x', accessExp: Date.now() + 3600000, refresh: 'x' } })`);
+await panel.until((t) => /Routines|No routines/.test(t) && !/Continue with Google/.test(t));
 const size = await panel.evaluate('({ w: innerWidth, h: innerHeight, scroll: document.documentElement.scrollWidth })');
 log('panel size', JSON.stringify(size));
 check(size.scroll <= size.w, 'nothing overflows the real panel');
@@ -175,6 +181,18 @@ check(await panel.until((t) => !/Stop recording/.test(t), 2000), 'R stops it');
 await sleep(300);
 log(JSON.stringify(await panel.text()));
 check(!/· 0 steps/.test(await panel.text()), 'an empty recording leaves nothing behind');
+
+// ---------- account ----------
+await panel.click(panel.button('Account, Test'));
+check(await panel.until((t) => /test@example\.com/.test(t), 2000), 'the account button shows the email');
+const shot = await panel.c.send('Page.captureScreenshot', { format: 'png' });
+mkdirSync(join(FIXTURES, '../../.dev'), { recursive: true });
+writeFileSync(join(FIXTURES, '../../.dev/panel-account.png'), Buffer.from(shot.data, 'base64'));
+await panel.c.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape' });
+check(await panel.until((t) => !/test@example\.com/.test(t), 2000), 'Escape closes the menu');
+await panel.click(panel.button('Account, Test'));
+await panel.click(panel.button('Sign out'));
+check(await panel.until((t) => /Continue with Google/.test(t)), 'signing out returns to the sign-in screen');
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 browser.close();

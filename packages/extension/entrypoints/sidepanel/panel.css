@@ -52,6 +52,18 @@ kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border-r
 .center p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-2); max-width: 260px; }
 .drift { animation: drift 6s ease-in-out infinite alternate; }
 @keyframes drift { to { transform: translateY(-4px); } }
+.bar-end { display: flex; align-items: center; gap: 4px; }
+.account { position: relative; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.account-menu { position: absolute; top: 48px; right: 4px; z-index: 10; min-width: 200px; max-width: calc(100vw - 24px); padding: 12px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); }
+.account-menu .email { font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.signin { gap: 28px; }
+.signin h1 { margin: 0; font-size: 21px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.signin-error { color: var(--danger) !important; }
+.signin-foot { flex-shrink: 0; padding: 16px; border: 0; text-align: center; font-size: 12px; color: var(--text-3); }
+/* Google's sign-in branding: the only place Roboto appears. */
+.gbtn { height: 44px; padding: 0 20px 0 14px; border-radius: 22px; border: 1px solid #747775; background: #fff; color: #1f1f1f; font: 500 14px/1 'Roboto', sans-serif; display: inline-flex; align-items: center; gap: 12px; cursor: pointer; }
+.gbtn:disabled { opacity: .6; cursor: default; }
 .onb { padding: 28px 16px; display: flex; flex-direction: column; gap: 20px; }
 .onb p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-2); }
 .cmd { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 2px 0 14px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-1); font-family: var(--font-mono); font-size: 13px; }

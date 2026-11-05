@@ -3,11 +3,13 @@ import '@fontsource/schibsted-grotesk/latin-500.css';
 import '@fontsource/schibsted-grotesk/latin-600.css';
 import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/roboto/latin-500.css';
 import './tokens.css';
 import './panel.css';
 import { compileRun, siteOf, type ParamSpec } from '@browser-routines/core';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import type { Account as AccountInfo } from '../../lib/auth';
 import type { PanelCommand, PanelState } from '../../lib/panel-types';
 
 // ---------- connection to the background ----------
@@ -135,6 +137,88 @@ function RecordButton({ on }: { on: boolean }) {
   );
 }
 
+function GoogleG() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  );
+}
+
+function SignIn() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  async function go() {
+    setBusy(true);
+    setError(false);
+    try {
+      await send({ t: 'signIn' });
+    } catch {
+      setError(true);
+    }
+    setBusy(false);
+  }
+  return (
+    <div class="panel">
+      <main class="center signin">
+        <Mark size={48} cls="drift" />
+        <div class="stack" style={{ gap: '8px', alignItems: 'center' }}>
+          <h1>Browser Routines</h1>
+          <p>Sign in once. Your routines follow you to every browser you use.</p>
+        </div>
+        <button class="gbtn" type="button" disabled={busy} onClick={go}>
+          <GoogleG />
+          Continue with Google
+        </button>
+        {error && (
+          <p class="signin-error" role="alert">
+            That didn't work. Try again.
+          </p>
+        )}
+      </main>
+      <footer class="signin-foot">Passwords you type are never saved.</footer>
+    </div>
+  );
+}
+
+function Account({ account }: { account: AccountInfo }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => {
+      removeEventListener('pointerdown', away);
+      removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  return (
+    <div class="account" ref={ref}>
+      <button class="icon-btn" type="button" aria-label={`Account, ${account.name}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span class="avatar">{(account.name || account.email).charAt(0).toUpperCase()}</span>
+      </button>
+      {open && (
+        <div class="account-menu">
+          <span class="email">{account.email}</span>
+          <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   const cmd = 'npx browser-routines setup';
@@ -145,6 +229,7 @@ function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
           <Mark />
           <h1>Routines</h1>
         </div>
+        {s.account && <Account account={s.account} />}
       </header>
       <main class="onb">
         <div class="stack" style={{ gap: '6px' }}>
@@ -206,7 +291,10 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
           <Mark />
           <h1>Routines</h1>
         </div>
-        {(!empty || recording) && <RecordButton on={recording} />}
+        <div class="bar-end">
+          {(!empty || recording) && <RecordButton on={recording} />}
+          {s.account && <Account account={s.account} />}
+        </div>
       </header>
       {empty && !recording ? (
         <main class="center">
@@ -721,6 +809,8 @@ function App() {
       />
     );
   }
+
+  if (!s.account) return <SignIn />;
 
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (
