@@ -1,0 +1,18 @@
+---
+import Base from '../../layouts/Base.astro';
+import DocsNav from '../../components/DocsNav.astro';
+import { pages, render } from '../../lib/docs';
+
+export function getStaticPaths() {
+  return pages.map((p) => ({ params: { slug: p.slug }, props: { summary: p.summary } }));
+}
+const { slug } = Astro.params;
+const { summary } = Astro.props;
+const { title, html } = await render(slug as string);
+---
+<Base title={title} description={summary}>
+  <div class="wrap docs">
+    <DocsNav current={slug} />
+    <article class="prose"><h1>{title}</h1><Fragment set:html={html} /></article>
+  </div>
+</Base>

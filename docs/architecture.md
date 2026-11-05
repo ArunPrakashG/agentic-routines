@@ -30,7 +30,7 @@ A routine is a skill for the browser. It is a folder with a `ROUTINE.md` that te
 | `browser-routines` npm package | `mcp` mode for agents, `host` mode for native messaging, `setup` to write agent configs and register the host with each browser | TypeScript, Node 20, `@modelcontextprotocol/sdk` |
 | `core` package | Routine format, compiler (drop navigation, find params, mark pauses), locator matching, shared by extension and package | TypeScript |
 | Directory API | Accounts, sync, publish, versions, search, install counts, reports | Go service on Postgres and Redis, behind Caddy and Cloudflare |
-| Site and directory pages | Marketing page, routine directory, user profiles, privacy page | Astro on Cloudflare Pages, reading the same API |
+| Site and docs | Marketing page, documentation, routine directory, user profiles, privacy page | Astro, static, served from its own container on the same host as the API, reading the same API |
 
 Everything above runs on free tiers to start.
 
@@ -191,8 +191,8 @@ packages/core        routine format, compiler, locator matching
 packages/extension   WXT extension (chrome, edge, firefox targets)
 packages/cli         npm package: mcp, host, setup
 apps/api             Go service: auth, sync, directory
-apps/site            Astro: marketing page, directory, profiles, privacy
-docs/                this file
+apps/site            Astro: marketing page, docs, directory, profiles, privacy
+docs/                this file, the guide pages (guide/), guidelines, privacy
 design/              approved mockups and tokens
 ```
 

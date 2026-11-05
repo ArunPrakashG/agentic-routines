@@ -1,0 +1,8 @@
+---
+import { pages } from '../lib/docs';
+const { current } = Astro.props as { current?: string };
+---
+<nav class="docs-nav" aria-label="Documentation">
+  <a href="/docs" aria-current={current === undefined ? 'page' : undefined}>Overview</a>
+  {pages.map((p) => <a href={`/docs/${p.slug}`} aria-current={current === p.slug ? 'page' : undefined}>{p.title}</a>)}
+</nav>
