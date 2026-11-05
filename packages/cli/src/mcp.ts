@@ -49,6 +49,7 @@ export function describeResult(r: RunResult): string {
       const parts = [`Done · ${r.steps_total} steps · ${calls} · ${clock(r.ms)}`];
       if (r.updated_to) parts.push(`routine updated to v${r.updated_to}`);
       let t = parts.join(' · ');
+      if (r.approved_in_panel?.length) t += `\nThe routine paused and the user approved ${r.approved_in_panel.join(', ')} in the side panel.`;
       if (r.read && Object.keys(r.read).length) t += '\n' + Object.entries(r.read).map(([k, v]) => `${k}: ${v}`).join('\n');
       return t;
     }
@@ -275,6 +276,7 @@ export async function runMcp(): Promise<void> {
         `Saved ${saved.meta.name} v${saved.meta.version} · ${saved.steps.length} of ${recorded} recorded steps (${dropped} replaced by a direct URL)` +
           (params.length ? ` · asks for ${params.join(', ')}` : '') +
           (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')}` : '') +
+          (saved.steps[0]?.url ? `\nStarts at ${saved.steps[0].url}, so it stays on what that address opens.` : '') +
           `\nRun it with ${toolName(saved.meta.name)}.`,
       );
     },

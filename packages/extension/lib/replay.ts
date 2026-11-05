@@ -22,6 +22,7 @@ export interface ReplayState {
   tabId: number;
   i: number;
   approved: Set<number>;
+  approvedInPanel: string[];
   modelCalls: number;
   fixes: Record<number, Locator>;
   crops: Record<number, string>;
@@ -79,6 +80,7 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     candidates: s.candidates,
     error: s.error,
     read: Object.keys(s.read).length ? s.read : undefined,
+    approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     fixes: s.fixes,
     crops: s.crops,
   };
@@ -185,6 +187,7 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
           return result(s);
         }
         s.approved.add(step.n);
+        s.approvedInPanel.push(`step ${step.n} “${step.label}”`);
         s.status = 'running';
         notify(s);
       }
@@ -215,6 +218,7 @@ export async function start(p: { routine: Routine; params: Record<string, string
     tabId: await agentTabId(),
     i: 0,
     approved: new Set(),
+    approvedInPanel: [],
     modelCalls: 0,
     fixes: {},
     crops: {},

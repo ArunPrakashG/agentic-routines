@@ -132,4 +132,6 @@ export interface RunResult {
   /** Text read by "read" steps, keyed by label. */
   read?: Record<string, string>;
   updated_to?: number;
+  /** Pauses the user approved in the side panel, which the agent otherwise cannot see. */
+  approved_in_panel?: string[];
 }

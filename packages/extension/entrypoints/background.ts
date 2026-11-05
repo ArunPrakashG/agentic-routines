@@ -168,5 +168,9 @@ export default defineBackground(() => {
   else if (b.sidebarAction) browser.action.onClicked.addListener(() => b.sidebarAction.toggle());
   browser.action.setBadgeBackgroundColor?.({ color: '#3530E0' });
 
+  // Chrome only wakes a service worker for an event, and agents need the host up.
+  browser.runtime.onStartup.addListener(() => {});
+  browser.runtime.onInstalled.addListener(() => {});
+
   native.connect();
 });

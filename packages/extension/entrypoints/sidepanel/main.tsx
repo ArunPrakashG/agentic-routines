@@ -61,6 +61,7 @@ function suggestName(url: string): string {
   return (base.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 40) || 'routine').replace(/^-|-$/g, '');
 }
 
+const MAC = /Mac/.test(navigator.platform);
 const NAME_OK = /^[a-z0-9][a-z0-9-]{1,62}$/;
 
 // ---------- icons ----------
@@ -647,8 +648,8 @@ function Replay({ r, done }: { r: NonNullable<PanelState['replay']>; done: () =>
               <button class="btn btn-stop" type="button" aria-keyshortcuts="Escape" onClick={() => send({ t: 'decide', id: r.id, approve: false })}>
                 Stop
               </button>
-              <button class="btn btn-primary" type="button" aria-keyshortcuts="Meta+Enter" onClick={() => send({ t: 'decide', id: r.id, approve: true })}>
-                {approveLabel} <kbd>⌘↵</kbd>
+              <button class="btn btn-primary" type="button" aria-keyshortcuts={MAC ? 'Meta+Enter' : 'Control+Enter'} onClick={() => send({ t: 'decide', id: r.id, approve: true })}>
+                {approveLabel} <kbd>{MAC ? '⌘↵' : 'Ctrl ↵'}</kbd>
               </button>
             </div>
           </section>
