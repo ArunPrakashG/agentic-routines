@@ -70,19 +70,19 @@
       "x": 4040,
       "y": 0,
       "w": 1440,
-      "h": 4650,
+      "h": 5952,
       "title": "Site \u00b7 desktop"
     },
     "SiteMobile.dc.html": {
       "x": 5600,
       "y": 0,
       "w": 375,
-      "h": 6300,
+      "h": 7330,
       "title": "Site \u00b7 mobile"
     },
     "Directory.dc.html": {
       "x": 4040,
-      "y": 4770,
+      "y": 6072,
       "w": 1440,
       "h": 1024,
       "title": "Site \u00b7 Directory"
