@@ -90,6 +90,14 @@ async function shot(name) {
 }
 const panelEval = async (expr) => (await panel.send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.value;
 const panelText = () => panelEval('document.body.innerText');
+// Waits on what the panel shows, not on the clock: it renders after a push from the background script.
+const panelWait = async (re, ms = 8000) => {
+  for (let i = 0; i < ms / 100; i++) {
+    if (re.test(await panelText())) return true;
+    await sleep(100);
+  }
+  return false;
+};
 const panelClick = (label) =>
   panelEval(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(${JSON.stringify(label)}) || x.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`);
 
@@ -198,7 +206,7 @@ log(t);
 check(/routine updated to v2/.test(t), 'fix saved as v2');
 if (panel) {
   await panelClick('Back to routines');
-  await sleep(300);
+  await panelWait(/Step \d+ changed on the last run/);
   t = await panelText();
   check(/ran just now/.test(t) && /Step \d+ changed on the last run/.test(t), 'the library shows the last run and the step that changed');
   await shot('07b-library-changed');
@@ -218,15 +226,15 @@ check(/^Done.*0 model calls/.test(t), 'v2 replays with no model calls');
 await evalIn((u) => u.startsWith(SITE), 'delete localStorage.variant');
 if (panel) {
   await panelClick('Back to routines');
-  await sleep(300);
+  await panelWait(/ran just now/);
   check(!/changed on the last run/.test(await panelText()), 'a clean run clears the changed note');
 }
 await shot('08-library-v2');
 if (panel) {
   await panelClick('Run acme-release');
-  await sleep(500);
+  const asks = await panelWait(/app_bundle[\s\S]*version_name[\s\S]*release_notes/);
   await shot('09-run-inputs');
-  check(/app_bundle[\s\S]*version_name[\s\S]*release_notes/.test(await panelText()), 'panel asks for the values before running');
+  check(asks, 'panel asks for the values before running');
 }
 
 // ---------- 6. save a run from the side panel ----------
@@ -356,19 +364,19 @@ if (panel) {
 
   // An agent asks. Nothing is public until the person says yes in the panel.
   const asked = ask('acme-draft');
-  check(await waitText(/Claude Code wants to publish/), 'the panel shows that the agent wants to publish');
+  check(await waitText(/Claude Code wants to submit/), 'the panel shows that the agent wants to publish');
   let txt = await panelText();
   check(/acme-draft/.test(txt) && /These values become public/.test(txt) && /Big one\./.test(txt), 'it lists the typed values that become public');
   check(!seen.some((x) => x.method === 'PUT'), 'nothing was sent yet');
   await shot('12-publish-ask');
   await setVal('.pubcard input.input', 'taken');
-  await panelClick('Publish');
+  await panelClick('Submit for review');
   check(await waitText(/That name is taken/), 'a name that is taken says so');
   await setVal('.pubcard input.input', 'tester');
-  await panelClick('Publish');
-  check(await waitText(/Published as tester\/acme-draft/), 'the card says it is published');
+  await panelClick('Submit for review');
+  check(await waitText(/Sent for review/), 'the card says it is sent for review');
   const done = await asked;
-  check(!done.error && /Published tester\/acme-draft v1/.test(done.text), 'and the agent that asked is told');
+  check(!done.error && /Sent tester\/acme-draft v1 for review/.test(done.text), 'and the agent that asked is told');
   await shot('13-publish-done');
 
   const put = seen.find((x) => x.method === 'PUT' && x.url === '/api/v1/routines/acme-draft');
@@ -378,21 +386,21 @@ if (panel) {
   if (process.env.AR_CAPTURE) writeFileSync(join(FIXTURES, 'published-routine.json'), JSON.stringify(put.body, null, 2) + '\n');
   await panelClick('Done');
   txt = await panelText();
-  check(/published v1/.test(txt), 'the library marks it published');
+  check(/sent for review v1/.test(txt), 'the library marks it sent for review');
   await shot('14-library-published');
 
   // Saying no.
   const refused = ask('acme-release');
-  check(await waitText(/Claude Code wants to publish/), 'a second ask shows its card');
+  check(await waitText(/Claude Code wants to submit/), 'a second ask shows its card');
   await panelClick('Not now');
   const no = await refused;
   check(no.error && /chose not to publish/.test(no.text), 'saying no tells the agent');
   await sleep(500);
-  check(!/wants to publish/.test(await panelText()) && !seen.some((x) => x.url.endsWith('/acme-release')), 'and nothing was sent');
+  check(!/wants to submit/.test(await panelText()) && !seen.some((x) => x.url.endsWith('/acme-release')), 'and nothing was sent');
 
   // From the library, with no agent asking.
-  await panelClick('Publish acme-release');
-  check((await waitText(/Anyone can see and install it/)) && /acme-release/.test(await panelText()), 'the Publish button in the library opens the card');
+  await panelClick('Submit acme-release for review');
+  check((await waitText(/We read every submission/)) && /acme-release/.test(await panelText()), 'the Submit button in the library opens the card');
   await panelClick('Not now');
 
   // From the Save view.
@@ -404,12 +412,12 @@ if (panel) {
   await sleep(400);
   await setVal('input.input', 'acme-tiny');
   await setVal('textarea', 'Open the apps list on the test console. Use when the user asks to look at the apps.');
-  check(/Publish to the directory/.test(await panelText()), 'the Save view offers to publish');
+  check(/Submit to the directory for review/.test(await panelText()), 'the Save view offers to submit');
   await panelEval(`document.querySelector('footer input[type=checkbox]').click()`);
   await panelClick('Save routine');
   // Not the Save view's own checkbox label: the card says who can see it.
-  const opened = (await waitText(/Anyone can see and install it/)) && /acme-tiny/.test(await panelText());
-  check(opened, 'saving with Publish ticked opens the card for it');
+  const opened = (await waitText(/We read every submission/)) && /acme-tiny/.test(await panelText());
+  check(opened, 'saving with the box ticked opens the card for it');
   await panelClick('Not now');
   api.close();
 }
