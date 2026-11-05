@@ -32,6 +32,9 @@ const MESSAGES: Record<string, string> = {
   body_too_long: 'The notes are too long.',
   bad_steps: 'The steps are not in a shape the directory takes.',
   too_many_routines: 'You have reached the limit of published routines. Take one down first.',
+  blocked: 'This account cannot send routines to the directory.',
+  too_many_waiting: 'You have ten waiting for review. Wait for a decision or withdraw one.',
+  slow_down: 'You have sent a lot today. Try again tomorrow.',
   rate_limited: 'Too many tries. Wait a minute.',
 };
 
@@ -61,11 +64,45 @@ function payload(r: Routine, agentRaw?: string) {
   return { meta: { name, site, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw }, body: r.body, steps: r.steps };
 }
 
-export async function publish(r: Routine): Promise<{ owner: string; name: string; version: number }> {
+/** Sends the routine for review. Nothing is public until a person approves it. */
+export async function publish(r: Routine): Promise<{ id: string; owner: string; name: string; version: number; status: 'pending' }> {
   const res = await auth.api('PUT', `/routines/${r.meta.name}`, payload(r));
   if (res.ok) return res.json();
   const code = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? '';
-  throw new Error(MESSAGES[code] ?? 'Could not publish. Try again.');
+  throw new Error(MESSAGES[code] ?? 'Could not send it. Try again.');
+}
+
+export interface Submission {
+  id: string;
+  name: string;
+  site: string;
+  version: number;
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  guideline: string | null;
+  note: string | null;
+  submitted_at: string;
+  decided_at: string | null;
+}
+export interface LiveRoutine {
+  name: string;
+  site: string;
+  version: number;
+  installs: number;
+  updated_at: string;
+  disabled: boolean;
+  disabled_reason: string | null;
+}
+
+/** What this account has live, and what it sent for review. Read only; an agent can ask for it but not change it. */
+export async function mine(): Promise<{ routines: LiveRoutine[]; submissions: Submission[] }> {
+  const [live, sent] = await Promise.all([auth.api('GET', '/me/routines'), auth.api('GET', '/me/submissions')]);
+  if (!live.ok || !sent.ok) throw new Error('Could not load your submissions. Try again.');
+  return { routines: ((await live.json()) as { routines: LiveRoutine[] }).routines, submissions: ((await sent.json()) as { submissions: Submission[] }).submissions };
+}
+
+export async function withdraw(id: string): Promise<void> {
+  const res = await auth.api('DELETE', `/me/submissions/${id}`);
+  if (!res.ok && res.status !== 404) throw new Error('Could not withdraw it. Try again.');
 }
 
 export async function claimHandle(handle: string): Promise<void> {

@@ -380,12 +380,33 @@ export async function runMcp(): Promise<void> {
     'routine_publish',
     {
       description:
-        'Publish a saved routine to the public directory. Only when the user asked for it. The user is asked to confirm in the browser side panel, where they see what becomes public, so this waits for them. Needs a signed-in account.',
+        'Send a saved routine to the public directory for review. Only when the user asked for it. The user is asked to confirm in the browser side panel, where they see what becomes public, so this waits for them. Needs a signed-in account. Nothing is listed until a person reads it and approves it, so do not tell the user it is published. Use routine_submissions to see where it stands.',
       inputSchema: { name: z.string() },
     },
     async ({ name }) => {
       const r = await bridge.call<{ owner: string; name: string; version: number }>('directory.publish', { id: name }, 11 * 60_000);
-      return text(`Published ${r.owner}/${r.name} v${r.version}. Others can install it with routine_install.`);
+      return text(`Sent ${r.owner}/${r.name} v${r.version} for review. It is private until a person approves it; the user sees the decision in the side panel under Your submissions. Only the user can withdraw it.`);
+    },
+  );
+
+  server.registerTool(
+    'routine_submissions',
+    {
+      description: 'See where the routines the user sent to the directory stand: waiting for review, rejected (with the guideline and what to change), live, or turned off. Read only.',
+      inputSchema: {},
+    },
+    async () => {
+      const r = await bridge.call<{
+        routines: { name: string; version: number; installs: number; disabled: boolean; disabled_reason: string | null }[];
+        submissions: { name: string; version: number; status: string; guideline: string | null; note: string | null }[];
+      }>('directory.submissions', {}, 20_000);
+      const lines = [
+        ...r.submissions
+          .filter((x) => x.status === 'pending' || x.status === 'rejected')
+          .map((x) => (x.status === 'pending' ? `${x.name} v${x.version}: waiting for review` : `${x.name} v${x.version}: rejected under ${x.guideline}. ${x.note ?? ''}`.trim())),
+        ...r.routines.map((x) => (x.disabled ? `${x.name} v${x.version}: turned off. ${x.disabled_reason ?? ''}`.trim() : `${x.name} v${x.version}: live, ${x.installs} installs`)),
+      ];
+      return text(lines.length ? lines.join('\n') : 'Nothing sent to the directory yet.');
     },
   );
 

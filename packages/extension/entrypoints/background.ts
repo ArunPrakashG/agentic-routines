@@ -20,6 +20,8 @@ export default defineBackground(() => {
     // A rebuilt unpacked extension only runs after a reload. Waits so the answer gets out first.
     if (method === 'extension.reload') return void setTimeout(() => browser.runtime.reload(), 100);
     if (method === 'directory.publish') return askToPublish(p.id, agent.agentName(p.agent));
+    // The status of what the person sent. Reading only: an agent cannot approve, withdraw or change any of it.
+    if (method === 'directory.submissions') return directory.mine();
     if (method === 'replay.start') return replay.start(p);
     if (method === 'replay.resume') return replay.resume(p);
     if (method === 'agent.hello') {
@@ -209,6 +211,10 @@ export default defineBackground(() => {
         return beginPublish(c.id);
       case 'publishDecide':
         return decidePublish(c.approve, c.handle);
+      case 'submissions':
+        return directory.mine();
+      case 'withdraw':
+        return directory.withdraw(c.id);
       case 'discard':
         return runs.discard(c.runId);
       case 'inputs': {
