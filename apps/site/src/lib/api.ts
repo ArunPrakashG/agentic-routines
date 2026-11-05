@@ -1,5 +1,5 @@
 // The public directory API. Read in the browser, so the site stays static.
-export const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://browserroutines.arunprakashg.com/api/v1';
+export const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || '/api/v1';
 
 export interface Summary {
   owner: string;

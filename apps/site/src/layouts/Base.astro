@@ -9,7 +9,7 @@ interface Props {
   jsonLd?: object;
   dark?: boolean;
 }
-const { title, description, path = Astro.url.pathname, noindex = false, jsonLd, dark = false } = Astro.props;
+const { title, description, path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/?index$/, '/'), noindex = false, jsonLd, dark = false } = Astro.props;
 const canonical = new URL(path, Astro.site).toString().replace(/\/$/, '') || String(Astro.site);
 const full = title === 'Browser Routines' ? title : `${title} · Browser Routines`;
 const here = Astro.url.pathname.replace(/\.html$/, '');

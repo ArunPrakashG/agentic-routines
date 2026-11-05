@@ -38,7 +38,7 @@ import '../styles/directory.css';
   async function load(q: string, more = false) {
     if (!more) { offset = 0; last = q; }
     const host = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(q) ? q.toLowerCase() : '';
-    const u = new URL(`${API}/routines`);
+    const u = new URL(`${API}/routines`, location.origin);
     if (host) u.searchParams.set('site', host); else if (q) u.searchParams.set('q', q);
     u.searchParams.set('limit', String(PAGE));
     u.searchParams.set('offset', String(offset));
