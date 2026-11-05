@@ -31,4 +31,4 @@ Other options:
 - A new build gets a new browser profile, because Chromium keeps the old background script in a reused one. The panel's onboarding and the page's `localStorage` start over.
 - `dev/up.sh --no-build` skips the build. `--headless` and `--no-claude` do what they say.
 - `BR_MODEL=haiku dev/up.sh` picks the model. `BR_DEV_DIR` moves the state folder. `BR_CHROME` picks the browser.
-- `pnpm e2e` is the scripted check: a fresh headless browser and store, with no model calls. It replaces a running environment. Add `--shots` to save panel screenshots to `.dev/e2e-*/shots`.
+- `pnpm e2e` is the scripted check: fresh headless browsers and stores, with no model calls. It covers an agent over MCP, then a person recording and replaying a demo in the real side panel with input events. It replaces a running environment. Add `--shots` to save panel screenshots to `.dev/e2e-*/shots`.
