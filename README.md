@@ -62,6 +62,8 @@ More in [Getting started](docs/guide/getting-started.md).
 - `routines_list` and `routine_describe` show everything saved. `routines_search` also looks in the directory and in repositories you added.
 - A replay ends as done, paused or needing a choice. The agent continues a paused replay with `routine_resume`.
 
+`setup` also tells each agent to use Agentic Routines for all browser work and to try a saved routine first. Add `--exclusive` to turn off other browser tools, and `--remove` takes it all back out ([How agents choose](docs/guide/agents.md)). For Claude Code alone, the plugin installs with `/plugin install agentic-routines --marketplace ArunPrakashG/agentic-routines`.
+
 The full list of tools is in [Agent tools](docs/guide/tools.md), and the loop an agent follows to save a routine is in [Refine a routine](docs/guide/refine.md).
 
 ## Routine repositories

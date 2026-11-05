@@ -1,0 +1,9 @@
+{
+  "name": "agentic-routines",
+  "version": "0.1.0",
+  "description": "Makes Claude Code use Agentic Routines for all browser work and prefer a saved routine when one fits. Can block other browser tools.",
+  "author": { "name": "Arun Prakash" },
+  "homepage": "https://agenticroutines.arunprakashg.com/docs/agents",
+  "license": "MIT",
+  "keywords": ["browser", "routines", "mcp"]
+}

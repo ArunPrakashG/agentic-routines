@@ -1,0 +1,13 @@
+{
+  "name": "agentic-routines",
+  "owner": { "name": "Arun Prakash" },
+  "metadata": { "description": "Agentic Routines: use the browser through saved routines." },
+  "plugins": [
+    {
+      "name": "agentic-routines",
+      "source": "./plugins/agentic-routines",
+      "description": "A skill that makes Claude Code use Agentic Routines for all browser work and prefer a saved routine, plus an optional hook that blocks other browser tools.",
+      "category": "productivity"
+    }
+  ]
+}
