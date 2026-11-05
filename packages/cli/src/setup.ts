@@ -5,16 +5,11 @@ import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+import { BROWSERS, hostManifest, type Browser, type OS } from '@browser-routines/browsers';
 import { HOST_NAME, paths } from './paths.ts';
 
 // `npx browser-routines setup`: register the native host with every browser
 // found, and add the MCP server to every agent found.
-
-export const EXTENSION_IDS = {
-  // Pinned by the public key in the extension manifest; store ids are added at release.
-  chrome: ['fafmcnlaedchfncjiimcndjlfphdfkdo'],
-  firefox: ['browser-routines@browser-routines.dev'],
-};
 
 const SERVER = 'browser-routines';
 const H = homedir();
@@ -49,51 +44,45 @@ async function writeHostWrapper(): Promise<string> {
   return p;
 }
 
-function browserDirs(): { name: string; dir: string; firefox?: boolean }[] {
-  const mac = platform() === 'darwin';
-  const base = mac ? join(H, 'Library/Application Support') : join(H, '.config');
-  const chromium: [string, string][] = mac
-    ? [
-        ['Chrome', 'Google/Chrome'],
-        ['Chromium', 'Chromium'],
-        ['Edge', 'Microsoft Edge'],
-        ['Brave', 'BraveSoftware/Brave-Browser'],
-        ['Vivaldi', 'Vivaldi'],
-        ['Arc', 'Arc/User Data'],
-      ]
-    : [
-        ['Chrome', 'google-chrome'],
-        ['Chromium', 'chromium'],
-        ['Edge', 'microsoft-edge'],
-        ['Brave', 'BraveSoftware/Brave-Browser'],
-        ['Vivaldi', 'vivaldi'],
-      ];
-  const out = chromium.map(([name, d]) => ({ name, dir: join(base, d) }));
-  out.push({ name: 'Firefox', dir: mac ? join(base, 'Mozilla') : join(H, '.mozilla'), firefox: true } as any);
-  return out;
+function profileDir(b: Browser): string | undefined {
+  const rel = b.profile[platform() as OS];
+  if (!rel) return;
+  if (platform() !== 'win32') return join(H, rel);
+  const base = b.engine === 'gecko' ? (process.env.APPDATA ?? join(H, 'AppData/Roaming')) : (process.env.LOCALAPPDATA ?? join(H, 'AppData/Local'));
+  return join(base, rel);
 }
 
 async function registerHost(dry: boolean): Promise<Line[]> {
-  if (platform() === 'win32') return [{ ok: false, name: 'Browsers', detail: 'Windows needs registry entries; not supported by setup yet' }];
-  const wrapper = dry ? join(paths.bin(), 'host') : await writeHostWrapper();
+  const wrapper = dry ? join(paths.bin(), platform() === 'win32' ? 'host.bat' : 'host') : await writeHostWrapper();
   const lines: Line[] = [];
-  for (const b of browserDirs()) {
-    if (!existsSync(b.dir)) continue;
-    const target = join(b.dir, b.firefox ? 'native-messaging-hosts' : 'NativeMessagingHosts', `${HOST_NAME}.json`);
-    const manifest = {
-      name: HOST_NAME,
-      description: 'Browser Routines',
-      path: wrapper,
-      type: 'stdio',
-      ...(b.firefox ? { allowed_extensions: EXTENSION_IDS.firefox } : { allowed_origins: EXTENSION_IDS.chrome.map((id) => `chrome-extension://${id}/`) }),
-    };
+  const done = new Set<string>();
+  for (const b of BROWSERS) {
+    const dir = profileDir(b);
+    if (!dir || !existsSync(dir)) continue;
+    const manifest = hostManifest(b, HOST_NAME, wrapper);
+    if (platform() === 'win32') {
+      // Windows finds the manifest through a registry key, and some browsers share one.
+      if (!b.registry) continue;
+      const file = join(paths.root(), 'manifests', `${b.engine}.json`);
+      if (!dry) {
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, JSON.stringify(manifest, null, 2) + '\n');
+        if (!done.has(b.registry)) execFileSync('reg', ['add', `HKCU\\${b.registry}\\${HOST_NAME}`, '/ve', '/t', 'REG_SZ', '/d', file, '/f'], { stdio: 'ignore' });
+      }
+      done.add(b.registry);
+      lines.push({ ok: true, name: b.name, detail: `HKCU\\${b.registry}` });
+      continue;
+    }
+    const hosts = b.hosts[platform() as 'darwin' | 'linux'];
+    if (!hosts) continue;
+    const target = join(H, hosts, `${HOST_NAME}.json`);
     if (!dry) {
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, JSON.stringify(manifest, null, 2) + '\n');
     }
     lines.push({ ok: true, name: b.name, detail: tilde(target) });
   }
-  if (!lines.length) lines.push({ ok: false, name: 'Browsers', detail: 'No Chrome, Edge, Brave or Firefox profile found' });
+  if (!lines.length) lines.push({ ok: false, name: 'Browsers', detail: `No ${BROWSERS.map((b) => b.name).join(', ')} profile found` });
   return lines;
 }
 
