@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseRoutineMd, stringifyRoutineMd, type Routine, type Step } from '@browser-routines/core';
+import { parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@browser-routines/core';
 import { paths } from './paths.ts';
 
 // Routines live at ~/.browser-routines/routines/<owner>/<name>/{ROUTINE.md,steps.json}.
@@ -16,6 +16,10 @@ export interface Listed {
   description: string;
   enabled: boolean;
   draftedBy?: string;
+  /** Set when it came from somewhere other than the person's own recordings. */
+  origin?: Origin;
+  /** Why it was turned off by a block, when it was. */
+  blocked?: string;
 }
 
 function dir(owner: string, name: string) {
@@ -53,13 +57,23 @@ export async function list(): Promise<Listed[]> {
         const md = await readFile(join(paths.routines(), owner, name, 'ROUTINE.md'), 'utf8');
         const { meta } = parseRoutineMd(md);
         const disabled = await readFile(join(paths.routines(), owner, name, '.disabled'), 'utf8').then(() => true, () => false);
-        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by });
+        const origin = await readJson<Origin>(join(paths.routines(), owner, name, '.origin.json'));
+        const blocked = (await readJson<{ reason: string }>(join(paths.routines(), owner, name, '.blocked.json')))?.reason;
+        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked });
       } catch {
         // Not a routine folder.
       }
     }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function readJson<T>(file: string): Promise<T | undefined> {
+  try {
+    return JSON.parse(await readFile(file, 'utf8')) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function read(id: string): Promise<Routine & { owner: string }> {
@@ -77,7 +91,7 @@ async function atomicWrite(file: string, text: string) {
 }
 
 /** Save a routine. Versions only go up: saving over an existing one bumps it. */
-export async function write(r: Routine, owner = r.meta.owner ?? LOCAL): Promise<Routine> {
+export async function write(r: Routine, owner = r.meta.owner ?? LOCAL, origin?: Origin): Promise<Routine> {
   const d = dir(owner, r.meta.name);
   await mkdir(d, { recursive: true, mode: 0o700 });
   let version = r.meta.version;
@@ -90,6 +104,9 @@ export async function write(r: Routine, owner = r.meta.owner ?? LOCAL): Promise<
   const saved: Routine = { ...r, meta: { ...r.meta, owner: owner === LOCAL ? undefined : owner, version } };
   await atomicWrite(join(d, 'steps.json'), JSON.stringify(saved.steps, null, 2) + '\n');
   await atomicWrite(join(d, 'ROUTINE.md'), stringifyRoutineMd(saved.meta, saved.body));
+  if (origin) await atomicWrite(join(d, '.origin.json'), JSON.stringify(origin) + '\n');
+  // A new copy is the person's call again, so an earlier block note goes.
+  await rm(join(d, '.blocked.json'), { force: true });
   return saved;
 }
 
@@ -101,6 +118,15 @@ export async function remove(id: string): Promise<void> {
 export async function setEnabled(id: string, enabled: boolean): Promise<void> {
   const [owner, name] = await locate(id);
   const f = join(dir(owner, name), '.disabled');
-  if (enabled) await rm(f, { force: true });
-  else await writeFile(f, '');
+  if (enabled) {
+    await rm(f, { force: true });
+    await rm(join(dir(owner, name), '.blocked.json'), { force: true });
+  } else await writeFile(f, '');
+}
+
+/** Turns a routine off because of a block, and says why. Turning it on again by hand is the person's call. */
+export async function block(owner: string, name: string, reason: string): Promise<void> {
+  const d = dir(owner, name);
+  await writeFile(join(d, '.disabled'), '');
+  await atomicWrite(join(d, '.blocked.json'), JSON.stringify({ reason, at: new Date().toISOString() }) + '\n');
 }

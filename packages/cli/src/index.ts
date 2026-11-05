@@ -2,6 +2,7 @@ import { runDoctor } from './doctor.ts';
 import { runHost } from './host.ts';
 import { runMcp } from './mcp.ts';
 import { runSetup } from './setup.ts';
+import { runExport, runSources } from './sources-cli.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -18,6 +19,11 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
     console.error(e.message);
     process.exit(1);
   });
+} else if (cmd === 'sources' || cmd === 'export') {
+  (cmd === 'sources' ? runSources(args) : runExport(args)).catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
 } else if (cmd === 'doctor') {
   runDoctor();
 } else {
@@ -25,6 +31,8 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
 
   setup [--dry-run]   Connect your browsers and agents (Claude Code, Codex, Copilot, OpenCode)
   doctor              Check what is connected and what is not
+  sources             List, add, remove, turn on or off the places routines can come from
+  export <routine>    Print a routine as one file to put in a Git repository's routines folder
   mcp                 Run the MCP server (agents start this)
   host                Run the native host (browsers start this)`);
 }

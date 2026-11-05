@@ -11,6 +11,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Account as AccountInfo } from '../../lib/auth';
 import type { LiveRoutine, Submission } from '../../lib/directory';
+import type { GitCard, SourceEntries, SourcesData } from '../../lib/git';
 import type { PanelCommand, PanelState } from '../../lib/panel-types';
 
 // ---------- connection to the background ----------
@@ -127,7 +128,7 @@ const Pips = ({ colors, label }: { colors?: string[]; label: string }) => (
 
 // ---------- views ----------
 
-type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' };
+type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' };
 
 function RecordButton({ on }: { on: boolean }) {
   return (
@@ -212,6 +213,11 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
         <div class="account-menu">
           <span class="email">{account.email}</span>
           {go && (
+            <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'sources' }); }}>
+              Sources
+            </button>
+          )}
+          {go && (
             <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'submissions' }); }}>
               Your submissions
             </button>
@@ -226,6 +232,198 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const repoName = (id: string) => id.replace(/^https:\/\/github\.com\//, '');
+
+function Sources({ back }: { back: () => void }) {
+  const [data, setData] = useState<SourcesData>();
+  const [error, setError] = useState('');
+  const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<string>();
+  const [found, setFound] = useState<SourceEntries>();
+  const load = () => send<SourcesData>({ t: 'sources' }).then(setData, (e) => setError(e.message));
+  useEffect(() => void load(), []);
+  const act = (p: Promise<unknown>) => p.then(() => { setError(''); return load(); }, (e) => setError(e.message));
+  const add = async () => {
+    setBusy(true);
+    await act(send({ t: 'sourceAdd', address }).then(() => setAddress('')));
+    setBusy(false);
+  };
+  const expand = (id: string) => {
+    if (open === id) return setOpen(undefined);
+    setOpen(id);
+    setFound(undefined);
+    send<SourceEntries[]>({ t: 'sourceEntries', id }).then((r) => setFound(r[0]), (e) => setError(e.message));
+  };
+  return (
+    <div class="panel">
+      <header class="bar back">
+        <button class="icon-btn" type="button" aria-label="Back to routines" onClick={back}>
+          <Back />
+        </button>
+        <h1>Sources</h1>
+      </header>
+      <main class="form" style={{ gap: '24px' }}>
+        <p class="meta" style={{ margin: 0, whiteSpace: 'normal', fontSize: '13px', lineHeight: '20px' }}>
+          Where routines can come from. Turn a source off and its routines stop appearing in search and can’t be installed. Routines you already have stay.
+        </p>
+        {error && (
+          <span class="err" role="alert">
+            {error}
+          </span>
+        )}
+        {data && (
+          <section class="subs srcs" aria-label="Sources" style={{ borderTop: '1px solid var(--border)' }}>
+            <div class="src">
+              <div class="stack" style={{ flex: 1 }}>
+                <span class="top">
+                  <span class="name">Directory</span>
+                  <span class="tag ok">Reviewed</span>
+                </span>
+                <span class="meta">Reviewed before it is listed</span>
+              </div>
+              <Switch on={data.directory} label="Directory" set={(on) => act(send({ t: 'sourceSet', id: 'directory', enabled: on }))} />
+            </div>
+            {data.sources.map((x) => (
+              <div key={x.id}>
+                <div class="src">
+                  <button class="src-name" type="button" aria-expanded={open === x.id} disabled={!x.enabled} onClick={() => expand(x.id)}>
+                    <span class="name">{x.kind === 'folder' ? x.id.replace(/^\/home\/[^/]+/, '~') : repoName(x.id)}</span>
+                    <span class="meta">
+                      {x.kind === 'folder' ? 'Local folder' : 'GitHub'} · {!x.enabled ? 'turned off' : x.error ? 'could not be read' : `${x.routines ?? 0} routines${x.checkedAt ? ` · checked ${ago(x.checkedAt)}` : ''}`}
+                    </span>
+                  </button>
+                  <Switch on={x.enabled} label={repoName(x.id)} set={(on) => act(send({ t: 'sourceSet', id: x.id, enabled: on }))} />
+                </div>
+                {x.error && <span class="err">{x.error}</span>}
+                {open === x.id && (
+                  <div class="entries">
+                    {!found && <span class="meta">Reading…</span>}
+                    {found?.error && <span class="err">{found.error}</span>}
+                    {found?.entries.map((e) => (
+                      <div class="entry" key={e.path}>
+                        <div class="stack" style={{ flex: 1 }}>
+                          <span class="name">{e.name}</span>
+                          <span class="meta">{e.site}</span>
+                        </div>
+                        <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'gitPreview', source: x.id, path: e.path }).then(back, (er) => setError(er.message))}>
+                          Review
+                        </button>
+                      </div>
+                    ))}
+                    {!!found?.skipped && <span class="meta">{found.skipped} {found.skipped === 1 ? 'file was' : 'files were'} not a routine and left out.</span>}
+                    <button class="btn btn-ghost sm" type="button" onClick={() => act(send({ t: 'sourceRemove', id: x.id }).then(() => setOpen(undefined)))}>
+                      Remove this source
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
+        <section class="stack" style={{ gap: '10px' }} aria-label="Add a source">
+          <h2 class="h3">Add a source</h2>
+          <form class="addsrc" onSubmit={(e) => { e.preventDefault(); if (address.trim() && !busy) add(); }}>
+            <input class="input" type="text" aria-label="GitHub address or folder" spellcheck={false} placeholder="github.com/owner/repository" value={address} onInput={(e) => setAddress(e.currentTarget.value)} />
+            <button class="btn btn-secondary" type="submit" disabled={busy || !address.trim()}>
+              {busy ? 'Adding…' : 'Add'}
+            </button>
+          </form>
+          <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
+            A GitHub repository or a folder on this computer. Routines are plain <code>.md</code> files in a <code>routines</code> folder.
+          </span>
+          <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
+            Only the Directory is reviewed by us. For anything else, you see every step before it installs.
+          </span>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function Switch({ on, label, set }: { on: boolean; label: string; set: (on: boolean) => void }) {
+  return <button class="sw" type="button" role="switch" aria-checked={on} aria-label={`${label} on`} onClick={() => set(!on)} />;
+}
+
+function InstallGit({ card }: { card: GitCard }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? card.steps : card.steps.slice(0, 4);
+  const blocked = card.problems.length > 0;
+  return (
+    <div class="panel">
+      <header class="bar back">
+        <button class="icon-btn" type="button" aria-label="Cancel" disabled={card.busy} onClick={() => send({ t: 'gitDecide', approve: false })}>
+          <Back />
+        </button>
+        <h1>Install routine</h1>
+      </header>
+      <main class="form install" style={{ gap: '16px' }}>
+        <div class="stack" style={{ gap: '2px' }}>
+          <span class="mono" style={{ fontSize: '13px' }}>{card.kind === 'folder' ? card.source.replace(/^\/home\/[^/]+/, '~') : repoName(card.source)}</span>
+          <span class="meta mono">{card.path}{card.ref ? ` · ${card.ref.slice(0, 7)}` : ''}</span>
+        </div>
+        <div class="warnbox" role="note">
+          <span class="wt">Not reviewed by Browser Routines</span>
+          <span class="meta">{card.by ? `${card.by} asked for this. ` : ''}Anyone can put a routine in a repository. Read the steps before you install.</span>
+        </div>
+        <div class="stack" style={{ gap: '6px' }}>
+          <span class="title mono">{card.name}</span>
+          <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere' }}>{card.description}</span>
+        </div>
+        <div class="facts">
+          <span><b>{card.steps.length}</b> steps</span>
+          <span><b>{card.pauses}</b> {card.pauses === 1 ? 'pause' : 'pauses'}</span>
+          <span><b>{card.params.length}</b> {card.params.length === 1 ? 'input' : 'inputs'}{card.params.length ? `: ${card.params.join(', ')}` : ''}</span>
+        </div>
+        <section class="gsteps" aria-label="Steps">
+          {shown.map((x) => (
+            <div class={x.pause ? 'gstep flag' : 'gstep'} key={x.n}>
+              <span class="n">{x.n}</span>
+              <span>{x.action}</span>
+              <span class="t">{x.action === 'navigate' || x.action === 'type' || x.action === 'select' ? (x.value ?? x.label) : x.label}</span>
+              {x.pause && <span class="tag warn">pause</span>}
+            </div>
+          ))}
+          {card.steps.length > 4 && (
+            <button class="btn btn-ghost sm" type="button" onClick={() => setAll(!all)}>
+              {all ? 'Show fewer' : `${card.steps.length - 4} more · Show all`}
+            </button>
+          )}
+        </section>
+        {blocked ? (
+          <div class="warnbox bad" role="alert">
+            <span class="wt">It can’t be installed</span>
+            {card.problems.map((p) => (
+              <span class="meta" key={p}>{p}</span>
+            ))}
+          </div>
+        ) : (
+          <ul class="ticks">
+            <li>Every step stays on <span class="mono">{card.site}</span></li>
+            <li>No saved passwords or tokens</li>
+            <li>It runs in your signed-in browser, so it can do anything you can on that site</li>
+          </ul>
+        )}
+        {card.installed && <span class="meta" style={{ whiteSpace: 'normal' }}>You have v{card.installed.version}. This replaces it.</span>}
+        {card.error && <span class="err" role="alert">{card.error}</span>}
+        <div class="foot2">
+          <button class="btn btn-ghost" type="button" disabled={card.busy} onClick={() => send({ t: 'gitDecide', approve: false })}>
+            Cancel
+          </button>
+          <button class="btn btn-primary" type="button" disabled={card.busy || blocked} onClick={() => send({ t: 'gitDecide', approve: true })}>
+            {card.busy ? 'Installing…' : 'Install'}
+          </button>
+        </div>
+        {card.ref && (
+          <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
+            Pinned to commit <span class="mono">{card.ref.slice(0, 7)}</span>. Later changes are never applied on their own: you will see what changed first.
+          </span>
+        )}
+      </main>
     </div>
   );
 }
@@ -511,7 +709,8 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                   <div class="stack" style={{ flex: 1 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span class="name">{r.name}</span>
-                      {r.owner !== 'local' && <span class="badge">by {r.owner}</span>}
+                      {r.owner !== 'local' && <span class="badge">by {r.owner.replace(/^(gh|folder)_/, '')}</span>}
+                      {r.origin && r.origin.kind !== 'directory' && <span class="tag warn">Not reviewed</span>}
                     </span>
                     <span class="desc">{r.description.split(/\bUse when\b/i)[0].trim() || r.description}</span>
                     <span class="meta">
@@ -520,12 +719,18 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                       {r.published ? ` · sent for review v${r.published.version}` : ''}
                       {r.lastRun ? ` · ran ${ago(r.lastRun)}` : ''}
                     </span>
+                    {r.blocked && <span class="changed">Turned off: {r.blocked}</span>}
                     {!!r.changed?.length && (
                       <span class="changed">
                         {r.changed.length === 1 ? 'Step' : 'Steps'} {r.changed.join(', ')} changed on the last run
                       </span>
                     )}
                   </div>
+                  {!r.enabled && !r.blocked && (
+                    <button class="btn btn-ghost sm" type="button" aria-label={`Turn ${r.name} on`} onClick={() => send({ t: 'enable', id: `${r.owner}/${r.name}`, enabled: true })}>
+                      Turn on
+                    </button>
+                  )}
                   {r.owner === 'local' && !s.publish && (
                     <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => send({ t: 'publish', id: `local/${r.name}` })}>
                       Submit
@@ -535,7 +740,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                     class="icon-btn"
                     type="button"
                     aria-label={`Run ${r.name}`}
-                    disabled={!!s.replay}
+                    disabled={!!s.replay || !r.enabled}
                     onClick={() => go({ v: 'inputs', id: `${r.owner}/${r.name}`, name: r.name })}
                   >
                     <Play />
@@ -998,6 +1203,7 @@ function App() {
   }
 
   if (!s.account) return <SignIn />;
+  if (s.install) return <InstallGit card={s.install} />;
 
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (
@@ -1014,6 +1220,7 @@ function App() {
   if (view.v === 'save') return <Save s={s} runId={view.runId} back={back} />;
   if (view.v === 'inputs') return <Inputs id={view.id} name={view.name} back={back} />;
   if (view.v === 'submissions') return <Submissions s={s} back={back} />;
+  if (view.v === 'sources') return <Sources back={back} />;
   return <Library s={s} go={setView} />;
 }
 

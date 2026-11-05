@@ -4,6 +4,7 @@ import { createServer, type Socket } from 'node:net';
 import { basename, join } from 'node:path';
 import { paths, socketPath } from './paths.ts';
 import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from './protocol.ts';
+import * as sources from './sources.ts';
 import * as store from './store.ts';
 
 // Started by the browser through native messaging, one per browser.
@@ -20,18 +21,37 @@ function log(...a: unknown[]) {
   }
 }
 
-export async function handleStore(method: string, p: any): Promise<unknown> {
+// What an agent may ask of the host over the socket. Changing sources and installing from them is only
+// ever done from the browser, after the person clicked.
+const AGENT_MAY = new Set(['store.list', 'store.read', 'store.write', 'store.remove', 'store.setEnabled', 'sources.list', 'sources.entries', 'sources.preview']);
+
+export async function handleStore(method: string, p: any, fromBrowser = true): Promise<unknown> {
+  if (!fromBrowser && !AGENT_MAY.has(method)) throw new Error('Only the browser can do that.');
   switch (method) {
     case 'store.list':
       return store.list();
     case 'store.read':
       return store.read(p.id);
     case 'store.write':
-      return store.write(p.routine, p.owner);
+      return store.write(p.routine, p.owner, p.origin);
     case 'store.remove':
       return store.remove(p.id);
     case 'store.setEnabled':
-      return store.setEnabled(p.id, p.enabled);
+      return sources.enable(p.id, p.enabled);
+    case 'sources.list':
+      return sources.list();
+    case 'sources.add':
+      return sources.add(String(p.address));
+    case 'sources.remove':
+      return sources.remove(String(p.id));
+    case 'sources.setEnabled':
+      return sources.setEnabled(String(p.id), !!p.enabled);
+    case 'sources.entries':
+      return sources.entries(p.id ? String(p.id) : undefined, !!p.fresh);
+    case 'sources.preview':
+      return sources.preview(String(p.id), String(p.path), p.ref ? String(p.ref) : undefined);
+    case 'sources.install':
+      return sources.install(String(p.id), String(p.path), p.ref ? String(p.ref) : undefined);
     default:
       throw new Error(`Unknown method ${method}`);
   }
@@ -81,13 +101,13 @@ export function runHost(): void {
         if (!isRequest(m)) return;
         const session = (m.params as { session?: string } | undefined)?.session;
         if (session) sessions.set(client, session);
-        if (m.method.startsWith('store.')) {
+        if (m.method.startsWith('store.') || m.method.startsWith('sources.')) {
           try {
-            toClient(client, { id: m.id, result: await handleStore(m.method, m.params) });
+            toClient(client, { id: m.id, result: await handleStore(m.method, m.params, false) });
           } catch (e) {
             toClient(client, { id: m.id, error: (e as Error).message });
           }
-          if (m.method !== 'store.list' && m.method !== 'store.read') {
+          if (m.method === 'store.write' || m.method === 'store.remove' || m.method === 'store.setEnabled' || m.method === 'sources.install') {
             toBrowser({ event: 'routines.changed' });
             for (const c of clients) if (c !== client) toClient(c, { event: 'routines.changed' });
           }
@@ -144,7 +164,7 @@ export function runHost(): void {
         try {
           const result = await handleStore(req.method, req.params);
           toBrowser({ id: req.id, result });
-          if (req.method !== 'store.list' && req.method !== 'store.read') for (const c of clients) toClient(c, { event: 'routines.changed' });
+          if (req.method === 'store.write' || req.method === 'store.remove' || req.method === 'store.setEnabled' || req.method === 'sources.install') for (const c of clients) toClient(c, { event: 'routines.changed' });
         } catch (e) {
           toBrowser({ id: req.id, error: (e as Error).message });
         }
@@ -163,6 +183,20 @@ export function runHost(): void {
       cleanup();
       process.exit(0);
     });
+
+  // The block list is read at least daily: routines from a blocked source turn themselves off.
+  const checkBlocks = () =>
+    sources.applyBlocks().then(
+      (off) => {
+        if (!off.length) return;
+        log('turned off by the block list:', off.join(', '));
+        toBrowser({ event: 'routines.changed' });
+        for (const c of clients) toClient(c, { event: 'routines.changed' });
+      },
+      (e) => log('block list check failed', (e as Error).message),
+    );
+  checkBlocks();
+  setInterval(checkBlocks, 6 * 60 * 60_000).unref();
 
   cleanup();
   server.listen(sock, () => {
