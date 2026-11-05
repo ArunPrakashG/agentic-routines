@@ -338,6 +338,8 @@ res = await call(p1, 'PUT', '/routines/review-me', routine({ meta: { ...routine(
 const queued = await res.json();
 let list = await waiting();
 check(list.waiting === 1 && list.submissions[0].id === queued.id && list.submissions[0].owner === 'pone' && list.submissions[0].steps === 4, 'a reviewer sees what is waiting');
+check(list.submissions[0].live_version === null && list.submissions[0].new_publisher === false && list.submissions[0].tags.length === 3, 'each one carries short tags for the queue');
+check((await (await call(adm, 'GET', '/admin/submissions?status=approved')).json()).submissions.some((x) => x.live_version === 2), 'an update says which live version it replaces');
 let one = await (await call(adm, 'GET', `/admin/submissions/${queued.id}`)).json();
 const level = (id) => one.checks.find((c) => c.id === id)?.level;
 check(level('shape') === 'pass' && level('site') === 'pass', 'the checks pass what is fine');

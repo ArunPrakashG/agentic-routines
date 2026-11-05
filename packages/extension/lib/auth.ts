@@ -10,6 +10,8 @@ export interface Account {
   name: string;
   picture?: string | null;
   handle?: string | null;
+  /** Set by the API for the few accounts that review submissions. */
+  admin?: boolean;
 }
 interface Session {
   account: Account;
