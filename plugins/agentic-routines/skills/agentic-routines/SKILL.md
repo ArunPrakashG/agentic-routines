@@ -11,10 +11,10 @@ Do not use another browser tool: not Playwright, Puppeteer, Chrome DevTools, Cla
 
 ### Start with a routine
 
-1. Before you open anything, look for a routine that fits. Call `routines_list` for what is installed and `routines_search` with the task in the user's words, or with the site if you know it. Installed routines also appear as `rt_<name>` tools; read their descriptions.
-2. Pick by the "Use when" text first. A routine fits only if the task is what it says it is for and the values it asks for are ones you have. Call `routine_describe` when the choice is close; it lists when not to use it and where it pauses.
-3. Then check the address. A routine for the site you are on, or one whose URL pattern matches the page, beats a general one. `navigate` and `read_page` list saved routines for the site; take a match from there.
-4. Then prefer the cheaper one. Compare what the listing shows: a routine that runs with no model calls beats one that needs the agent, fewer steps beat more, and one that has finished cleanly before beats one that has failed or been repaired. When two fit equally, take the more efficient one.
+1. Before you open anything, look for a routine that fits. Call `routines_search` with the task in the user's words (`query`) or the page you are on (`url`); it finds installed routines and ones other people published, best fit first. `routines_list` shows everything installed. Installed routines are also `rt_<name>` tools; read their descriptions.
+2. Pick by the "Use when" text first. A routine fits only if the task is what it says it is for and you have the values it asks for. Call `routine_describe` when the choice is close; it lists when not to use it, the pages it applies to and where it pauses.
+3. Then check the address. When `navigate` lands on, or `read_page` reads, a page an installed routine handles, the result ends with a line like `Routine rt_play_release handles this page: release to a track. Prefer it.` Take it unless the task is clearly something else. A routine that only shares the site gets no such line.
+4. Then prefer the cheaper one. Each routine lists how your runs of it have gone: runs, how many finished, model calls per run, median time, last run. A routine that runs with no model calls beats one that needs the agent, one that finishes its runs beats one that often fails, and the faster one wins a tie.
 5. Run it with its `rt_<name>` tool, or `routine_run` by name if the tool is not loaded. Give the values it asks for; do not invent any. If a run pauses, tell the user what the next step does and wait for their answer before `routine_resume` with `approve: true`. If a step changed and the run asks for a choice, look with `read_page`, then choose with `routine_resume`.
 6. Say which routine you ran and what it returned. If it ends in `failed`, or the result is not what the task needs, finish the task by hand with the browser tools below and say that you did.
 
