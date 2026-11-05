@@ -1,5 +1,5 @@
 {
-  "name": "@browser-routines/extension",
+  "name": "@agentic-routines/extension",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "preact": "^10.27.2"
   },
   "devDependencies": {
-    "@browser-routines/core": "workspace:*",
+    "@agentic-routines/core": "workspace:*",
     "@preact/preset-vite": "^2.10.2",
     "wxt": "^0.21.5"
   }

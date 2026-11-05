@@ -1,4 +1,4 @@
-import type { Locator, PageFingerprint } from '@browser-routines/core';
+import type { Locator, PageFingerprint } from '@agentic-routines/core';
 
 // Runs in the page. Turns elements into locators and outlines, and back.
 

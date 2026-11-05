@@ -9,8 +9,8 @@ pnpm dev:up
 | tmux session | What it is |
 |---|---|
 | `br-claude` | Claude Code, using your login, with only this MCP server and none of your user settings or hooks |
-| `br-chrome` | Chromium from Playwright with the unpacked extension, debugging port 9333, or `BR_CDP_PORT` |
-| `br-site` | The test site on http://127.0.0.1:8765, or `BR_SITE_PORT` |
+| `br-chrome` | Chromium from Playwright with the unpacked extension, debugging port 9333, or `AR_CDP_PORT` |
+| `br-site` | The test site on http://127.0.0.1:8765, or `AR_SITE_PORT` |
 
 ```bash
 tmux attach -t br-claude
@@ -30,7 +30,7 @@ Other options:
 - `pnpm dev:down` stops it all. Routines stay, so `rm -rf .dev` is the clean start.
 - A new build gets a new browser profile, because Chromium keeps the old background script in a reused one. The panel's onboarding and the page's `localStorage` start over.
 - `dev/up.sh --no-build` skips the build. `--headless` and `--no-claude` do what they say.
-- `BR_MODEL=haiku dev/up.sh` picks the model. `BR_DEV_DIR` moves the state folder. `BR_CHROME` picks the browser.
+- `AR_MODEL=haiku dev/up.sh` picks the model. `AR_DEV_DIR` moves the state folder. `AR_CHROME` picks the browser.
 - `pnpm e2e` is the scripted check: fresh headless browsers and stores, with no model calls. It covers an agent over MCP, then a person recording and replaying a demo in the real side panel with input events. It replaces a running environment. Add `--shots` to save panel screenshots to `.dev/e2e-*/shots`.
 
 ## Sign-in and the API

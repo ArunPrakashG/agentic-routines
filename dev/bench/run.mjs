@@ -15,7 +15,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../..');
 const BENCH = join(ROOT, '.dev/bench');
 const STORE = join(BENCH, 'env/store');
-const CDP = `http://127.0.0.1:${process.env.BR_CDP_PORT ?? 9333}`;
+const CDP = `http://127.0.0.1:${process.env.AR_CDP_PORT ?? 9333}`;
 const REAL_STORE = join(BENCH, 'real/store');
 const VIDEO = process.env.BENCH_VIDEO;
 const WORK = join(BENCH, 'workspace');
@@ -87,14 +87,14 @@ function verify(task, v, log) {
 // ---------- agents ----------
 const node = process.execPath;
 const servers = {
-  ours: { mcpServers: { 'browser-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'], env: { BROWSER_ROUTINES_HOME: STORE } } } },
-  real: { mcpServers: { 'browser-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'], env: { BROWSER_ROUTINES_HOME: REAL_STORE } } } },
+  ours: { mcpServers: { 'agentic-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'], env: { AGENTIC_ROUTINES_HOME: STORE } } } },
+  real: { mcpServers: { 'agentic-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'], env: { AGENTIC_ROUTINES_HOME: REAL_STORE } } } },
 };
 for (const [k, v] of Object.entries(servers)) writeFileSync(join(BENCH, `mcp-${k}.json`), JSON.stringify(v));
 
 function runClaude(server, prompt, rawFile) {
   // Claude in Chrome comes from --chrome and drives the real Chrome with its extension.
-  const browser = server === 'cic' ? ['--chrome', '--allowedTools', 'mcp__claude-in-chrome'] : ['--mcp-config', join(BENCH, `mcp-${server}.json`), '--allowedTools', 'mcp__browser-routines'];
+  const browser = server === 'cic' ? ['--chrome', '--allowedTools', 'mcp__claude-in-chrome'] : ['--mcp-config', join(BENCH, `mcp-${server}.json`), '--allowedTools', 'mcp__agentic-routines'];
   const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', ...browser, '--strict-mcp-config', '--setting-sources', 'project,local', '--permission-mode', 'default', '--model', MODEL, '--max-budget-usd', '6'];
   return new Promise((resolve) => {
     const t0 = Date.now();

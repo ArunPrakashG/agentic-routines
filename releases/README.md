@@ -6,7 +6,7 @@ Each folder here is one released version: the packages that were shipped, their 
 releases/
   scripts/        how a release is made
   store/          store listing text and the reason for every permission
-  v0.1.0/         browser-routines-0.1.0-chrome.zip, -firefox.zip, -sources.zip, .tgz, SHA256SUMS, RELEASE.json, NOTES.md
+  v0.1.0/         agentic-routines-0.1.0-chrome.zip, -firefox.zip, -sources.zip, .tgz, SHA256SUMS, RELEASE.json, NOTES.md
 ```
 
 The Chrome zip also goes to Edge Add-ons. The sources zip goes to Firefox Add-ons with the Firefox zip, as it asks for the source of anything bundled.
@@ -17,7 +17,7 @@ The Chrome zip also goes to Edge Add-ons. The sources zip goes to Firefox Add-on
 2. `pnpm release:version 0.2.0` sets the version everywhere. Commit it.
 3. `pnpm release` builds into `releases/v0.2.0`. It refuses to run with uncommitted changes, and runs the store checks on the result.
 4. Edit `releases/v0.2.0/NOTES.md`, commit the folder, tag `v0.2.0`.
-5. Upload the zips to each store (`store/listing.md` has the text), publish the npm package with `npm publish releases/v0.2.0/browser-routines-0.2.0.tgz`, and attach the files to the GitHub release.
+5. Upload the zips to each store (`store/listing.md` has the text), publish the npm package with `npm publish releases/v0.2.0/agentic-routines-0.2.0.tgz`, and attach the files to the GitHub release.
 
 `pnpm check:store <dir>` runs the store checks alone on a build folder.
 

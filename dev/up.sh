@@ -2,10 +2,10 @@
 # Starts the local test environment in tmux. Nothing outside the state folder is
 # touched: the browser, the routine store and the agent config all live there.
 #   dev/up.sh [--headless] [--no-claude] [--no-build]
-# BR_DEV_DIR moves the state folder, BR_CHROME picks the browser, BR_MODEL the agent's model.
+# AR_DEV_DIR moves the state folder, AR_CHROME picks the browser, AR_MODEL the agent's model.
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-DEV=${BR_DEV_DIR:-$ROOT/.dev}
+DEV=${AR_DEV_DIR:-$ROOT/.dev}
 HEADLESS=; CLAUDE=1; BUILD=1
 for a in "$@"; do
   case "$a" in
@@ -17,20 +17,20 @@ for a in "$@"; do
 done
 
 # Tests drive whatever answers on this port, so it has to be ours.
-CDP_PORT=${BR_CDP_PORT:-9333}
+CDP_PORT=${AR_CDP_PORT:-9333}
 if curl -s --max-time 1 "127.0.0.1:$CDP_PORT/json/version" >/dev/null; then
-  echo "Port $CDP_PORT already has a browser on it. Set BR_CDP_PORT to another port." >&2
+  echo "Port $CDP_PORT already has a browser on it. Set AR_CDP_PORT to another port." >&2
   exit 1
 fi
 
-SITE_PORT=${BR_SITE_PORT:-8765}
+SITE_PORT=${AR_SITE_PORT:-8765}
 if curl -s --max-time 1 -o /dev/null "127.0.0.1:$SITE_PORT/"; then
-  echo "Port $SITE_PORT already has a server on it. Set BR_SITE_PORT to another port." >&2
+  echo "Port $SITE_PORT already has a server on it. Set AR_SITE_PORT to another port." >&2
   exit 1
 fi
 
 # Branded Chrome ignores --load-extension, so this needs Chromium.
-CHROME=${BR_CHROME:-$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}
+CHROME=${AR_CHROME:-$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}
 [ -x "$CHROME" ] || { echo "No Chromium found. Run: npx playwright install chromium" >&2; exit 1; }
 NODE=$(command -v node)
 CLI=$ROOT/packages/cli/dist/index.js
@@ -51,11 +51,11 @@ mkdir -p "$PROFILE" "$STORE" "$DEV/workspace"
 cp "$ROOT"/dev/fixtures/* "$DEV/workspace/"
 
 # Real setup against the throwaway home, with no agent on PATH to edit.
-env HOME="$BHOME" BROWSER_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/bin:/bin" "$NODE" "$CLI" setup >/dev/null
+env HOME="$BHOME" AGENTIC_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/bin:/bin" "$NODE" "$CLI" setup >/dev/null
 
 touch "$DEV/.started"
 tmux new-session -d -s br-site "python3 -m http.server $SITE_PORT --bind 127.0.0.1 --directory '$ROOT/dev/site'"
-tmux new-session -d -s br-chrome "env HOME='$BHOME' BROWSER_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
+tmux new-session -d -s br-chrome "env HOME='$BHOME' AGENTIC_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
 
 i=0; until curl -s 127.0.0.1:$CDP_PORT/json/version >/dev/null || [ $i -gt 100 ]; do i=$((i+1)); sleep 0.2; done
 # Only a host from this browser counts: a crash leaves the old one's file behind.
@@ -65,11 +65,11 @@ host_up || { echo "Native host did not start. See $DEV/chrome.log and $STORE/hos
 
 if [ -n "$CLAUDE" ]; then
   cat > "$DEV/mcp.json" <<JSON
-{ "mcpServers": { "browser-routines": { "type": "stdio", "command": "$NODE", "args": ["$CLI", "mcp"], "env": { "BROWSER_ROUTINES_HOME": "$STORE" } } } }
+{ "mcpServers": { "agentic-routines": { "type": "stdio", "command": "$NODE", "args": ["$CLI", "mcp"], "env": { "AGENTIC_ROUTINES_HOME": "$STORE" } } } }
 JSON
   # Your own login, but only this server and none of your user settings or hooks.
   # Default permissions, because auto mode opens a dialog that edits your real settings.
-  tmux new-session -d -s br-claude -c "$DEV/workspace" -x 120 -y 40 "'$(command -v claude)' --mcp-config '$DEV/mcp.json' --strict-mcp-config --setting-sources project,local --permission-mode default --allowedTools mcp__browser-routines --model '${BR_MODEL:-sonnet}'"
+  tmux new-session -d -s br-claude -c "$DEV/workspace" -x 120 -y 40 "'$(command -v claude)' --mcp-config '$DEV/mcp.json' --strict-mcp-config --setting-sources project,local --permission-mode default --allowedTools mcp__agentic-routines --model '${AR_MODEL:-sonnet}'"
 fi
 
 echo "Site     http://127.0.0.1:$SITE_PORT/ (tmux: br-site)"

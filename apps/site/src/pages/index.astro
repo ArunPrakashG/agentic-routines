@@ -34,25 +34,25 @@ const stops = [
 ];
 // Direct store entries go in here once the listings are live; until then each opens the store's search.
 const stores = [
-  { id: 'chrome', name: 'Chrome', store: 'the Chrome Web Store', href: 'https://chromewebstore.google.com/search/browser%20routines' },
-  { id: 'edge', name: 'Edge', store: 'Microsoft Edge Add-ons', href: 'https://microsoftedge.microsoft.com/addons/search/browser%20routines' },
-  { id: 'firefox', name: 'Firefox', store: 'Firefox Add-ons', href: 'https://addons.mozilla.org/firefox/search/?q=browser+routines' },
+  { id: 'chrome', name: 'Chrome', store: 'the Chrome Web Store', href: 'https://chromewebstore.google.com/search/agentic%20routines' },
+  { id: 'edge', name: 'Edge', store: 'Microsoft Edge Add-ons', href: 'https://microsoftedge.microsoft.com/addons/search/agentic%20routines' },
+  { id: 'firefox', name: 'Firefox', store: 'Firefox Add-ons', href: 'https://addons.mozilla.org/firefox/search/?q=agentic+routines' },
 ];
 const runs = [
-  { pm: 'npm', cmd: 'npx browser-routines setup' },
-  { pm: 'pnpm', cmd: 'pnpm dlx browser-routines setup' },
-  { pm: 'bun', cmd: 'bunx browser-routines setup' },
-  { pm: 'yarn', cmd: 'yarn dlx browser-routines setup' },
+  { pm: 'npm', cmd: 'npx agentic-routines setup' },
+  { pm: 'pnpm', cmd: 'pnpm dlx agentic-routines setup' },
+  { pm: 'bun', cmd: 'bunx agentic-routines setup' },
+  { pm: 'yarn', cmd: 'yarn dlx agentic-routines setup' },
 ];
-const prompt = `Set up Browser Routines on this machine.
-1. Run "npx browser-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
-2. Run "npx browser-routines doctor" and tell me which agents and browsers are connected and what is still missing.
+const prompt = `Set up Agentic Routines on this machine.
+1. Run "npx agentic-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
+2. Run "npx agentic-routines doctor" and tell me which agents and browsers are connected and what is still missing.
 3. If my browser has no extension yet, tell me which store page to open. Do not install anything else.
 4. Tell me to restart this agent so it loads the browser tools.`;
 const ld = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: 'Browser Routines',
+  name: 'Agentic Routines',
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'Chrome, Edge, Firefox',
   description: 'Records how your AI agent did a browser task, then replays it without asking the model again.',
@@ -60,8 +60,8 @@ const ld = {
 };
 ---
 <Base
-  title="Browser Routines"
-  description="Browser Routines remembers how your agent did a task in the browser, then replays it without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less."
+  title="Agentic Routines"
+  description="Agentic Routines remembers how your agent did a task in the browser, then replays it without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less."
   path="/"
   jsonLd={ld}
   dark
@@ -71,7 +71,7 @@ const ld = {
       <div class="hero-copy">
         <span class="mono kicker">A memory for your agent’s browser work</span>
         <h1>Stop paying your agent to figure out the same website twice.</h1>
-        <p class="sub">Browser Routines remembers how your agent did a task, then replays it next time without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less.</p>
+        <p class="sub">Agentic Routines remembers how your agent did a task, then replays it next time without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less.</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="#install">Install, it’s free</a>
           <a class="btn btn-secondary btn-lg" href="#numbers">See the numbers</a>
@@ -82,9 +82,9 @@ const ld = {
       <figure class="chart">
         <div class="chart-head">
           <figcaption>The same chore, run 30 times</figcaption>
-          <span class="legend"><span><i style="background: var(--text-3)"></i>By hand</span><span><i style="background: var(--accent)"></i>With Browser Routines</span></span>
+          <span class="legend"><span><i style="background: var(--text-3)"></i>By hand</span><span><i style="background: var(--accent)"></i>With Agentic Routines</span></span>
         </div>
-        <svg viewBox="0 0 720 300" role="img" aria-label="Cost of running the same chore 30 times: $6.18 by hand, $1.34 with Browser Routines, 78 percent less">
+        <svg viewBox="0 0 720 300" role="img" aria-label="Cost of running the same chore 30 times: $6.18 by hand, $1.34 with Agentic Routines, 78 percent less">
           <g stroke="var(--border)" stroke-width="1"><line x1="40" y1="270" x2="560" y2="270"/><line x1="40" y1="192.3" x2="560" y2="192.3"/><line x1="40" y1="114.6" x2="560" y2="114.6"/><line x1="40" y1="37" x2="560" y2="37"/></g>
           <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-3)"><text x="0" y="274">$0</text><text x="0" y="196">$2</text><text x="0" y="118">$4</text><text x="0" y="41">$6</text><text x="40" y="292">run 1</text><text x="195" y="292">10</text><text x="368" y="292">20</text><text x="540" y="292" text-anchor="middle">30</text></g>
           <line class="hl" pathLength="1" x1="40" y1="262" x2="540" y2="30" stroke="var(--text-3)" stroke-width="2.5" stroke-linecap="round"/>
@@ -126,7 +126,7 @@ const ld = {
     <div class="wrap stack">
       <div class="head">
         <h2 class="h2">Watch it once. Replay it every time.</h2>
-        <p class="lede">Your agent does the task. Browser Routines tidies the steps up and keeps them, then checks the page at every step on the way back.</p>
+        <p class="lede">Your agent does the task. Agentic Routines tidies the steps up and keeps them, then checks the page at every step on the way back.</p>
       </div>
       <ol class="flow">
         <li>

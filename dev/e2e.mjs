@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const CDP = `http://127.0.0.1:${process.env.BR_CDP_PORT ?? 9333}`;
+const CDP = `http://127.0.0.1:${process.env.AR_CDP_PORT ?? 9333}`;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.DEV_DIR;
 const HOME = DEV;
@@ -14,9 +14,9 @@ const { Client } = await import(`${SDK}/client/index.js`);
 const { StdioClientTransport } = await import(`${SDK}/client/stdio.js`);
 const { ToolListChangedNotificationSchema } = await import(`${SDK}/types.js`);
 const EXT = 'chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo';
-const SITE = `http://127.0.0.1:${process.env.BR_SITE_PORT ?? 8765}`;
+const SITE = `http://127.0.0.1:${process.env.AR_SITE_PORT ?? 8765}`;
 const shots = process.argv.includes('--shots');
-const STORE = process.env.BROWSER_ROUTINES_HOME;
+const STORE = process.env.AGENTIC_ROUTINES_HOME;
 const SHOTS = join(DEV, 'shots');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -97,7 +97,7 @@ const panelClick = (label) =>
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [`${CLI}/dist/index.js`, 'mcp'],
-  env: { HOME, PATH: process.env.PATH, BROWSER_ROUTINES_HOME: STORE },
+  env: { HOME, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: STORE },
   stderr: 'inherit',
 });
 const client = new Client({ name: 'claude-code', version: '2.0.0' });
@@ -295,7 +295,7 @@ if (panel) {
 // ---------- 8. the agent goes away during a pause ----------
 {
   await evalIn((u) => u.startsWith(SITE), "localStorage.variant = 'b'");
-  const other = new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME, PATH: process.env.PATH, BROWSER_ROUTINES_HOME: STORE }, stderr: 'inherit' });
+  const other = new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: STORE }, stderr: 'inherit' });
   const c2 = new Client({ name: 'claude-code', version: '2.0.0' });
   await c2.connect(other);
   c2.callTool({ name: 'routine_run', arguments: { name: 'acme-release', params: { app_bundle: join(FIXTURES, 'kavyam-2.15.0.aab'), version_name: '9.9.9', release_notes: 'Nobody home.' } } }, undefined, { timeout: 60_000 }).catch(() => {});
@@ -375,7 +375,7 @@ if (panel) {
   check(put?.auth === 'Bearer x' && seen.filter((x) => x.url === '/api/v1/me/handle').length === 2, 'the name was claimed after the retry, then the routine was sent as the person');
   check(put?.body.meta.name === 'acme-draft' && put.body.steps.length > 1 && put.body.meta.params.release_name?.type === 'string' && put.body.meta.site, 'with its meta, params and every step');
   check(!JSON.stringify(put?.body).includes('"example"') && !('owner' in put.body.meta), 'and no example values or owner');
-  if (process.env.BR_CAPTURE) writeFileSync(join(FIXTURES, 'published-routine.json'), JSON.stringify(put.body, null, 2) + '\n');
+  if (process.env.AR_CAPTURE) writeFileSync(join(FIXTURES, 'published-routine.json'), JSON.stringify(put.body, null, 2) + '\n');
   await panelClick('Done');
   txt = await panelText();
   check(/published v1/.test(txt), 'the library marks it published');

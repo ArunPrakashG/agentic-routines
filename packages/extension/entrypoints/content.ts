@@ -1,4 +1,4 @@
-import { resolve, type Locator, type RecordedEvent } from '@browser-routines/core';
+import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
 import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, role, select, type } from '../lib/dom';
 
 export type ContentMsg =

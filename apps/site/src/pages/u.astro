@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 import '../styles/directory.css';
 ---
-<Base title="Publisher" description="Routines published by one person in the Browser Routines directory." path="/u" noindex>
+<Base title="Publisher" description="Routines published by one person in the Agentic Routines directory." path="/u" noindex>
   <div class="wrap page" id="root">
     <p class="crumb"><a href="/directory">Directory</a></p>
     <div class="state">Loading…</div>
@@ -19,7 +19,7 @@ import '../styles/directory.css';
 
   async function run() {
     if (!/^[a-z0-9_-]{1,40}$/i.test(h)) { root.replaceChildren(crumb, el('div', { class: 'state' }, el('b', {}, 'No such publisher.'), 'Check the address.')); return; }
-    document.title = `${h} · Browser Routines`;
+    document.title = `${h} · Agentic Routines`;
     try {
       // The search has no owner filter, so fetch pages and keep this publisher's routines.
       const mine: Summary[] = [];

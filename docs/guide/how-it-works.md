@@ -36,4 +36,4 @@ A value typed into a password field is never saved. It becomes a placeholder, an
 
 ## What stays on your computer
 
-Routines, recordings and screenshot crops live in `~/.browser-routines` on your machine. Crops are never published. See the [privacy page](/privacy) for the full list of what is sent when you sign in or publish.
+Routines, recordings and screenshot crops live in `~/.agentic-routines` on your machine. Crops are never published. See the [privacy page](/privacy) for the full list of what is sent when you sign in or publish.

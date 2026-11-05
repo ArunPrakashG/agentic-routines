@@ -1,23 +1,25 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
-import { BROWSERS, hostManifest, type Browser, type OS } from '@browser-routines/browsers';
-import { HOST_NAME, paths } from './paths.ts';
+import { BROWSERS, hostManifest, type Browser, type OS } from '@agentic-routines/browsers';
+import { HOST_NAME, LEGACY_HOST_NAME, paths } from './paths.ts';
 
-// `npx browser-routines setup`: register the native host with every browser
+// `npx agentic-routines setup`: register the native host with every browser
 // found, and add the MCP server to every agent found.
 
-const SERVER = 'browser-routines';
+const SERVER = 'agentic-routines';
+// What the project was called before; removed so an agent does not end up with two copies.
+const LEGACY_SERVER = 'browser-routines';
 const H = homedir();
 const tilde = (p: string) => (p.startsWith(H) ? '~' + p.slice(H.length) : p);
 
 function mcpCommand(): string[] {
   const script = realpathSync(process.argv[1]);
-  if (script.includes(`${'_npx'}`)) return ['npx', '-y', 'browser-routines', 'mcp'];
+  if (script.includes(`${'_npx'}`)) return ['npx', '-y', 'agentic-routines', 'mcp'];
   return [process.execPath, script, 'mcp'];
 }
 
@@ -67,6 +69,13 @@ async function registerHost(dry: boolean): Promise<Line[]> {
       if (!dry) {
         await mkdir(dirname(file), { recursive: true });
         await writeFile(file, JSON.stringify(manifest, null, 2) + '\n');
+        if (!done.has(b.registry)) {
+          try {
+            execFileSync('reg', ['delete', `HKCU\\${b.registry}\\${LEGACY_HOST_NAME}`, '/f'], { stdio: 'ignore' });
+          } catch {
+            // Not registered.
+          }
+        }
         if (!done.has(b.registry)) execFileSync('reg', ['add', `HKCU\\${b.registry}\\${HOST_NAME}`, '/ve', '/t', 'REG_SZ', '/d', file, '/f'], { stdio: 'ignore' });
       }
       done.add(b.registry);
@@ -77,6 +86,7 @@ async function registerHost(dry: boolean): Promise<Line[]> {
     if (!hosts) continue;
     const target = join(H, hosts, `${HOST_NAME}.json`);
     if (!dry) {
+      await rm(join(H, hosts, `${LEGACY_HOST_NAME}.json`), { force: true });
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, JSON.stringify(manifest, null, 2) + '\n');
     }
@@ -97,6 +107,14 @@ async function editJson(file: string, path: (string | number)[], value: unknown,
   }
 }
 
+/** Drop the entry an earlier name left behind. */
+async function dropJson(file: string, path: (string | number)[], dry: boolean) {
+  if (!existsSync(file)) return;
+  const before = await readFile(file, 'utf8');
+  const after = applyEdits(before, modify(before, path, undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
+  if (!dry && after !== before) await writeFile(file, after);
+}
+
 function onPath(cmd: string): boolean {
   try {
     execFileSync(platform() === 'win32' ? 'where' : 'which', [cmd], { stdio: 'ignore' });
@@ -115,11 +133,17 @@ async function claudeCode(cmd: string[], dry: boolean): Promise<Line | null> {
       } catch {
         // Not added yet.
       }
+      try {
+        execFileSync('claude', ['mcp', 'remove', '--scope', 'user', LEGACY_SERVER], { stdio: 'ignore' });
+      } catch {
+        // Never added.
+      }
       execFileSync('claude', ['mcp', 'add', '--scope', 'user', SERVER, '--', ...cmd], { stdio: 'ignore' });
     }
     return { ok: true, name: 'Claude Code', detail: tilde(file) };
   }
   if (!existsSync(file)) return null;
+  await dropJson(file, ['mcpServers', LEGACY_SERVER], dry);
   await editJson(file, ['mcpServers', SERVER], { type: 'stdio', command: cmd[0], args: cmd.slice(1), env: {} }, dry);
   return { ok: true, name: 'Claude Code', detail: tilde(file) };
 }
@@ -130,6 +154,7 @@ async function codex(cmd: string[], dry: boolean): Promise<Line | null> {
   const file = join(dir, 'config.toml');
   const conf = existsSync(file) ? (parseToml(await readFile(file, 'utf8')) as Record<string, any>) : {};
   conf.mcp_servers ??= {};
+  delete conf.mcp_servers[LEGACY_SERVER];
   // A replay can wait at a pause for longer than Codex's 60s default.
   conf.mcp_servers[SERVER] = { command: cmd[0], args: cmd.slice(1), tool_timeout_sec: 900 };
   if (!dry) await writeFile(file, stringifyToml(conf) + '\n');
@@ -145,6 +170,7 @@ async function copilot(cmd: string[], dry: boolean): Promise<Line | null> {
         : join(H, '.config/Code/User');
   if (!existsSync(user)) return null;
   const file = join(user, 'mcp.json');
+  await dropJson(file, ['servers', LEGACY_SERVER], dry);
   await editJson(file, ['servers', SERVER], { type: 'stdio', command: cmd[0], args: cmd.slice(1) }, dry);
   return { ok: true, name: 'GitHub Copilot', detail: tilde(file) };
 }
@@ -153,6 +179,7 @@ async function opencode(cmd: string[], dry: boolean): Promise<Line | null> {
   const dir = join(H, '.config/opencode');
   if (!existsSync(dir)) return null;
   const file = ['opencode.jsonc', 'opencode.json'].map((f) => join(dir, f)).find(existsSync) ?? join(dir, 'opencode.json');
+  await dropJson(file, ['mcp', LEGACY_SERVER], dry);
   await editJson(file, ['mcp', SERVER], { type: 'local', command: cmd, enabled: true }, dry);
   return { ok: true, name: 'OpenCode', detail: tilde(file) };
 }

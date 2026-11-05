@@ -1,6 +1,6 @@
 # Getting started
 
-Browser Routines records what your agent does in the browser. You save it as a routine, with the values you fill in each time. Next time, the routine replays as one tool call, with no model doing the steps.
+Agentic Routines records what your agent does in the browser. You save it as a routine, with the values you fill in each time. Next time, the routine replays as one tool call, with no model doing the steps.
 
 It has two parts: a browser extension, and one command that connects your agents to it.
 
@@ -11,15 +11,15 @@ Install it from the store for your browser: Chrome, Edge or Firefox. Brave, Arc 
 ## 2. Connect your agent
 
 ```bash
-npx browser-routines setup
+npx agentic-routines setup
 ```
 
-Use `pnpm dlx`, `bunx` or `yarn dlx` in place of `npx` if you prefer. The command finds Claude Code, Codex, GitHub Copilot in VS Code and OpenCode, adds the Browser Routines tool server to each one's config, and registers the native host with every browser it finds. Run it with `--dry-run` first to see what it would write.
+Use `pnpm dlx`, `bunx` or `yarn dlx` in place of `npx` if you prefer. The command finds Claude Code, Codex, GitHub Copilot in VS Code and OpenCode, adds the Agentic Routines tool server to each one's config, and registers the native host with every browser it finds. Run it with `--dry-run` first to see what it would write.
 
 Restart your agent afterwards so it loads the new tools. Then check everything is connected:
 
 ```bash
-npx browser-routines doctor
+npx agentic-routines doctor
 ```
 
 ### Or let your agent do it
@@ -27,9 +27,9 @@ npx browser-routines doctor
 Paste this into Claude Code, Codex, OpenCode or any agent chat:
 
 ```text
-Set up Browser Routines on this machine.
-1. Run "npx browser-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
-2. Run "npx browser-routines doctor" and tell me which agents and browsers are connected and what is still missing.
+Set up Agentic Routines on this machine.
+1. Run "npx agentic-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
+2. Run "npx agentic-routines doctor" and tell me which agents and browsers are connected and what is still missing.
 3. If my browser has no extension yet, tell me which store page to open. Do not install anything else.
 4. Tell me to restart this agent so it loads the browser tools.
 ```

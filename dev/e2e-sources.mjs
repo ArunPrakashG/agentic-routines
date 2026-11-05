@@ -1,6 +1,6 @@
 // Functional check of installing from Git sources: the real built CLI (setup commands, MCP server and
 // native host) against a stand-in for GitHub and for the block list. No browser: the browser's side of
-// the native line is played by this script. Run `pnpm --filter browser-routines build` first.
+// the native line is played by this script. Run `pnpm --filter agentic-routines build` first.
 //   node dev/e2e-sources.mjs
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, connect } from 'node:net';
@@ -39,7 +39,7 @@ const run = (args, env) => spawnSync(process.execPath, [`${CLI}/dist/index.js`, 
 putRoutine(author, 'deploy-staging');
 putRoutine(author, 'bad-site', { navigate: 'https://evil.example/deploys' });
 const exported = (name) => {
-  const r = run(['export', name], { BROWSER_ROUTINES_HOME: author });
+  const r = run(['export', name], { AGENTIC_ROUTINES_HOME: author });
   return r;
 };
 const good = exported('deploy-staging');
@@ -65,14 +65,14 @@ let gh;
 const github = http((req, res) => {
   const u = new URL(req.url, 'http://x');
   let m;
-  if (u.pathname === '/repos/acme-corp/browser-routines/commits/HEAD') return res.end(head);
-  if ((m = /^\/repos\/acme-corp\/browser-routines\/git\/trees\/([0-9a-f]{40})$/.exec(u.pathname))) {
+  if (u.pathname === '/repos/acme-corp/agentic-routines/commits/HEAD') return res.end(head);
+  if ((m = /^\/repos\/acme-corp\/agentic-routines\/git\/trees\/([0-9a-f]{40})$/.exec(u.pathname))) {
     const tree = Object.keys(files[m[1]] ?? {}).map((path) => ({ path, type: 'blob', size: files[m[1]][path].length }));
     tree.push({ path: 'README.md', type: 'blob', size: 10 }, { path: 'routines/notes.txt', type: 'blob', size: 10 });
     res.setHeader('content-type', 'application/json');
     return res.end(JSON.stringify({ tree }));
   }
-  if ((m = /^\/raw\/acme-corp\/browser-routines\/([0-9a-f]{40})\/(.+)$/.exec(u.pathname))) {
+  if ((m = /^\/raw\/acme-corp\/agentic-routines\/([0-9a-f]{40})\/(.+)$/.exec(u.pathname))) {
     const f = files[m[1]]?.[m[2]];
     if (f === undefined) return void ((res.statusCode = 404), res.end());
     return res.end(f);
@@ -94,7 +94,7 @@ await new Promise((r) => api.listen(API_PORT, '127.0.0.1', r));
 
 // ---------- the person's machine ----------
 const home = mkdtempSync(join(tmpdir(), 'br-user-'));
-const env = { HOME: home, BROWSER_ROUTINES_HOME: home, BROWSER_ROUTINES_API: `http://127.0.0.1:${API_PORT}`, BROWSER_ROUTINES_GITHUB_API: `http://127.0.0.1:${GH_PORT}`, BROWSER_ROUTINES_GITHUB_RAW: `http://127.0.0.1:${GH_PORT}/raw` };
+const env = { HOME: home, AGENTIC_ROUTINES_HOME: home, AGENTIC_ROUTINES_API: `http://127.0.0.1:${API_PORT}`, AGENTIC_ROUTINES_GITHUB_API: `http://127.0.0.1:${GH_PORT}`, AGENTIC_ROUTINES_GITHUB_RAW: `http://127.0.0.1:${GH_PORT}/raw` };
 // Not spawnSync: the stand-ins for GitHub and the block list answer from this same process.
 const cli = (...args) =>
   new Promise((resolve) => {
@@ -105,12 +105,12 @@ const cli = (...args) =>
     c.stderr.on('data', (d) => (stderr += d));
     c.on('close', (status) => resolve({ status, stdout, stderr }));
   });
-const REPO = 'https://github.com/acme-corp/browser-routines';
+const REPO = 'https://github.com/acme-corp/agentic-routines';
 
-let r = await cli('sources', 'add', 'github.com/Acme-Corp/Browser-Routines.git');
+let r = await cli('sources', 'add', 'github.com/Acme-Corp/Agentic-Routines.git');
 if (r.status !== 0) console.log(r.stderr, r.stdout);
 check(r.status === 0 && r.stdout.includes(REPO), 'a GitHub repository is added, in its normal form');
-r = await cli('sources', 'add', 'github.com/acme-corp/browser-routines');
+r = await cli('sources', 'add', 'github.com/acme-corp/agentic-routines');
 check(r.status !== 0 && /already added/.test(r.stderr), 'the same one twice is refused');
 r = await cli('sources', 'add', 'https://gitlab.com/acme/x');
 check(r.status !== 0 && /GitHub/.test(r.stderr), 'other hosts say they are not supported yet');
@@ -188,7 +188,7 @@ p = await host.ask('sources.preview', { id: 'https://github.com/someone/else', p
 check(p.error && /not in your list/.test(p.error), 'a source the person did not add is refused');
 
 // An agent cannot install, add or change a source, whatever it sends.
-for (const [m, params] of [['sources.install', { id: REPO, path: entry }], ['sources.add', { address: 'github.com/acme-corp/browser-routines' }], ['sources.remove', { id: REPO }], ['sources.setEnabled', { id: REPO, enabled: false }]]) {
+for (const [m, params] of [['sources.install', { id: REPO, path: entry }], ['sources.add', { address: 'github.com/acme-corp/agentic-routines' }], ['sources.remove', { id: REPO }], ['sources.setEnabled', { id: REPO, enabled: false }]]) {
   const a = await agentCall(m, params);
   check(a.error === 'Only the browser can do that.', `an agent cannot call ${m}`);
 }

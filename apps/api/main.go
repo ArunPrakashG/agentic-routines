@@ -1,4 +1,4 @@
-// The Browser Routines API: Google sign-in and the accounts everything else belongs to.
+// The Agentic Routines API: Google sign-in and the accounts everything else belongs to.
 package main
 
 import (

@@ -1,14 +1,14 @@
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { blockedBy, checkFetched, githubSource, ownerFor, parseRoutineFile, repoKey, FILE_PATH, type BlockList, type Fetched, type Origin, type Routine, type Source, type SourceEntry } from '@browser-routines/core';
+import { blockedBy, checkFetched, githubSource, ownerFor, parseRoutineFile, repoKey, FILE_PATH, type BlockList, type Fetched, type Origin, type Routine, type Source, type SourceEntry } from '@agentic-routines/core';
 import { paths } from './paths.ts';
 import * as store from './store.ts';
 
 // Sources the person added, the block list we fetch, and installing from either.
 // Nothing here installs on its own: install() runs only when the person clicked Install.
 
-const API = process.env.BROWSER_ROUTINES_API ?? 'https://browserroutines.arunprakashg.com';
+const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
 const DAY = 24 * 60 * 60_000;
 const MAX_SOURCES = 20;
 
@@ -82,8 +82,8 @@ function folderSource(path: string): Source {
 
 function open(s: SourceConfig): Source {
   if (s.kind === 'folder') return folderSource(s.id);
-  const api = process.env.BROWSER_ROUTINES_GITHUB_API;
-  const raw = process.env.BROWSER_ROUTINES_GITHUB_RAW;
+  const api = process.env.AGENTIC_ROUTINES_GITHUB_API;
+  const raw = process.env.AGENTIC_ROUTINES_GITHUB_RAW;
   return githubSource(s.id, fetch, api && raw ? { api, raw } : undefined);
 }
 

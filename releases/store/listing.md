@@ -4,7 +4,7 @@ The text each store asks for. Keep it true to what the build does; `releases/sto
 
 ## Name
 
-Browser Routines
+Agentic Routines
 
 ## Short description (132 characters or fewer)
 
@@ -18,7 +18,7 @@ Lets a coding agent record a browser task and replay it later as a routine.
 
 Your coding agent repeats the same browser chores step by step: releases, console admin work, portal downloads. Every run costs the same tokens and time as the first.
 
-Browser Routines records what your agent does in the browser. Save it as a routine, with the values you fill in each time. Next time the routine replays with no model, as a single tool call.
+Agentic Routines records what your agent does in the browser. Save it as a routine, with the values you fill in each time. Next time the routine replays with no model, as a single tool call.
 
 - Works with Claude Code, Codex, GitHub Copilot and OpenCode.
 - Checks the page before each step. If a step clearly changed, your agent fixes just that step.
@@ -26,7 +26,7 @@ Browser Routines records what your agent does in the browser. Save it as a routi
 - Never stores secrets. Recordings stay on your computer.
 - Record a demo by doing the task yourself.
 
-Needs one free command to connect your browser and agent: `npx browser-routines setup`.
+Needs one free command to connect your browser and agent: `npx agentic-routines setup`.
 
 ## Category
 
@@ -44,8 +44,8 @@ Developer Tools
 
 The extension needs its companion program to do anything useful, and that is what a coding agent talks to.
 
-1. `npx browser-routines setup` registers the companion for every browser found.
-2. Open the Browser Routines side panel from the toolbar button. It shows "Connected" once the companion is running.
+1. `npx agentic-routines setup` registers the companion for every browser found.
+2. Open the Agentic Routines side panel from the toolbar button. It shows "Connected" once the companion is running.
 3. To see a recording without an agent, press Alt+Shift+R on any page, click and type, press it again, then save the run in the panel and replay it.
 
 Permissions: see `permissions.json`. The `debugger` permission is the one that needs the longest justification, so it is spelled out there.

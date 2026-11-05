@@ -27,7 +27,7 @@ var (
 	useWhen       = regexp.MustCompile(`(?i)\buse when\b`)
 	actions       = map[string]bool{"navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true}
 	// Names that would read as the service or as a place, not a person.
-	reserved = map[string]bool{"local": true, "admin": true, "api": true, "me": true, "root": true, "support": true, "official": true, "browser-routines": true, "browserroutines": true, "routines": true, "www": true}
+	reserved = map[string]bool{"local": true, "admin": true, "api": true, "me": true, "root": true, "support": true, "official": true, "agentic-routines": true, "agenticroutines": true, "browser-routines": true, "browserroutines": true, "routines": true, "www": true}
 )
 
 const (

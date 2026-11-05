@@ -5,6 +5,6 @@ import Base from '../layouts/Base.astro';
 const md = readFileSync(new URL('../../../../docs/privacy.md', import.meta.url), 'utf8').replace(/^# .*\n/, '');
 const html = await marked.parse(md);
 ---
-<Base title="Privacy" description="What Browser Routines keeps on your computer, and what is sent when you sign in, publish or install.">
+<Base title="Privacy" description="What Agentic Routines keeps on your computer, and what is sent when you sign in, publish or install.">
   <div class="wrap"><article class="prose"><h1>Privacy</h1><Fragment set:html={html} /></article></div>
 </Base>

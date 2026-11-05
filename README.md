@@ -1,10 +1,10 @@
-# Browser Routines
+# Agentic Routines
 
-Your agent does a browser task once. Browser Routines records it, and next time replays it without asking the model again.
+Your agent does a browser task once. Agentic Routines records it, and next time replays it without asking the model again.
 
 Repeat chores run up to 3.5 times faster and cost up to 83% less, and your agent's context stays free of page snapshots. It works with Claude Code, Codex, GitHub Copilot and OpenCode, in Chrome, Edge and Firefox.
 
-Website and docs: <https://browserroutines.arunprakashg.com>
+Website and docs: <https://agenticroutines.arunprakashg.com>
 
 ## Install
 
@@ -12,17 +12,17 @@ Website and docs: <https://browserroutines.arunprakashg.com>
 2. Connect your agents:
 
 ```bash
-npx browser-routines setup
+npx agentic-routines setup
 ```
 
-Then restart your agent and check everything is connected with `npx browser-routines doctor`.
+Then restart your agent and check everything is connected with `npx agentic-routines doctor`.
 
 Or paste this into your agent and let it do the work:
 
 ```text
-Set up Browser Routines on this machine.
-1. Run "npx browser-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
-2. Run "npx browser-routines doctor" and tell me which agents and browsers are connected and what is still missing.
+Set up Agentic Routines on this machine.
+1. Run "npx agentic-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
+2. Run "npx agentic-routines doctor" and tell me which agents and browsers are connected and what is still missing.
 3. If my browser has no extension yet, tell me which store page to open. Do not install anything else.
 4. Tell me to restart this agent so it loads the browser tools.
 ```
@@ -36,14 +36,14 @@ Set up Browser Routines on this machine.
 
 You can also record a demo by doing the task yourself, and share routines through the reviewed directory or a GitHub repository.
 
-Read more in the [docs](https://browserroutines.arunprakashg.com/docs), or the [architecture notes](docs/architecture.md).
+Read more in the [docs](https://agenticroutines.arunprakashg.com/docs), or the [architecture notes](docs/architecture.md).
 
 ## Repository
 
 | Path | What it is |
 |---|---|
 | `packages/extension` | The browser extension (WXT, Preact). One codebase for Chrome, Edge and Firefox |
-| `packages/cli` | The `browser-routines` npm package: `setup`, `doctor`, `mcp` and the native `host` |
+| `packages/cli` | The `agentic-routines` npm package: `setup`, `doctor`, `mcp` and the native `host` |
 | `packages/core` | Routine format, compiler and locator matching, shared by both |
 | `packages/browsers` | Every supported browser in one table: where it keeps native host manifests, which ids it accepts |
 | `apps/api` | Accounts and the directory. A Go service on Postgres and Redis |

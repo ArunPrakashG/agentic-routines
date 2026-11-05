@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 import '../styles/directory.css';
 ---
-<Base title="Routine" description="A routine from the Browser Routines directory: what it does, every step, and how to install it." path="/r" noindex>
+<Base title="Routine" description="A routine from the Agentic Routines directory: what it does, every step, and how to install it." path="/r" noindex>
   <div class="wrap page" id="root">
     <p class="crumb"><a href="/directory">Directory</a></p>
     <div class="state">Loading…</div>
@@ -47,7 +47,7 @@ import '../styles/directory.css';
       if (res.status === 404) return fail('No such routine.', 'It may have been taken down or never listed.');
       if (!res.ok) throw new Error(String(res.status));
       const r = (await res.json()) as Detail;
-      document.title = `${r.owner}/${r.name} · Browser Routines`;
+      document.title = `${r.owner}/${r.name} · Agentic Routines`;
       const pauses = new Set(r.meta?.pauses ?? []);
       const params = Object.keys(r.meta?.params ?? {});
       const head = el(

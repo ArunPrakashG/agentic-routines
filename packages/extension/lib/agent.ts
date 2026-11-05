@@ -1,4 +1,4 @@
-import type { Locator, PageFingerprint, RecordedEvent } from '@browser-routines/core';
+import type { Locator, PageFingerprint, RecordedEvent } from '@agentic-routines/core';
 import { areaBase64, cropHash, pngBase64, type Rect } from './crop';
 import * as native from './native';
 import { platform } from './platform';
