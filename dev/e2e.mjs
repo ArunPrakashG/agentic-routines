@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const CDP = `http://127.0.0.1:${process.env.BR_CDP_PORT ?? 9333}`;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.DEV_DIR;
 const HOME = DEV;
@@ -28,7 +29,7 @@ const check = (ok, what) => {
 
 // ---------- CDP ----------
 async function cdpTarget(match) {
-  const list = await (await fetch('http://127.0.0.1:9333/json/list')).json();
+  const list = await (await fetch(`${CDP}/json/list`)).json();
   return list.find((t) => t.type === 'page' && match(t.url));
 }
 async function cdp(wsUrl) {
@@ -63,12 +64,12 @@ async function evalIn(match, expr) {
 // The side panel, opened as a tab at panel size.
 let panel;
 async function openPanel(scheme = 'light') {
-  const v = await (await fetch('http://127.0.0.1:9333/json/version')).json();
+  const v = await (await fetch(`${CDP}/json/version`)).json();
   const b = await cdp(v.webSocketDebuggerUrl);
   const { targetId } = await b.send('Target.createTarget', { url: `${EXT}/sidepanel.html`, newWindow: true });
   b.close();
   await sleep(800);
-  const t = (await (await fetch('http://127.0.0.1:9333/json/list')).json()).find((x) => x.id === targetId);
+  const t = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.id === targetId);
   panel = await cdp(t.webSocketDebuggerUrl);
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 844, deviceScaleFactor: 1, mobile: false });
   await panel.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }, { name: 'prefers-reduced-motion', value: 'reduce' }] });

@@ -16,6 +16,13 @@ for a in "$@"; do
   esac
 done
 
+# Tests drive whatever answers on this port, so it has to be ours.
+CDP_PORT=${BR_CDP_PORT:-9333}
+if curl -s --max-time 1 "127.0.0.1:$CDP_PORT/json/version" >/dev/null; then
+  echo "Port $CDP_PORT already has a browser on it. Set BR_CDP_PORT to another port." >&2
+  exit 1
+fi
+
 # Branded Chrome ignores --load-extension, so this needs Chromium.
 CHROME=${BR_CHROME:-$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}
 [ -x "$CHROME" ] || { echo "No Chromium found. Run: npx playwright install chromium" >&2; exit 1; }
@@ -42,9 +49,9 @@ env HOME="$BHOME" BROWSER_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/b
 
 touch "$DEV/.started"
 tmux new-session -d -s br-site "python3 -m http.server 8765 --bind 127.0.0.1 --directory '$ROOT/dev/site'"
-tmux new-session -d -s br-chrome "env HOME='$BHOME' BROWSER_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=9333 --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:8765/ > '$DEV/chrome.log' 2>&1"
+tmux new-session -d -s br-chrome "env HOME='$BHOME' BROWSER_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:8765/ > '$DEV/chrome.log' 2>&1"
 
-i=0; until curl -s localhost:9333/json/version >/dev/null || [ $i -gt 100 ]; do i=$((i+1)); sleep 0.2; done
+i=0; until curl -s 127.0.0.1:$CDP_PORT/json/version >/dev/null || [ $i -gt 100 ]; do i=$((i+1)); sleep 0.2; done
 # Only a host from this browser counts: a crash leaves the old one's file behind.
 host_up() { [ -n "$(find "$STORE/hosts" -name '*.json' -newer "$DEV/.started" 2>/dev/null)" ]; }
 i=0; until host_up || [ $i -gt 300 ]; do i=$((i+1)); sleep 0.2; done
@@ -60,6 +67,6 @@ JSON
 fi
 
 echo "Site     http://127.0.0.1:8765/ (tmux: br-site)"
-echo "Browser  CDP on 9333 (tmux: br-chrome)"
+echo "Browser  CDP on $CDP_PORT (tmux: br-chrome)"
 [ -n "$CLAUDE" ] && echo "Agent    tmux attach -t br-claude"
 echo "State    $DEV"
