@@ -1,0 +1,74 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  path?: string;
+  noindex?: boolean;
+  jsonLd?: object;
+  dark?: boolean;
+}
+const { title, description, path = Astro.url.pathname, noindex = false, jsonLd, dark = false } = Astro.props;
+const canonical = new URL(path, Astro.site).toString().replace(/\/$/, '') || String(Astro.site);
+const full = title === 'Browser Routines' ? title : `${title} · Browser Routines`;
+const here = Astro.url.pathname.replace(/\.html$/, '');
+const nav = [
+  { href: '/directory', label: 'Directory' },
+];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{full}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="light dark" />
+    {noindex && <meta name="robots" content="noindex" />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Browser Routines" />
+    <meta property="og:title" content={full} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={full} />
+    <meta name="twitter:description" content={description} />
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class:list={['top', { 't-dark': dark }]}>
+      <div class="wrap">
+        <header class="topbar">
+          <a class="brand" href="/" aria-label="Browser Routines, home">
+            <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" stroke="var(--accent-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Browser Routines</span>
+          </a>
+          <nav class="topnav" aria-label="Main">
+            {nav.map((n) => <a class="nav" href={n.href} aria-current={here === n.href ? 'page' : undefined}>{n.label}</a>)}
+            <a class="nav hide-sm" href="https://github.com/ArunPrakashG/browser-routines">GitHub</a>
+            <a class="btn btn-primary" href="/#install" style="margin-left: 8px;">Install</a>
+          </nav>
+        </header>
+      </div>
+    </div>
+    <main id="main"><slot /></main>
+    <footer class="site">
+      <div class="wrap in">
+        <div>
+          <a class="brand" href="/">Browser Routines</a>
+          <p>A memory for your agent’s browser work. Free and open source.</p>
+        </div>
+        <nav aria-label="Footer">
+          <a class="nav" href="/directory">Directory</a>
+          <a class="nav" href="/guidelines">Guidelines</a>
+          <a class="nav" href="https://github.com/ArunPrakashG/browser-routines">GitHub</a>
+          <a class="nav" href="/privacy">Privacy</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/directory.css';
+---
+<Base title="Routine" description="A routine from the Browser Routines directory: what it does, every step, and how to install it." path="/r" noindex>
+  <div class="wrap page" id="root">
+    <p class="crumb"><a href="/directory">Directory</a></p>
+    <div class="state">Loading…</div>
+  </div>
+</Base>
+
+<script>
+  import { API, type Detail } from '../lib/api';
+  import { el, count, letter } from '../lib/dom';
+
+  const root = document.getElementById('root')!;
+  const p = new URLSearchParams(location.search);
+  const owner = p.get('o') ?? '';
+  const name = p.get('n') ?? '';
+  const crumb = el('p', { class: 'crumb' }, el('a', { href: '/directory' }, 'Directory'));
+
+  function fail(title: string, text: string) {
+    root.replaceChildren(crumb, el('div', { class: 'state' }, el('b', {}, title), text));
+  }
+
+  function copyBlock(label: string, text: string) {
+    const btn = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Copy');
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; setTimeout(() => (btn.textContent = 'Copy'), 1500); } catch { btn.textContent = 'Press ctrl+C'; }
+    });
+    return el('div', { class: 'copy' }, el('pre', { 'aria-label': label }, text), el('div', { style: 'margin-top: 8px' }, btn));
+  }
+
+  function stepRow(s: Detail['steps'][number], pauses: Set<number>) {
+    const target = s.url ?? s.label;
+    const t = el('span', { class: 't' }, target);
+    if (s.value && /^\{\{.+\}\}$/.test(s.value)) t.append(' ', el('span', { class: 'tag' }, s.value));
+    const li = el('li', {}, el('span', { class: 'n' }, String(s.n)), el('span', { class: 'v' }, s.action), t);
+    if (pauses.has(s.n) || s.pause) li.append(el('span', { class: 'pause' }, 'Pauses here and waits for you'));
+    return li;
+  }
+
+  async function run() {
+    if (!/^[a-z0-9_-]{1,40}$/i.test(owner) || !/^[a-z0-9_-]{1,60}$/i.test(name)) return fail('No such routine.', 'Check the address.');
+    try {
+      const res = await fetch(`${API}/routines/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
+      if (res.status === 404) return fail('No such routine.', 'It may have been taken down or never listed.');
+      if (!res.ok) throw new Error(String(res.status));
+      const r = (await res.json()) as Detail;
+      document.title = `${r.owner}/${r.name} · Browser Routines`;
+      const pauses = new Set(r.meta?.pauses ?? []);
+      const params = Object.keys(r.meta?.params ?? {});
+      const head = el(
+        'header',
+        { class: 'rhead' },
+        el('h1', {}, el('span', { class: 'own' }, `${r.owner}/`), r.name),
+        el('p', { class: 'lede' }, r.description.split('\n')[0] ?? ''),
+        el('div', { class: 'facts mono' }, el('span', {}, r.site), el('span', {}, `v${r.version}`), el('span', {}, `${r.steps.length} steps`), el('span', {}, `${count(r.installs)} installs`), el('a', { href: `/u?h=${encodeURIComponent(r.owner)}` }, `by ${r.owner}`)),
+      );
+      const main = el('div', {}, ...(r.body.trim() ? [el('h2', { class: 'sub-h' }, 'Notes'), el('p', { class: 'notes-body' }, r.body.trim())] : []), el('h2', { class: 'sub-h' }, 'Steps'), el('ol', { class: 'steps' }, ...r.steps.map((s) => stepRow(s, pauses))));
+      const side = el(
+        'aside',
+        { style: 'display: flex; flex-direction: column; gap: 16px' },
+        el('section', { class: 'panel' }, el('h2', {}, 'Install'), el('p', {}, 'In the extension, open Directory, find this routine and press Add. You see every step before it installs.'), el('p', {}, 'Or ask your agent:'), copyBlock('Agent command', `routine_install("${r.owner}/${r.name}")`)),
+        ...(params.length ? [el('section', { class: 'panel' }, el('h2', {}, 'Inputs'), el('p', { class: 'mono' }, params.join(', ')))] : []),
+        el('section', { class: 'panel' }, el('h2', {}, 'Reviewed'), el('p', {}, 'A person read this routine before it was listed. ', el('a', { href: '/guidelines' }, 'See the guidelines'), '.')),
+      );
+      root.replaceChildren(crumb, head, el('div', { class: 'layout' }, main, side));
+      void letter;
+    } catch {
+      fail('The directory is not reachable.', 'Try again in a minute.');
+    }
+  }
+  run();
+</script>

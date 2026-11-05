@@ -1,0 +1,355 @@
+---
+import Base from '../layouts/Base.astro';
+import Agents from '../components/Agents.astro';
+
+const pain = [
+  { n: '539k', t: 'tokens to change one YouTube description' },
+  { n: '17', t: 'tool calls, and 6 screenshots sent to the model' },
+  { n: '0:56', t: 'start to finish, every time it runs' },
+  { n: '+19k', t: 'tokens of page snapshots left in your agent’s context afterwards' },
+];
+type Row = { task: string; note: string; tokens: string[]; time: string[]; cost: string[] };
+const same: Row[] = [
+  { task: 'Edit a YouTube description', note: 'Real YouTube, signed in', tokens: ['539k', '97k', '−82%'], time: ['0:56', '0:19', '−66%'], cost: ['$0.21', '$0.04', '−81%'] },
+  { task: 'Release a build to testers', note: 'Replica of a store console, one form', tokens: ['430k', '131k', '−70%'], time: ['0:46', '0:15', '−67%'], cost: ['$0.17', '$0.04', '−73%'] },
+  { task: 'Release with every setting', note: 'The same console, a long form', tokens: ['910k', '199k', '−78%'], time: ['1:33', '0:27', '−71%'], cost: ['$0.32', '$0.06', '−83%'] },
+];
+const changed: Row[] = [
+  { task: 'Release a build to testers', note: 'One button renamed since the recording', tokens: ['430k', '198k', '−54%'], time: ['0:46', '0:28', '−40%'], cost: ['$0.17', '$0.06', '−66%'] },
+  { task: 'Release with every setting', note: 'One button renamed since the recording', tokens: ['910k', '305k', '−66%'], time: ['1:33', '0:41', '−55%'], cost: ['$0.32', '$0.08', '−76%'] },
+];
+const tables = [
+  { head: 'Same page as recorded', rows: same },
+  { head: 'After the site changed', rows: changed },
+];
+const checks = [
+  { k: 'Same page', h: 'It runs straight through.', p: 'No model, no tokens.' },
+  { k: 'A step moved', h: 'Only that step goes to your agent.', p: 'It fixes it, and the fix is saved for next time.' },
+  { k: 'It breaks', h: 'Your agent takes over.', p: 'From that step, with everything done so far.' },
+];
+const stops = [
+  { h: 'Pauses before anything you can’t undo.', p: 'Publishing, paying, deleting. It waits for you, or for your agent to say yes.' },
+  { h: 'Never saves a password.', p: 'What you type into a password field stays in the browser and shows up as a placeholder.' },
+  { h: 'Learns from you too.', p: 'Do the task once yourself. It saves the same way an agent run does.' },
+];
+const ld = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Browser Routines',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Chrome, Edge, Firefox',
+  description: 'Records how your AI agent did a browser task, then replays it without asking the model again.',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+};
+---
+<Base
+  title="Browser Routines"
+  description="Browser Routines remembers how your agent did a task in the browser, then replays it without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less."
+  path="/"
+  jsonLd={ld}
+  dark
+>
+  <section class="hero t-dark">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <span class="mono kicker">A memory for your agent’s browser work</span>
+        <h1>Stop paying your agent to figure out the same website twice.</h1>
+        <p class="sub">Browser Routines remembers how your agent did a task, then replays it next time without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less.</p>
+        <div class="cta">
+          <a class="btn btn-primary btn-lg" href="#install">Install, it’s free</a>
+          <a class="btn btn-secondary btn-lg" href="#numbers">See the numbers</a>
+        </div>
+        <div class="works"><span class="mono">Works with</span><Agents /></div>
+      </div>
+
+      <figure class="chart">
+        <div class="chart-head">
+          <figcaption>The same chore, run 30 times</figcaption>
+          <span class="legend"><span><i style="background: var(--text-3)"></i>By hand</span><span><i style="background: var(--accent)"></i>With Browser Routines</span></span>
+        </div>
+        <svg viewBox="0 0 720 300" role="img" aria-label="Cost of running the same chore 30 times: $6.18 by hand, $1.34 with Browser Routines, 78 percent less">
+          <g stroke="var(--border)" stroke-width="1"><line x1="40" y1="270" x2="560" y2="270"/><line x1="40" y1="192.3" x2="560" y2="192.3"/><line x1="40" y1="114.6" x2="560" y2="114.6"/><line x1="40" y1="37" x2="560" y2="37"/></g>
+          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-3)"><text x="0" y="274">$0</text><text x="0" y="196">$2</text><text x="0" y="118">$4</text><text x="0" y="41">$6</text><text x="40" y="292">run 1</text><text x="195" y="292">10</text><text x="368" y="292">20</text><text x="540" y="292" text-anchor="middle">30</text></g>
+          <line class="hl" pathLength="1" x1="40" y1="262" x2="540" y2="30" stroke="var(--text-3)" stroke-width="2.5" stroke-linecap="round"/>
+          <line class="hl hl2" pathLength="1" x1="40" y1="262" x2="540" y2="218.1" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round"/>
+          <g class="hfade">
+            <circle cx="540" cy="30" r="4.5" fill="var(--text-3)"/><circle cx="540" cy="218.1" r="5" fill="var(--accent)"/>
+            <text x="552" y="35" font-family="IBM Plex Mono, monospace" font-size="15" fill="var(--text-2)">$6.18</text>
+            <text x="552" y="223" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="500" fill="var(--accent-ink)">$1.34</text>
+            <path d="M624 42 V206" stroke="var(--accent)" stroke-width="1.5" fill="none"/><path d="M618 42 H624 M618 206 H624" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="636" y="130" font-family="IBM Plex Mono, monospace" font-size="26" font-weight="500" fill="var(--accent-ink)" letter-spacing="-0.5">−78%</text>
+          </g>
+        </svg>
+        <div class="rule"></div>
+        <dl class="hstats">
+          <div><dt>tokens</dt><dd class="hstat">−82%</dd></div>
+          <div><dt>time</dt><dd class="hstat">−66%</dd></div>
+          <div><dt>cost</dt><dd class="hstat">−81%</dd></div>
+        </dl>
+        <p class="fine">Cost of one YouTube description edit, 21 cents by hand and 4 cents replayed, times 30. Run 1 is your agent at full price. Tokens, time and cost for one run are medians of 5 runs with Claude Sonnet 5.5.</p>
+      </figure>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="wrap stack">
+      <div class="head">
+        <h2 class="h2">Made for the chores your agent repeats.</h2>
+        <p class="lede">The first run is your agent, as usual. Every run after that replays what it learned: no reading the page again, no thinking, no waiting.</p>
+      </div>
+      <div class="cols3">
+        <div class="col"><span class="mono k">Once</span><h3>A task you do one time.</h3><p>Just ask your agent. There is nothing to save, and nothing lost.</p></div>
+        <div class="col on"><span class="mono k">Again and again</span><h3>A chore you repeat.</h3><p>Shipping a release, exporting a report, adding a record in a console. It saves on every run after the first.</p></div>
+        <div class="col"><span class="mono k">Everyone</span><h3>A chore your whole team does.</h3><p>Record it once and share it, so nobody pays to teach it again.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="wrap stack">
+      <div class="head">
+        <h2 class="h2">Watch it once. Replay it every time.</h2>
+        <p class="lede">Your agent does the task. Browser Routines tidies the steps up and keeps them, then checks the page at every step on the way back.</p>
+      </div>
+      <ol class="flow">
+        <li>
+          <span class="mono k">1 · Record</span>
+          <h3>Your agent runs the task.</h3>
+          <pre class="code" aria-label="A recorded run of 25 steps">navigate  play.google.com/console
+click     Kavyam
+click     Test and release
+click     Testing
+click     Internal testing
+click     Create new release
+<span class="dim">… 19 more</span></pre>
+          <p>25 steps, as your agent clicked them.</p>
+        </li>
+        <li>
+          <span class="mono k">2 · Compile</span>
+          <h3>The steps are tidied up.</h3>
+          <pre class="code" aria-label="The compiled routine, 20 steps">navigate  …/releases/new  <span class="tag">direct URL</span>
+upload    <span class="tag">{'{{bundle}}'}</span>
+type      Release name  <span class="tag">{'{{version_name}}'}</span>
+type      Release notes <span class="tag">{'{{release_notes}}'}</span>
+click     Next
+<span class="dim">… 15 more</span></pre>
+          <p>Navigation a link can replace is dropped. What changes between runs becomes an input. 20 steps.</p>
+        </li>
+        <li>
+          <span class="mono k">3 · Replay</span>
+          <h3>One call, no model.</h3>
+          <pre class="code" aria-label="Replaying the routine with one tool call"><span class="fn">routine_run</span>(<span class="str">"play-release"</span>, {'{'}
+  version_name: <span class="str">"2.15.0 (215)"</span>,
+  release_notes: <span class="str">"Dark mode for the reader."</span>,
+  bundle: <span class="str">"kavyam-2.15.0.aab"</span>
+{'}'})</pre>
+          <p>Step 9 changed, so the model was called once. 20 steps, 0:31.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="sec" id="numbers">
+    <div class="wrap stack">
+      <div class="head">
+        <h2 class="h2">Your agent starts from zero every time.</h2>
+        <p class="lede">Browser agents read the page, think, act, and read the page again, for every single step. Run the same chore tomorrow and you pay for all of it again.</p>
+      </div>
+      <dl class="pain">
+        {pain.map((x) => <div><dt class="hstat">{x.n}</dt><dd>{x.t}</dd></div>)}
+      </dl>
+      <p class="fine wide">That is one small edit to a YouTube description, done by hand through Claude in Chrome. On a longer console task it took 44 tool calls, 910k tokens and 1:33, and one run in five said it was done without starting the rollout.</p>
+
+      <div class="head" style="margin-top: 32px;">
+        <h2 class="h2">Measured, not estimated.</h2>
+        <p class="lede">Up to 83% cheaper and 3.5 times faster than the same agent doing the task by hand. Each arrow goes from by hand to replay.</p>
+      </div>
+      {tables.map((t) => (
+        <div class="tbl" role="table" aria-label={t.head}>
+          <div class="tr th" role="row"><span role="columnheader">{t.head}</span><span role="columnheader">Tokens</span><span role="columnheader">Time</span><span role="columnheader">Cost</span></div>
+          {t.rows.map((r) => (
+            <div class="tr" role="row">
+              <span class="task" role="cell"><b>{r.task}</b><small>{r.note}</small></span>
+              {[['Tokens', r.tokens], ['Time', r.time], ['Cost', r.cost]].map(([l, v]) => (
+                <span class="m" role="cell" data-l={l as string}><span class="mono">{(v as string[])[0]} → <b>{(v as string[])[1]}</b></span><em class="mono">{(v as string[])[2]}</em></span>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      <div class="notes">
+        <p>A button was renamed since the recording. That added 12 to 15 seconds and 1 to 2 cents: your agent fixed that one step and the fix was saved.</p>
+        <p>Best for chores you repeat. The first run still goes through your agent, and a task you do once is just as quick to ask for.</p>
+        <p class="fine">Claude Sonnet 5.5 through Claude in Chrome, against the saved routine, on one machine. Median of 5 runs each, a small sample. Costs are what Claude Code reported at list prices. The YouTube task ran on real YouTube; the other two on a replica of a store console. Token totals include context read back from cache.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="wrap stack">
+      <h2 class="h2">It checks the page before every step.</h2>
+      <div class="cols3">
+        {checks.map((c) => <div class="col"><span class="mono k">{c.k}</span><h3>{c.h}</h3><p>{c.p}</p></div>)}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="wrap stack">
+      <h2 class="h2">It stops where you would.</h2>
+      <div class="cols3">
+        {stops.map((c) => <div class="col"><h3>{c.h}</h3><p>{c.p}</p></div>)}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="wrap stack">
+      <div class="split">
+        <div class="head">
+          <h2 class="h2">Routines other people keep working.</h2>
+          <p class="lede">Publish a routine, or install one someone else maintains. Every routine is read by a person before it is listed, and you see each step before it installs.</p>
+        </div>
+        <div class="split-cta">
+          <a class="btn btn-primary btn-lg" href="/directory">Browse the directory</a>
+          <a class="btn btn-secondary btn-lg" href="/guidelines">Read the guidelines</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="install">
+    <div class="wrap stack">
+      <h2 class="h2">Set up in two steps.</h2>
+      <div class="cols2">
+        <div class="step">
+          <span class="num mono">1</span>
+          <h3>Add the extension</h3>
+          <div class="chips"><span>Chrome</span><span>Edge</span><span>Firefox</span></div>
+          <p>Brave, Arc and Opera use the Chrome version. Signing in with Google is optional.</p>
+        </div>
+        <div class="step">
+          <span class="num mono">2</span>
+          <h3>Connect your agent</h3>
+          <div class="term" aria-label="Terminal">
+            <div><span class="dim">$</span> npx browser-routines setup</div>
+            <div class="ok"><span>✓</span> Claude Code <span class="dim">~/.claude.json</span></div>
+            <div class="ok"><span>✓</span> Codex <span class="dim">~/.codex/config.toml</span></div>
+            <div class="ok"><span>✓</span> GitHub Copilot <span class="dim">VS Code mcp.json</span></div>
+            <div class="ok"><span>✓</span> OpenCode <span class="dim">~/.config/opencode/opencode.json</span></div>
+            <div class="ok"><span>✓</span> Chrome <span class="dim">extension connected</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style is:global>
+  .top.t-dark { background: var(--bg); color: var(--text-1); }
+  .hero { background: var(--bg); color: var(--text-1); }
+  .hero-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 620px); gap: 48px; align-items: center; padding-top: 56px; padding-bottom: 96px; }
+  .hero-copy { display: flex; flex-direction: column; gap: 28px; }
+  .hero .kicker { font-size: 13px; color: var(--accent-ink); }
+  .hero h1 { margin: 0; font-size: 60px; line-height: 64px; font-weight: 600; letter-spacing: -0.035em; text-wrap: balance; }
+  .hero .sub { margin: 0; font-size: 18px; line-height: 28px; color: var(--text-2); max-width: 540px; }
+  .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .hero .works { display: flex; flex-direction: column; gap: 12px; }
+  .hero .works > .mono { font-size: 12px; color: var(--text-3); }
+  .chart { margin: 0; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--surface-1); padding: 28px; display: flex; flex-direction: column; gap: 22px; box-shadow: var(--shadow-2); }
+  .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+  .chart figcaption { font-size: 15px; font-weight: 500; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .chart .rule { height: 1px; background: var(--border); }
+  .hstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+  .hstats div { display: flex; flex-direction: column-reverse; gap: 2px; }
+  .hstats dd { margin: 0; font-size: 44px; line-height: 1.05; }
+  .hstats dt { font-size: 13px; color: var(--text-2); }
+  .hstat { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.03em; color: var(--accent-ink); }
+  .fine { margin: 0; font-size: 12px; line-height: 18px; color: var(--text-3); }
+  .fine.wide { max-width: 760px; }
+  .hl { stroke-dasharray: 1; stroke-dashoffset: 1; animation: hl 9s var(--ease-out) infinite both; }
+  .hl2 { animation-delay: .25s; }
+  @keyframes hl { 0%, 5% { stroke-dashoffset: 1; } 48%, 94% { stroke-dashoffset: 0; } 98%, 100% { stroke-dashoffset: 1; } }
+  .hfade { animation: hfade 9s ease-out infinite both; }
+  @keyframes hfade { 0%, 46% { opacity: 0; transform: translateY(4px); } 54%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .hl { stroke-dashoffset: 0 !important; } .hfade { opacity: 1 !important; } }
+
+  .stack { display: flex; flex-direction: column; gap: 48px; }
+  .head { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+  .cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
+  .cols2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
+  .col { display: flex; flex-direction: column; gap: 10px; padding-top: 20px; border-top: 2px solid var(--border-strong); }
+  .col.on { border-top-color: var(--accent); }
+  .col .k { font-size: 12px; color: var(--text-3); }
+  .col.on .k { color: var(--accent-ink); }
+  .col h3, .flow h3, .step h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 500; }
+  .col p, .flow p, .step p { margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2); }
+
+  .flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .flow li { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .flow .k { font-size: 12px; color: var(--accent-ink); }
+  .code { margin: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); font: 400 12px/20px var(--font-mono); color: var(--text-1); overflow-x: auto; white-space: pre; }
+  .code .dim, .term .dim { color: var(--text-3); }
+  .code .tag { background: var(--accent-soft); color: var(--accent-ink); border-radius: 4px; padding: 1px 6px; }
+  .code .fn { color: var(--accent-ink); }
+  .code .str { color: var(--text-2); }
+
+  .pain { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 0; }
+  .pain div { border-top: 2px solid var(--border-strong); padding-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .pain dt { font-size: 44px; line-height: 1.05; }
+  .pain dd { margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2); }
+
+  .tbl { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  .tr { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 20px; align-items: center; border-top: 1px solid var(--border); }
+  .tr:first-child { border-top: 0; }
+  .tr.th { font-size: 12px; color: var(--text-3); background: var(--surface-2); padding-top: 10px; padding-bottom: 10px; }
+  .tr .task { display: flex; flex-direction: column; gap: 2px; }
+  .tr .task b { font-weight: 500; font-size: 15px; }
+  .tr .task small { font-size: 12px; color: var(--text-3); }
+  .tr .m { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--text-2); }
+  .tr .m b { color: var(--text-1); font-weight: 500; }
+  .tr .m em { font-style: normal; font-size: 12px; color: var(--accent-ink); }
+  .notes { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+  .notes p { margin: 0; font-size: 15px; line-height: 24px; color: var(--text-2); }
+  .notes p.fine { font-size: 12px; line-height: 18px; color: var(--text-3); }
+
+  .split { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; flex-wrap: wrap; }
+  .split-cta { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .step { display: flex; flex-direction: column; gap: 14px; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); min-width: 0; }
+  .step .num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chips span { padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 14px; }
+  .term { font: 400 13px/22px var(--font-mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; white-space: nowrap; }
+  .term .ok span:first-child { color: var(--accent-ink); }
+
+  @media (max-width: 1100px) {
+    .hero-in { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-bottom: 72px; }
+    .chart { max-width: 680px; }
+  }
+  @media (max-width: 900px) {
+    .cols3, .flow { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+    .cols2 { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .pain { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stack { gap: 36px; }
+  }
+  @media (max-width: 640px) {
+    .hero-in { padding-top: 32px; padding-bottom: 56px; }
+    .hero h1 { font-size: 38px; line-height: 42px; }
+    .hero .sub { font-size: 16px; line-height: 26px; }
+    .hero .cta .btn { flex: 1 1 100%; }
+    .chart { padding: 20px 16px; }
+    .hstats dd { font-size: 30px; }
+    .pain dt { font-size: 34px; }
+    .tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); gap: 10px; padding: 14px 16px; }
+    .tr .task { grid-column: 1 / -1; }
+    .tr.th { display: none; }
+    .tr .m::before { content: attr(data-l); font: 400 11px/1 var(--font-sans); color: var(--text-3); }
+    .tr .m { font-size: 12px; }
+    .split-cta .btn { flex: 1 1 100%; }
+  }
+</style>

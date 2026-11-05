@@ -1,0 +1,77 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/directory.css';
+---
+<Base
+  title="Directory"
+  description="Routines other people published for the sites you use, each one read by a person before it is listed. Search by site or by task."
+  path="/directory"
+  jsonLd={{ '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Browser Routines directory' }}
+>
+  <div class="wrap page">
+    <header>
+      <h1>Directory</h1>
+      <p class="lede">Routines other people keep working. Every one is read by a person before it is listed.</p>
+    </header>
+    <form class="search" id="f" role="search">
+      <input id="q" type="search" name="q" placeholder="A site or a task, like play.google.com or refund" aria-label="Search routines" autocomplete="off" />
+      <button class="btn btn-primary btn-lg" type="submit">Search</button>
+    </form>
+    <div id="out" aria-live="polite"><div class="list"><div class="state">Loading…</div></div></div>
+  </div>
+</Base>
+
+<script>
+  import { API, type Summary } from '../lib/api';
+  import { el, card } from '../lib/dom';
+
+  const out = document.getElementById('out')!;
+  const input = document.getElementById('q') as HTMLInputElement;
+  let offset = 0;
+  let last = '';
+  const PAGE = 20;
+
+  function state(title: string, text: Node | string) {
+    out.replaceChildren(el('div', { class: 'list' }, el('div', { class: 'state' }, el('b', {}, title), text)));
+  }
+
+  async function load(q: string, more = false) {
+    if (!more) { offset = 0; last = q; }
+    const host = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(q) ? q.toLowerCase() : '';
+    const u = new URL(`${API}/routines`);
+    if (host) u.searchParams.set('site', host); else if (q) u.searchParams.set('q', q);
+    u.searchParams.set('limit', String(PAGE));
+    u.searchParams.set('offset', String(offset));
+    try {
+      const res = await fetch(u);
+      if (!res.ok) throw new Error(String(res.status));
+      const { routines } = (await res.json()) as { routines: Summary[] };
+      if (!more && routines.length === 0) {
+        state(q ? 'Nothing for that yet.' : 'Nothing is listed yet.', el('span', {}, 'Publish one from the extension, or ', el('a', { href: '/guidelines' }, 'read the guidelines'), '.'));
+        return;
+      }
+      const list = more ? (out.querySelector('.list') as HTMLElement) : el('div', { class: 'list' });
+      routines.forEach((r) => list.append(card(r)));
+      if (!more) out.replaceChildren(list);
+      out.querySelector('.more')?.remove();
+      offset += routines.length;
+      if (routines.length === PAGE) {
+        const b = el('button', { class: 'btn btn-secondary more', type: 'button' }, 'Show more');
+        b.addEventListener('click', () => load(last, true));
+        out.append(b);
+      }
+    } catch {
+      state('The directory is not reachable.', 'Try again in a minute.');
+    }
+  }
+
+  document.getElementById('f')!.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = input.value.trim();
+    history.replaceState(null, '', q ? `?q=${encodeURIComponent(q)}` : location.pathname);
+    load(q);
+  });
+  const start = new URLSearchParams(location.search).get('q')?.slice(0, 100) ?? '';
+  input.value = start;
+  load(start);
+</script>
