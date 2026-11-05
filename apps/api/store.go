@@ -27,6 +27,7 @@ type user struct {
 	Name    string  `json:"name"`
 	Picture *string `json:"picture"`
 	Handle  *string `json:"handle"`
+	Admin   bool    `json:"admin"`
 }
 
 type store struct{ db *pgxpool.Pool }

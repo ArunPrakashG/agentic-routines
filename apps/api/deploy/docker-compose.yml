@@ -5,7 +5,7 @@
 # container over the "proxy" network. Postgres and Redis are the shared ones, reached over
 # "shared_services": database and role "browserroutines", Redis database 1.
 # .env next to this file (mode 600, never in the repo) holds DATABASE_URL, REDIS_URL, TAG (the
-# image to run), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and SESSION_SECRET.
+# image to run), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET and ADMIN_EMAILS (who may review submissions).
 
 name: browserroutines
 

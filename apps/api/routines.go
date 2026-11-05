@@ -33,6 +33,8 @@ var (
 const (
 	maxSteps       = 300
 	maxPerUser     = 100
+	maxPending     = 10
+	maxPerDay      = 30
 	maxPublishBody = 256 << 10
 )
 
@@ -181,10 +183,13 @@ func (r *routineIn) check(name string) string {
 // ---------- the database ----------
 
 var (
-	errHandleTaken = errors.New("handle taken")
-	errHandleSet   = errors.New("handle already set")
-	errTooMany     = errors.New("too many routines")
-	errNotFound    = errors.New("not found")
+	errHandleTaken    = errors.New("handle taken")
+	errHandleSet      = errors.New("handle already set")
+	errTooMany        = errors.New("too many routines")
+	errNotFound       = errors.New("not found")
+	errBlocked        = errors.New("blocked")
+	errTooManyPending = errors.New("too many waiting")
+	errSlowDown       = errors.New("too many submissions today")
 )
 
 type summary struct {
@@ -224,7 +229,8 @@ func (s *store) deleteUser(ctx context.Context, userID string) error {
 	return err
 }
 
-func (s *store) publish(ctx context.Context, ownerID, name string, r routineIn) (version int, err error) {
+// submit queues a routine for review. It never touches the live copy: that changes only when a person approves.
+func (s *store) submit(ctx context.Context, ownerID, handle, name string, r routineIn) (id string, version int, err error) {
 	meta, err := json.Marshal(r.Meta)
 	if err != nil {
 		return
@@ -238,24 +244,51 @@ func (s *store) publish(ctx context.Context, ownerID, name string, r routineIn) 
 		return
 	}
 	defer tx.Rollback(ctx)
-	// Serialises one person's publishes, so the cap cannot be passed by two at once.
+	// Serialises one person's submissions, so the caps cannot be passed by two at once.
 	if _, err = tx.Exec(ctx, `SELECT 1 FROM users WHERE id = $1::uuid FOR UPDATE`, ownerID); err != nil {
 		return
 	}
-	var have int
-	var exists bool
-	if err = tx.QueryRow(ctx, `SELECT count(*), coalesce(bool_or(name = $2), false) FROM routines WHERE owner_id = $1::uuid`, ownerID, name).Scan(&have, &exists); err != nil {
+	var blocked bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2))`,
+		handle, handle+"/"+name).Scan(&blocked); err != nil {
 		return
 	}
-	if !exists && have >= maxPerUser {
-		return 0, errTooMany
+	if blocked {
+		return "", 0, errBlocked
+	}
+	var names, otherPending, recent int
+	var exists bool
+	if err = tx.QueryRow(ctx, `
+		SELECT count(DISTINCT n), coalesce(bool_or(n = $2), false), count(DISTINCT n) FILTER (WHERE pending AND n <> $2)
+		FROM (SELECT name n, false pending FROM routines WHERE owner_id = $1::uuid
+		      UNION ALL SELECT name, true FROM submissions WHERE owner_id = $1::uuid AND status = 'pending') x`,
+		ownerID, name).Scan(&names, &exists, &otherPending); err != nil {
+		return
+	}
+	if !exists && names >= maxPerUser {
+		return "", 0, errTooMany
+	}
+	if otherPending >= maxPending {
+		return "", 0, errTooManyPending
+	}
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM submissions WHERE owner_id = $1::uuid AND submitted_at > now() - interval '1 day'`, ownerID).Scan(&recent); err != nil {
+		return
+	}
+	if recent >= maxPerDay {
+		return "", 0, errSlowDown
+	}
+	// A newer version replaces the one still waiting.
+	if _, err = tx.Exec(ctx, `UPDATE submissions SET status = 'withdrawn', decided_at = now(), decided_by = 'publisher'
+		WHERE owner_id = $1::uuid AND name = $2 AND status = 'pending'`, ownerID, name); err != nil {
+		return
 	}
 	err = tx.QueryRow(ctx, `
-		INSERT INTO routines (id, owner_id, name, site, description, version, body, meta, steps)
-		VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4, 1, $5, $6, $7)
-		ON CONFLICT (owner_id, name) DO UPDATE SET site = EXCLUDED.site, description = EXCLUDED.description,
-			version = routines.version + 1, body = EXCLUDED.body, meta = EXCLUDED.meta, steps = EXCLUDED.steps, updated_at = now()
-		RETURNING version`, ownerID, name, r.Meta.Site, r.Meta.Description, r.Body, meta, steps).Scan(&version)
+		INSERT INTO submissions (owner_id, name, site, description, version, body, meta, steps)
+		VALUES ($1::uuid, $2, $3, $4,
+			greatest(coalesce((SELECT version FROM routines WHERE owner_id = $1::uuid AND name = $2), 0),
+			         coalesce((SELECT max(version) FROM submissions WHERE owner_id = $1::uuid AND name = $2), 0)) + 1,
+			$5, $6, $7)
+		RETURNING id::text, version`, ownerID, name, r.Meta.Site, r.Meta.Description, r.Body, meta, steps).Scan(&id, &version)
 	if err != nil {
 		return
 	}
@@ -263,13 +296,30 @@ func (s *store) publish(ctx context.Context, ownerID, name string, r routineIn) 
 	return
 }
 
+// unpublish takes the live routine down and withdraws anything waiting for review under the name.
 func (s *store) unpublish(ctx context.Context, ownerID, name string) error {
-	t, err := s.db.Exec(ctx, `DELETE FROM routines WHERE owner_id = $1::uuid AND name = $2`, ownerID, name)
-	if err == nil && t.RowsAffected() == 0 {
-		err = errNotFound
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
 	}
-	return err
+	defer tx.Rollback(ctx)
+	t, err := tx.Exec(ctx, `DELETE FROM routines WHERE owner_id = $1::uuid AND name = $2`, ownerID, name)
+	if err != nil {
+		return err
+	}
+	w, err := tx.Exec(ctx, `UPDATE submissions SET status = 'withdrawn', decided_at = now(), decided_by = 'publisher'
+		WHERE owner_id = $1::uuid AND name = $2 AND status = 'pending'`, ownerID, name)
+	if err != nil {
+		return err
+	}
+	if t.RowsAffected()+w.RowsAffected() == 0 {
+		return errNotFound
+	}
+	return tx.Commit(ctx)
 }
+
+// liveOnly keeps a disabled routine, or one from a blocked publisher, out of everything public.
+const liveOnly = `r.disabled = false AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.kind = 'user' AND b.value = u.handle)`
 
 const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at`
 
@@ -282,7 +332,7 @@ func (s *store) search(ctx context.Context, q, host string, limit, offset int) (
 	pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q) + "%"
 	rows, err := s.db.Query(ctx, `
 		SELECT `+summaryCols+` FROM routines r JOIN users u ON u.id = r.owner_id
-		WHERE u.handle IS NOT NULL
+		WHERE u.handle IS NOT NULL AND `+liveOnly+`
 		  AND ($1 = '' OR r.name ILIKE $2 OR r.description ILIKE $2 OR r.site ILIKE $2)
 		  AND ($3 = '' OR $3 = r.site OR $3 LIKE '%.' || r.site)
 		ORDER BY r.installs DESC, r.updated_at DESC LIMIT $4 OFFSET $5`, q, pattern, host, limit, offset)
@@ -301,18 +351,23 @@ func (s *store) search(ctx context.Context, q, host string, limit, offset int) (
 	return out, rows.Err()
 }
 
-func (s *store) mine(ctx context.Context, ownerID string) ([]summary, error) {
+type mineRow struct {
+	summary
+	Disabled bool `json:"disabled"`
+}
+
+func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT `+summaryCols+` FROM routines r JOIN users u ON u.id = r.owner_id
+		SELECT `+summaryCols+`, r.disabled FROM routines r JOIN users u ON u.id = r.owner_id
 		WHERE r.owner_id = $1::uuid ORDER BY r.updated_at DESC`, ownerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []summary{}
+	out := []mineRow{}
 	for rows.Next() {
-		x, err := scanSummary(rows)
-		if err != nil {
+		var x mineRow
+		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Disabled); err != nil {
 			return nil, err
 		}
 		out = append(out, x)
@@ -323,7 +378,7 @@ func (s *store) mine(ctx context.Context, ownerID string) ([]summary, error) {
 func (s *store) routine(ctx context.Context, owner, name string) (f full, err error) {
 	row := s.db.QueryRow(ctx, `
 		SELECT `+summaryCols+`, r.meta, r.body, r.steps FROM routines r JOIN users u ON u.id = r.owner_id
-		WHERE u.handle = $1 AND r.name = $2`, owner, name)
+		WHERE u.handle = $1 AND r.name = $2 AND `+liveOnly, owner, name)
 	f.summary, err = scanSummary(row, &f.Meta, &f.Body, &f.Steps)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errNotFound
@@ -334,7 +389,8 @@ func (s *store) routine(ctx context.Context, owner, name string) (f full, err er
 func (s *store) countInstall(ctx context.Context, owner, name string) error {
 	t, err := s.db.Exec(ctx, `
 		UPDATE routines SET installs = installs + 1 FROM users u
-		WHERE u.id = routines.owner_id AND u.handle = $1 AND routines.name = $2`, owner, name)
+		WHERE u.id = routines.owner_id AND u.handle = $1 AND routines.name = $2 AND routines.disabled = false
+		  AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.kind = 'user' AND b.value = u.handle)`, owner, name)
 	if err == nil && t.RowsAffected() == 0 {
 		err = errNotFound
 	}
@@ -363,6 +419,7 @@ func (a *app) user(w http.ResponseWriter, r *http.Request) (user, bool) {
 		serverError(w, r, err)
 		return user{}, false
 	}
+	u.Admin = a.cfg.AdminEmails[strings.ToLower(u.Email)]
 	return u, true
 }
 
@@ -427,16 +484,23 @@ func (a *app) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.normalize()
-	version, err := a.db.publish(r.Context(), u.ID, name, in)
-	if errors.Is(err, errTooMany) {
+	id, version, err := a.db.submit(r.Context(), u.ID, *u.Handle, name, in)
+	switch {
+	case errors.Is(err, errBlocked):
+		fail(w, http.StatusForbidden, "blocked")
+	case errors.Is(err, errTooMany):
 		fail(w, http.StatusConflict, "too_many_routines")
-		return
-	}
-	if err != nil {
+	case errors.Is(err, errTooManyPending):
+		fail(w, http.StatusConflict, "too_many_waiting")
+	case errors.Is(err, errSlowDown):
+		w.Header().Set("Retry-After", "3600")
+		fail(w, http.StatusTooManyRequests, "slow_down")
+	case err != nil:
 		serverError(w, r, err)
-		return
+	default:
+		// Accepted, not published: a person reads it first.
+		reply(w, http.StatusAccepted, map[string]any{"id": id, "owner": *u.Handle, "name": name, "version": version, "status": "pending"})
 	}
-	reply(w, http.StatusOK, map[string]any{"owner": *u.Handle, "name": name, "version": version})
 }
 
 func (a *app) unpublish(w http.ResponseWriter, r *http.Request) {
