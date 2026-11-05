@@ -46,7 +46,9 @@ function ago(ts: number): string {
   const h = Math.round(m / 60);
   if (h < 24) return `${h} h ago`;
   const d = Math.round(h / 24);
-  return d === 1 ? 'yesterday' : `${d} days ago`;
+  if (d < 7) return d === 1 ? 'yesterday' : `${d} days ago`;
+  if (d < 30) return d < 11 ? 'last week' : `${Math.round(d / 7)} weeks ago`;
+  return d < 60 ? 'last month' : `${Math.round(d / 30)} months ago`;
 }
 
 function clock(ms: number): string {
@@ -251,7 +253,13 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                     <span class="desc">{r.description.split(/\bUse when\b/i)[0].trim() || r.description}</span>
                     <span class="meta">
                       {r.site} · v{r.version}
+                      {r.lastRun ? ` · ran ${ago(r.lastRun)}` : ''}
                     </span>
+                    {!!r.changed?.length && (
+                      <span class="changed">
+                        {r.changed.length === 1 ? 'Step' : 'Steps'} {r.changed.join(', ')} changed on the last run
+                      </span>
+                    )}
                   </div>
                   <button
                     class="icon-btn"

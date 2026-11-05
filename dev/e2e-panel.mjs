@@ -161,6 +161,7 @@ log(JSON.stringify(status));
 check(/Rollout started: 3\.0\.0 · kavyam-2\.15\.0\.aab .* notes: From the panel/.test(status), 'the page got the new values');
 await panel.click(panel.button('Back to routines'));
 await panel.until((t) => /Routines/.test(t));
+check(/ran just now/.test(await panel.text()), 'the library shows when it last ran');
 
 // ---------- the keyboard ----------
 const press = async (key) => {
