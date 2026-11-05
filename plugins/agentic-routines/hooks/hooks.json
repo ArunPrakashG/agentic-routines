@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs\"" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*(claude-in-chrome|Claude_in_Chrome|Claude_Browser|playwright|puppeteer|chrome-devtools|browsermcp|browser-mcp|browser-use|browserbase|stagehand|selenium).*",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/block-other-browsers.mjs\"" }
+        ]
+      }
+    ]
+  }
+}

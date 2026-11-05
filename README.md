@@ -62,6 +62,8 @@ More in [Getting started](docs/guide/getting-started.md).
 - `routines_list` and `routine_describe` show everything saved. `routines_search` also looks in the directory and in repositories you added.
 - A replay ends as done, paused or needing a choice. The agent continues a paused replay with `routine_resume`.
 
+`setup` also tells each agent to use Agentic Routines for all browser work and to try a saved routine first. Add `--exclusive` to turn off other browser tools, and `--remove` takes it all back out ([How agents choose](docs/guide/agents.md)). For Claude Code alone, the plugin installs with `/plugin install agentic-routines --marketplace ArunPrakashG/agentic-routines`.
+
 The full list of tools is in [Agent tools](docs/guide/tools.md), and the loop an agent follows to save a routine is in [Refine a routine](docs/guide/refine.md).
 
 ## Routine repositories
@@ -97,6 +99,7 @@ The [website](https://agenticroutines.arunprakashg.com) has the docs, the direct
 | [`packages/cli`](packages/cli) | The `agentic-routines` npm package: `setup`, `doctor`, `mcp` and the native `host` |
 | [`packages/core`](packages/core) | Routine format, compiler and locator matching, shared by both |
 | [`packages/browsers`](packages/browsers) | Every supported browser in one table: where it keeps native host manifests, which ids it accepts |
+| [`plugins/agentic-routines`](plugins/agentic-routines) | The Claude Code plugin: a skill that tells the agent to look for a routine first, and hooks. Listed by `.claude-plugin/marketplace.json` |
 | [`apps/api`](apps/api) | Accounts and the directory. A Go service on Postgres and Redis |
 | [`apps/site`](apps/site) | The website and docs, built with Astro |
 | [`docs`](docs) | The documentation pages (`guide/`), architecture, directory guidelines and privacy |
@@ -109,7 +112,7 @@ Inside the larger ones:
 | Path | What it is |
 |---|---|
 | `packages/extension/lib/` | `agent/` runs, drafts and the native host line · `replay/` the replay engine · `page/` dom, overlay and tab helpers · `remote/` sign-in, directory and Git sources · `panel/` side panel messages · `platform/` Chromium and Gecko |
-| `packages/cli/src/` | `mcp/` the MCP server · `host/` the native host · `commands/` `setup`, `doctor` and `sources` · `store/` routines and sources on disk |
+| `packages/cli/src/` | `mcp/` the MCP server · `host/` the native host · `commands/` `setup`, `doctor`, `agents` and `sources` · `store/` routines and sources on disk |
 | `dev/` | `env/` the local environment · `e2e/` the end-to-end checks · `images/` the README screenshots · `fixtures/` and `site/` the test data and the test site · `bench/` the benchmark |
 
 ## Development

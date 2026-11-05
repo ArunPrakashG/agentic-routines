@@ -114,8 +114,35 @@ export function checkFetched(r: Routine): string[] {
     if (s.url && !/^https:\/\//i.test(s.url)) out.push(`Step ${s.n} opens an address that is not https.`);
   }
   for (const i of lintForPublish(r.meta, urls)) out.push(i.message);
+  out.push(...checkPlaceholders(r));
   for (const p of r.meta.pauses) if (!Number.isInteger(p) || p < 1 || p > r.steps.length) out.push('A pause points at a step that is not there.');
   return [...new Set(out)].slice(0, 8);
+}
+
+const PLACEHOLDER = /\{\{(secret:)?([a-z0-9_]+)\}\}/g;
+const WHOLE_PLACEHOLDER = /^\{\{([a-z0-9_]+)\}\}$/;
+
+/**
+ * Every {{name}} must be something the routine declares, and an upload takes its file from a file param, so the
+ * path always comes from the person who runs it and never from the routine.
+ */
+function checkPlaceholders(r: Routine): string[] {
+  const out: string[] = [];
+  const params = r.meta.params ?? {};
+  const secrets = r.meta.secrets ?? [];
+  for (const s of r.steps) {
+    if (s.action === 'upload') {
+      const name = WHOLE_PLACEHOLDER.exec(s.value ?? '')?.[1];
+      if (!name || params[name]?.type !== 'file') out.push(`Step ${s.n} uploads a file the routine picks. An upload has to take its file from a file the person gives.`);
+    }
+    if (s.url?.includes('{{secret:')) out.push(`Step ${s.n} puts a secret in an address.`);
+    for (const text of [s.url, s.value]) {
+      for (const m of (text ?? '').matchAll(PLACEHOLDER)) {
+        if (m[1] ? !secrets.includes(m[2]) : !params[m[2]] || (params[m[2]].type === 'file' && s.action !== 'upload')) out.push(`Step ${s.n} uses {{${m[1] ?? ''}${m[2]}}}, which the routine does not declare for that.`);
+      }
+    }
+  }
+  return out;
 }
 
 // ---------- a repository: config.routine, or the plain layout ----------

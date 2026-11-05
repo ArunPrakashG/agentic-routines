@@ -12,6 +12,7 @@
     "e2e": "dev/e2e/e2e.sh",
     "e2e:api": "node dev/e2e/e2e-api.mjs",
     "e2e:sources": "node dev/e2e/e2e-sources.mjs",
+    "e2e:agents": "node dev/e2e/e2e-agents.mjs",
     "e2e:hooks": "dev/e2e/e2e-hooks.sh",
     "check:links": "node dev/check-links.mjs",
     "readme:images": "dev/images/readme-images.sh",
@@ -22,5 +23,10 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "@types/node": "^22.18.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild@>=0.27.3 <0.28.1": ">=0.28.1"
+    }
   }
 }

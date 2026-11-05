@@ -14,7 +14,7 @@ Install it from the store for your browser: Chrome, Edge or Firefox. Brave, Arc 
 npx agentic-routines setup
 ```
 
-Use `pnpm dlx`, `bunx` or `yarn dlx` in place of `npx` if you prefer. The command finds Claude Code, Codex, GitHub Copilot in VS Code and OpenCode, adds the Agentic Routines tool server to each one's config, and registers the native host with every browser it finds. Run it with `--dry-run` first to see what it would write.
+Use `pnpm dlx`, `bunx` or `yarn dlx` in place of `npx` if you prefer. The command finds Claude Code, Codex, GitHub Copilot in VS Code and OpenCode, adds the Agentic Routines tool server to each one's config, and registers the native host with every browser it finds. It also tells each agent to use Agentic Routines for all browser work and to try a saved routine first ([how agents choose](/docs/agents)). Run it with `--dry-run` first to see what it would write.
 
 Restart your agent afterwards so it loads the new tools. Then check everything is connected:
 

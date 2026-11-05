@@ -1,4 +1,4 @@
-import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
+import { CROP_DRIFT, fill, hashDistance, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
 import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
@@ -224,6 +224,10 @@ async function perform(s: ReplayState, event: HookEvent, ds: Directive[], step?:
           entry.done.push(`wait ${d.ms} ms`);
           break;
         case 'goto':
+          if (!onSite(d.url, s.routine.meta.site)) {
+            refuse(d, `That address is not on ${s.routine.meta.site}.`);
+            break;
+          }
           await browser.tabs.update(s.tabId, { url: d.url });
           await sleep(200);
           await waitLoaded(s.tabId);
@@ -277,7 +281,10 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     const from = await urlOf();
     const a = await hook(s, 'action.navigate.before', step);
     if (a.skip) return 'next';
-    await browser.tabs.update(s.tabId, { url: fill(step.url, s.params, {}, true) });
+    // Whatever the routine says, and whatever the params fill in, it never leaves its own site.
+    const url = fill(step.url, s.params, {}, true) ?? '';
+    if (!onSite(url, s.routine.meta.site)) throw new Error(`Stopped: step ${step.n} would leave ${s.routine.meta.site}`);
+    await browser.tabs.update(s.tabId, { url });
     await sleep(200);
     await waitLoaded(s.tabId);
     await after(from);
@@ -314,7 +321,12 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     if (a.skip) return 'next';
     if (a.value !== undefined) value = a.value;
   }
-  if (kind === 'upload') await uploadFile(s.tabId, ref, value!);
+  if (kind === 'upload') {
+    // The file is the person's to give: a path written into the routine, or set by a hook, is never read.
+    const param = /^\{\{([a-z0-9_]+)\}\}$/.exec(step.value ?? '')?.[1];
+    if (!param || s.routine.meta.params[param]?.type !== 'file') throw new Error(`Stopped: step ${step.n} uploads a file the routine picks`);
+    await uploadFile(s.tabId, ref, fill(step.value, s.params)!);
+  }
   else if (kind === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
   else await ask(s.tabId, { t: 'act', ref, action: kind, value });
   await settle(s.tabId, before);
