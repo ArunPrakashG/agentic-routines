@@ -1,8 +1,9 @@
 ---
 import { marked } from 'marked';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
-const md = readFileSync(new URL('../../../../docs/privacy.md', import.meta.url), 'utf8').replace(/^# .*\n/, '');
+const md = readFileSync(join(process.cwd(), '../../docs/privacy.md'), 'utf8').replace(/^# .*\n/, '');
 const html = await marked.parse(md);
 ---
 <Base title="Privacy" description="What Agentic Routines keeps on your computer, and what is sent when you sign in, publish or install.">
