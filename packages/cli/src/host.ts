@@ -42,6 +42,8 @@ export function runHost(): void {
   const sock = socketPath(process.pid);
   const info = join(paths.hosts(), `${process.pid}.json`);
   const clients = new Set<Socket>();
+  // Agent sessions by connection, to tell the browser when one goes away.
+  const sessions = new Map<Socket, string>();
   // Requests forwarded to the extension: our id -> where the answer goes.
   const pending = new Map<number, { client: Socket; id: number }>();
   let nextId = 1;
@@ -77,6 +79,8 @@ export function runHost(): void {
       'data',
       lineReader(async (m) => {
         if (!isRequest(m)) return;
+        const session = (m.params as { session?: string } | undefined)?.session;
+        if (session) sessions.set(client, session);
         if (m.method.startsWith('store.')) {
           try {
             toClient(client, { id: m.id, result: await handleStore(m.method, m.params) });
@@ -105,6 +109,9 @@ export function runHost(): void {
     );
     const drop = () => {
       clients.delete(client);
+      const session = sessions.get(client);
+      sessions.delete(client);
+      if (session) toBrowser({ event: 'agent.gone', data: { session } });
       for (const [k, v] of pending) if (v.client === client) pending.delete(k);
     };
     client.on('close', drop);

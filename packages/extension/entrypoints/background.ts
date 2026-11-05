@@ -16,7 +16,7 @@ export default defineBackground(() => {
     if (method === 'replay.start') return replay.start(p);
     if (method === 'replay.resume') return replay.resume(p);
     if (method === 'agent.hello') {
-      agents.add(agent.agentName(p?.agent));
+      agents.set(p?.session, agent.agentName(p?.agent));
       push();
       return true;
     }
@@ -25,7 +25,8 @@ export default defineBackground(() => {
 
   // ---------- side panel ----------
   const panels = new Set<Browser.runtime.Port>();
-  const agents = new Set<string>();
+  // Connected agents by session.
+  const agents = new Map<string, string>();
   let routines: PanelState['routines'] = [];
   let recording: { runId: string; tabId: number } | undefined;
 
@@ -43,7 +44,7 @@ export default defineBackground(() => {
     const r = replay.current();
     return {
       connected: native.connected(),
-      agents: [...agents],
+      agents: [...new Set(agents.values())],
       routines,
       runs: all.filter((x) => !x.saved && x.events.length).map((x) => ({ id: x.id, source: x.source, startedAt: x.startedAt, updatedAt: x.updatedAt, events: x.events })),
       recording: recording?.runId,
@@ -74,7 +75,14 @@ export default defineBackground(() => {
     if (ok) refreshRoutines();
     else push();
   });
-  native.onHostEvent((e) => {
+  native.onHostEvent((e, data) => {
+    if (e === 'agent.gone') {
+      const { session } = data as { session: string };
+      agents.delete(session);
+      replay.agentGone(session);
+      push();
+      return;
+    }
     if (e === 'routines.changed') refreshRoutines();
   });
   runs.onRunsChanged(push);

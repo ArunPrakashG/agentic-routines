@@ -1,5 +1,5 @@
 import { resolve, type Locator, type RecordedEvent } from '@browser-routines/core';
-import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, select, type } from '../lib/dom';
+import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, role, select, type } from '../lib/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
@@ -11,6 +11,7 @@ export type ContentMsg =
   | { t: 'attach'; ref: string; files: { name: string; type: string; b64: string }[] }
   | { t: 'markUpload'; ref: string }
   | { t: 'resolve'; target: Locator }
+  | { t: 'first'; target: Locator }
   | { t: 'record'; on: boolean };
 
 function b64ToBytes(b64: string) {
@@ -82,6 +83,15 @@ export default defineContentScript({
             const cand = (r: { item: Element; score: number }) => ({ ref: refOf(r.item), role: describe(r.item).role, name: accessibleName(r.item), score: r.score, rect: rectOf(r.item) });
             if (res.kind === 'found') send({ ok: { kind: 'found', disabled: res.item.hasAttribute('disabled') || res.item.getAttribute('aria-disabled') === 'true', ...cand({ item: res.item, score: res.score }) } });
             else send({ ok: { kind: res.kind, candidates: res.ranked.map(cand) } });
+            break;
+          }
+          case 'first': {
+            // Same kind of element in the same place in the page, whichever row of a list it is.
+            const shape = (l: Locator) => `${l.tag}|${l.role}|${(l.css ?? '').replace(/:nth-of-type\(\d+\)/g, '')}`;
+            const want = shape(msg.target);
+            const el = interactive().find((c) => shape(describe(c)) === want);
+            if (el) send({ ok: { kind: 'found', disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true', ref: refOf(el), role: role(el), name: accessibleName(el), score: 0, rect: rectOf(el) } });
+            else send({ ok: { kind: 'missing', candidates: [] } });
             break;
           }
           case 'act': {

@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { compileRun, missingParams, onSite, type Locator, type Routine, type Run, type RunResult } from '@browser-routines/core';
+import { compileRun, eventLabel, missingParams, onSite, type Locator, type Routine, type Run, type RunResult } from '@browser-routines/core';
 import { Bridge } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as store from './store.ts';
@@ -250,10 +250,19 @@ export async function runMcp(): Promise<void> {
   );
 
   server.registerTool(
+    'run_steps',
+    { description: 'List the recorded steps of a run, numbered, to choose what routine_save leaves out.', inputSchema: { run_id: z.string().optional().describe('Defaults to the latest run') } },
+    async ({ run_id }) => {
+      const run = await bridge.call<Run>('runs.get', { run_id });
+      return text(run.events.map((e, i) => `${i + 1}. ${e.action} ${eventLabel(e)}${e.value !== undefined ? `: ${e.value}` : ''}`).join('\n'));
+    },
+  );
+
+  server.registerTool(
     'routine_save',
     {
       description:
-        'Save a recorded browser run as a routine. Write description as: what it does, then "Use when ..." in the words a user would say. Values typed during the run become params; name them by passing params { name: value typed }.',
+        'Save a recorded browser run as a routine. Write description as: what it does, then "Use when ..." in the words a user would say. Pass params { name: value typed } to choose what it asks for each run; everything else stays as typed. Without params, every typed value is asked for. If you retried a step or checked your work, or if the task means "the latest" of something, read run_steps first.',
       inputSchema: {
         name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).describe('Lowercase with dashes, e.g. play-release'),
         description: z.string().min(20).describe('What it does. Use when ...'),
@@ -261,23 +270,27 @@ export async function runMcp(): Promise<void> {
         run_id: z.string().optional().describe('Defaults to the latest run'),
         params: z.record(z.string()).optional(),
         fixed: z.array(z.string()).optional().describe('Auto-detected params to keep as typed'),
+        leave_out: z.array(z.number().int()).optional().describe('Numbers from run_steps that are not part of the task, like retries and checks'),
+        first_in_list: z.array(z.number().int()).optional().describe('Numbers from run_steps of clicks that should take whatever is first in the list next time, not the item clicked now'),
       },
     },
     async (a) => {
       if (!/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
       const run = await bridge.call<Run>('runs.get', { run_id: a.run_id });
       const body = a.do_not_use_for ? `## Do not use for\n${a.do_not_use_for}` : '';
-      const { routine, recorded, dropped } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, body });
+      const { routine, recorded, dropped, unmatched, pinned } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, leaveOut: a.leave_out, firstInList: a.first_in_list, body });
+      if (unmatched.length) return fail(`Not saved. These params match no value typed in this run: ${unmatched.join(', ')}. Check them against run_steps.`);
       const saved = await bridge.call<Routine>('store.write', { routine });
       await bridge.call('runs.markSaved', { run_id: run.id }).catch(() => {});
       scheduleRefresh();
       const params = Object.keys(saved.meta.params);
       return text(
-        `Saved ${saved.meta.name} v${saved.meta.version} · ${saved.steps.length} of ${recorded} recorded steps (${dropped} replaced by a direct URL)` +
+        `Saved ${saved.meta.name} v${saved.meta.version} · ${saved.steps.length} of ${recorded} recorded steps (${dropped} replaced by a direct URL${a.leave_out?.length ? `, ${a.leave_out.length} left out` : ''})` +
           (params.length ? ` · asks for ${params.join(', ')}` : '') +
           (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')}` : '') +
           (saved.steps[0]?.url ? `\nStarts at ${saved.steps[0].url}, so it stays on what that address opens.` : '') +
-          `\nRun it with ${toolName(saved.meta.name)}.`,
+          `\nRun it with ${toolName(saved.meta.name)}.` +
+          (pinned.length ? `\nThis routine stays on one specific item: ${pinned.join(', ')}. If it should follow whatever is newest, save again with first_in_list, starting from the list page.` : ''),
       );
     },
   );
