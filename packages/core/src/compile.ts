@@ -61,6 +61,8 @@ export interface CompileOptions {
   firstInList?: number[];
   body?: string;
   returns?: string;
+  /** The agent that wrote the description. */
+  draftedBy?: string;
 }
 
 export interface Compiled {
@@ -178,6 +180,7 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
       secrets,
       pauses: steps.filter((s) => s.pause).map((s) => s.n),
       returns: opts.returns,
+      drafted_by: opts.draftedBy,
     },
     body: opts.body ?? '',
     steps,

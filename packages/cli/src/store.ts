@@ -15,6 +15,7 @@ export interface Listed {
   site: string;
   description: string;
   enabled: boolean;
+  draftedBy?: string;
 }
 
 function dir(owner: string, name: string) {
@@ -52,7 +53,7 @@ export async function list(): Promise<Listed[]> {
         const md = await readFile(join(paths.routines(), owner, name, 'ROUTINE.md'), 'utf8');
         const { meta } = parseRoutineMd(md);
         const disabled = await readFile(join(paths.routines(), owner, name, '.disabled'), 'utf8').then(() => true, () => false);
-        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled });
+        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by });
       } catch {
         // Not a routine folder.
       }

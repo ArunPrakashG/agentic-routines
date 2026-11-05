@@ -4,13 +4,36 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { compileRun, eventLabel, missingParams, onSite, type Locator, type Routine, type Run, type RunResult } from '@browser-routines/core';
-import { Bridge } from './bridge.ts';
+import { compileRun, eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@browser-routines/core';
+import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as store from './store.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
 const VERSION = '0.1.0';
+const API = process.env.BROWSER_ROUTINES_API ?? 'https://browserroutines.arunprakashg.com';
+
+interface Listing {
+  owner: string;
+  name: string;
+  site: string;
+  description: string;
+  version: number;
+  installs: number;
+}
+
+async function directory<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API}/api/v1${path}`, { ...init, signal: AbortSignal.timeout(10_000) });
+  } catch {
+    throw new Error('Could not reach the directory. Check the connection and try again.');
+  }
+  if (res.status === 404) throw new Error('Not in the directory.');
+  if (res.status === 429) throw new Error('The directory is busy. Try again in a minute.');
+  if (!res.ok && res.status !== 204) throw new Error(`The directory answered ${res.status}.`);
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
 const text = (t: string) => ({ content: [{ type: 'text', text: t }] as Content[] });
@@ -111,15 +134,20 @@ export async function runMcp(): Promise<void> {
 
   async function refreshRoutineTools() {
     const all = (await store.list()).filter((r) => r.enabled).slice(0, MAX_ROUTINE_TOOLS);
-    const want = new Set(all.map((r) => toolName(r.name)));
+    const want = new Set<string>();
+    for (const r of all) want.add(want.has(toolName(r.name)) ? toolName(`${r.owner}-${r.name}`) : toolName(r.name));
     for (const [name, tool] of routineTools) {
       if (!want.has(name)) {
         tool.remove();
         routineTools.delete(name);
       }
     }
+    const taken = new Set<string>();
     for (const l of all) {
-      const name = toolName(l.name);
+      // Two people can publish the same name; the second one is told apart by its owner.
+      let name = toolName(l.name);
+      if (taken.has(name)) name = toolName(`${l.owner}-${l.name}`);
+      taken.add(name);
       let r: Routine;
       try {
         r = await store.read(`${l.owner}/${l.name}`);
@@ -278,7 +306,7 @@ export async function runMcp(): Promise<void> {
       if (!/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
       const run = await bridge.call<Run>('runs.get', { run_id: a.run_id });
       const body = a.do_not_use_for ? `## Do not use for\n${a.do_not_use_for}` : '';
-      const { routine, recorded, dropped, unmatched, pinned } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, leaveOut: a.leave_out, firstInList: a.first_in_list, body });
+      const { routine, recorded, dropped, unmatched, pinned } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, leaveOut: a.leave_out, firstInList: a.first_in_list, body, draftedBy: bridge.agent });
       if (unmatched.length) return fail(`Not saved. These params match no value typed in this run: ${unmatched.join(', ')}. Check them against run_steps.`);
       const saved = await bridge.call<Routine>('store.write', { routine });
       await bridge.call('runs.markSaved', { run_id: run.id }).catch(() => {});
@@ -292,6 +320,72 @@ export async function runMcp(): Promise<void> {
           `\nRun it with ${toolName(saved.meta.name)}.` +
           (pinned.length ? `\nThis routine stays on one specific item: ${pinned.join(', ')}. If it should follow whatever is newest, save again with first_in_list, starting from the list page.` : ''),
       );
+    },
+  );
+
+  // ---------- the directory ----------
+
+  const line = (r: Listing) => `${r.owner}/${r.name} v${r.version} · ${r.site}${r.installs ? ` · ${r.installs} install${r.installs === 1 ? '' : 's'}` : ''}\n  ${r.description.replace(/\n/g, ' ')}`;
+
+  server.registerTool(
+    'routines_search',
+    {
+      description:
+        'Find routines other people published for a site or task. Pass site (e.g. "play.google.com", or the host you are on) and/or words. Install one with routine_install. Check this before doing a chore by hand on a site you have no saved routine for.',
+      inputSchema: { query: z.string().max(100).optional(), site: z.string().max(253).optional() },
+    },
+    async ({ query, site }) => {
+      const q = new URLSearchParams({ limit: '10' });
+      if (query) q.set('q', query);
+      if (site) q.set('site', site.replace(/^https?:\/\//, '').split('/')[0]);
+      const { routines } = await directory<{ routines: Listing[] }>(`/routines?${q}`);
+      if (!routines.length) return text('Nothing in the directory for that yet.');
+      return text(routines.map(line).join('\n') + '\n\nInstall with routine_install and the owner/name.');
+    },
+  );
+
+  server.registerTool(
+    'routine_install',
+    {
+      description:
+        'Save a routine from the directory to this machine, as owner/name. It runs in the user\'s signed-in browser like their own, so tell the user what it does and which site it works on. Run it afterwards with its rt_ tool, or routine_run.',
+      inputSchema: { id: z.string().regex(/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/).describe('owner/name, from routines_search') },
+    },
+    async ({ id }) => {
+      const [owner, name] = id.split('/');
+      const f = await directory<Listing & { meta: Routine['meta']; body: string; steps: Step[] }>(`/routines/${owner}/${name}`);
+      // The directory checks this too, but what runs in this browser is decided here.
+      const urls = f.steps.flatMap((s) => [s.url, s.page?.url].filter((u): u is string => !!u));
+      const issues = lintForPublish(f.meta, urls);
+      if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.map((i) => i.message).join(' ') || 'Bad owner.'}`);
+      const routine: Routine = { meta: { ...f.meta, name, owner, version: f.version }, body: f.body, steps: f.steps };
+      // Through the host when a browser is open, so its panel shows it at once.
+      const saved = await bridge.call<Routine>('store.write', { routine, owner }).catch((e) => {
+        if (!(e instanceof NotConnected)) throw e;
+        return store.write(routine, owner);
+      });
+      directory(`/routines/${owner}/${name}/installs`, { method: 'POST' }).catch(() => {});
+      scheduleRefresh();
+      const asks = Object.keys(saved.meta.params);
+      return text(
+        `Installed ${owner}/${name} v${saved.meta.version} · ${saved.steps.length} steps on ${saved.meta.site}` +
+          (asks.length ? ` · asks for ${asks.join(', ')}` : '') +
+          (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')} for approval` : '') +
+          `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.`,
+      );
+    },
+  );
+
+  server.registerTool(
+    'routine_publish',
+    {
+      description:
+        'Publish a saved routine to the public directory. Only when the user asked for it. The user is asked to confirm in the browser side panel, where they see what becomes public, so this waits for them. Needs a signed-in account.',
+      inputSchema: { name: z.string() },
+    },
+    async ({ name }) => {
+      const r = await bridge.call<{ owner: string; name: string; version: number }>('directory.publish', { id: name }, 11 * 60_000);
+      return text(`Published ${r.owner}/${r.name} v${r.version}. Others can install it with routine_install.`);
     },
   );
 

@@ -109,6 +109,22 @@ export async function accessToken(): Promise<string | undefined> {
   return refreshing;
 }
 
+/** A call to the API as the signed-in person. Throws when signed out. */
+export async function api(method: string, path: string, body?: unknown): Promise<Response> {
+  const token = await accessToken();
+  if (!token) throw new Error('Sign in first.');
+  return fetch(`${API}/api/v1${path}`, {
+    method,
+    headers: { authorization: `Bearer ${token}`, 'x-install-id': await installId(), ...(body ? { 'content-type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+export async function setHandle(handle: string): Promise<void> {
+  const s = await load();
+  if (s) await browser.storage.local.set({ session: { ...s, account: { ...s.account, handle } } });
+}
+
 /** Picks up a session that ended elsewhere. Being offline leaves it signed in. */
 export async function check(): Promise<void> {
   try {

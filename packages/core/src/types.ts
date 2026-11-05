@@ -74,6 +74,8 @@ export interface RoutineMeta {
   pauses: number[];
   requires?: { signed_in?: string };
   returns?: string;
+  /** The agent that wrote the description, e.g. "claude-code". */
+  drafted_by?: string;
 }
 
 export interface Routine {
