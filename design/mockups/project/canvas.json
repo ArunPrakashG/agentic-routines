@@ -93,6 +93,34 @@
       "w": 1440,
       "h": 720,
       "title": "Site \u00b7 Profile, signed in"
+    },
+    "Admin.dc.html": {
+      "x": 6095,
+      "y": 0,
+      "w": 1440,
+      "h": 1000,
+      "title": "Admin \u00b7 Review"
+    },
+    "AdminLive.dc.html": {
+      "x": 6095,
+      "y": 1120,
+      "w": 1440,
+      "h": 800,
+      "title": "Admin \u00b7 Live and blocked"
+    },
+    "Sources.dc.html": {
+      "x": 6095,
+      "y": 2040,
+      "w": 400,
+      "h": 844,
+      "title": "Side panel \u00b7 Sources"
+    },
+    "InstallGit.dc.html": {
+      "x": 6615,
+      "y": 2040,
+      "w": 400,
+      "h": 844,
+      "title": "Side panel \u00b7 Install from Git"
     }
   },
   "order": [
