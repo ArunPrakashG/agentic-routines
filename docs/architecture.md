@@ -80,7 +80,7 @@ Rules, borrowed from how skills work:
 - **`description` is the trigger.** It says what the routine does and when to use it, in the user's words ("ship", "release", "upload a build"). It is required, at most 1024 characters, and must contain a "Use when" clause. The directory rejects a publish without one.
 - **"Do not use for"** keeps similar routines from being picked by mistake (testing track vs production).
 - **Progressive disclosure.** Agents see only `name`, `description` and `params` up front. The body of `ROUTINE.md` comes back from `routine_describe` when the agent wants it. `steps.json` never reaches the agent at all.
-- **Who writes the description.** On `routine_save` from an agent run, the agent writes it, because it knows what the user asked for. On a human demo, the side panel drafts one from the steps through the connected agent and the user edits it. The Save screen gets a "When to use" field (mockup change, below).
+- **Who writes the description.** On `routine_propose` from an agent run, the agent writes it, because it knows what the user asked for. On a human demo, the side panel drafts one from the steps through the connected agent and the user edits it. The Save screen gets a "When to use" field (mockup change, below).
 
 ## How an agent finds and runs a routine
 
@@ -97,7 +97,7 @@ Rules, borrowed from how skills work:
 | `navigate`, `click`, `type`, `read_page`, `screenshot`, `tabs` | none (agent driving, always recorded) |
 | `rt_<name>(params)` / `routine_run(name, params)` | Run |
 | `routine_resume(run_id, approve \| choice)` | Start rollout / Stop at a pause, or pick the changed element |
-| `routine_save(run_id, name, description, do_not_use_for?)` | Save routine |
+| `routine_propose(name, description, run_id?)`, `routine_edit(draft_id, ops)`, `routine_test(draft_id)`, `routine_save(draft_id)` | Save routine |
 | `routine_describe(name)` | Routine detail |
 | `routines_list()` | Routines list |
 | `routines_search(query, site?)` | Directory search |
@@ -207,5 +207,5 @@ design/              approved mockups and tokens
 
 1. Should routines work fully without signing in, local only, or is sign-in required to use the extension at all? The mockup requires it. This design allows local use and needs sign-in only for sync and the directory.
 2. Auto-publishing a shared fix after 7 days without a reply from the owner: keep it, or always wait for the owner?
-3. Teams: private namespaces shared by a group (`team/name`) fit this model. Should they be in v1 or later?
+3. Groups: private namespaces shared by a group of people. Parked; routines can be shared through a Git repository today.
 

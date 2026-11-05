@@ -12,4 +12,10 @@ DEV_DIR=$DIR AGENTIC_ROUTINES_HOME=$DIR/store node "$ROOT/dev/e2e.mjs" "$@" || c
 AR_DEV_DIR=$DIR/panel "$ROOT/dev/up.sh" --headless --no-claude --no-build >/dev/null
 node "$ROOT/dev/e2e-panel.mjs" || code=$?
 "$ROOT/dev/down.sh"
+# Hooks and instructions from a Git source, through the side panel, in a fresh browser again.
+AR_TLS_HOST=hooks.acme.test AR_TLS_PORT=${AR_TLS_PORT:-8443} AR_DEV_DIR=$DIR/hooks "$ROOT/dev/up.sh" --headless --no-claude --no-build >/dev/null
+DEV_DIR=$DIR/hooks AGENTIC_ROUTINES_HOME=$DIR/hooks/store node "$ROOT/dev/e2e-hooks.mjs" || code=$?
+"$ROOT/dev/down.sh"
+# Installing from Git sources and config.routine: the built CLI against a stand-in for GitHub, no browser.
+node "$ROOT/dev/e2e-sources.mjs" || code=$?
 exit ${code:-0}

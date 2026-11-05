@@ -1,6 +1,6 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
 import { aim, glow, veil, type GlowMode } from '../lib/overlay';
-import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, interactive, outline, press, rectOf, refOf, role, select, type } from '../lib/dom';
+import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type } from '../lib/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
@@ -9,6 +9,8 @@ export type ContentMsg =
   | { t: 'describe'; ref: string }
   | { t: 'rendering' }
   | { t: 'act'; ref?: string; action: string; value?: string }
+  | { t: 'snapshot'; ref?: string }
+  | { t: 'hookact'; ref: string; action: 'click' | 'type'; value?: string }
   | { t: 'attach'; ref: string; files: { name: string; type: string; b64: string }[] }
   | { t: 'markUpload'; ref: string }
   | { t: 'resolve'; target: Locator }
@@ -123,6 +125,35 @@ export default defineContentScript({
                     send({ ok: ((el as HTMLElement).innerText ?? '').trim().slice(0, 2000) });
                     return;
                 }
+                send({ ok: true });
+              } catch (e) {
+                send({ err: (e as Error).message });
+              }
+            })();
+            break;
+          }
+          case 'snapshot':
+            send({ ok: snapshot(msg.ref) });
+            break;
+          case 'hookact': {
+            // A hook points at an element by ref; whether it may touch it is decided here, in the page, not by the hook.
+            let el: Element;
+            try {
+              el = byRef(msg.ref);
+            } catch (e) {
+              send({ err: (e as Error).message });
+              break;
+            }
+            const why = hookMay(el, msg.action);
+            if (why) {
+              send({ err: `refused: ${why}` });
+              break;
+            }
+            void (async () => {
+              try {
+                await aim(el, msg.action);
+                if (msg.action === 'click') click(el);
+                else type(el, msg.value ?? '');
                 send({ ok: true });
               } catch (e) {
                 send({ err: (e as Error).message });

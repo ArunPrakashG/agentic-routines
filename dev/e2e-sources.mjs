@@ -5,15 +5,15 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, connect } from 'node:net';
 import { createServer as http } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'packages/cli');
-const GH_PORT = 8791;
-const API_PORT = 8792;
+const GH_PORT = Number(process.env.AR_GH_PORT || 8791);
+const API_PORT = Number(process.env.AR_SOURCES_API_PORT || 8792);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (ok, what) => {
@@ -61,10 +61,37 @@ let head = SHA_A;
 const files = { [SHA_A]: { 'routines/deploy-staging.md': good.stdout, 'routines/bad-site.md': badFile, 'routines/leaky.md': secretFile }, [SHA_B]: { 'routines/deploy-staging.md': changed, 'routines/bad-site.md': badFile, 'routines/leaky.md': secretFile } };
 let blocks = { users: [], repos: [], routines: [] };
 let blocklistFetches = 0;
+// Other repositories on the stand-in: the example repo with a config.routine, one whose config is wrong, a
+// single routine in the root, and one with a config that lists a file that does not match.
+const SHA_C = 'c'.repeat(40);
+const fixture = join(ROOT, 'dev/fixtures/routine-repo');
+const readTree = (dir, base = '') => Object.fromEntries(readdirSync(join(dir, base), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? Object.entries(readTree(dir, join(base, e.name))) : [[join(base, e.name), readFileSync(join(dir, base, e.name), 'utf8')]])));
+const exampleFiles = readTree(fixture);
+const otherRepos = {
+  'acme-corp/acme-console-routines': exampleFiles,
+  'acme-corp/broken-config': { 'config.routine': 'version: 2\nname: Broken\nroutines:\n  - name: acme-release\n    path: ../etc/passwd\n', 'routines/acme-release.md': exampleFiles['routines/acme-release.md'] },
+  'acme-corp/single': { 'ROUTINE.md': good.stdout },
+  'acme-corp/mismatch': {
+    'config.routine': 'version: 1\nname: mismatch\ndescription: x\nroutines:\n  - name: other-name\n    description: Wrong. Use when never.\n    path: routines/acme-release.md\n  - name: acme-export-history\n    description: Right. Use when you want history.\n    path: routines/acme-export-history.md\n    sites: [elsewhere.test]\n',
+    'routines/acme-release.md': exampleFiles['routines/acme-release.md'],
+    'routines/acme-export-history.md': exampleFiles['routines/acme-export-history.md'],
+  },
+};
 let gh;
 const github = http((req, res) => {
   const u = new URL(req.url, 'http://x');
   let m;
+  const other = (repo) => otherRepos[repo];
+  if ((m = /^\/repos\/(acme-corp\/[a-z-]+)\/commits\/HEAD$/.exec(u.pathname)) && other(m[1])) return res.end(SHA_C);
+  if ((m = /^\/repos\/(acme-corp\/[a-z-]+)\/git\/trees\/c{40}$/.exec(u.pathname)) && other(m[1])) {
+    res.setHeader('content-type', 'application/json');
+    return res.end(JSON.stringify({ tree: Object.entries(other(m[1])).map(([path, c]) => ({ path, type: 'blob', size: c.length })) }));
+  }
+  if ((m = /^\/raw\/(acme-corp\/[a-z-]+)\/c{40}\/(.+)$/.exec(u.pathname)) && other(m[1])) {
+    const f = other(m[1])[m[2]];
+    if (f === undefined) return void ((res.statusCode = 404), res.end());
+    return res.end(f);
+  }
   if (u.pathname === '/repos/acme-corp/agentic-routines/commits/HEAD') return res.end(head);
   if ((m = /^\/repos\/acme-corp\/agentic-routines\/git\/trees\/([0-9a-f]{40})$/.exec(u.pathname))) {
     const tree = Object.keys(files[m[1]] ?? {}).map((path) => ({ path, type: 'blob', size: files[m[1]][path].length }));
@@ -285,6 +312,73 @@ r = await cli('sources', 'add', theirFolder);
 p = await host.ask('sources.install', { id: theirFolder, path: entry });
 const folderOwner = readdirSync(join(home, 'routines')).find((n) => n.startsWith('folder_'));
 check(!p.error && folderOwner && existsSync(join(home, 'routines', folderOwner, 'deploy-staging/ROUTINE.md')), 'a routine in a local folder installs under its own owner');
+
+// ---------- a repository with a config.routine ----------
+const EX = 'https://github.com/acme-corp/acme-console-routines';
+r = await cli('sources', 'add', 'github.com/acme-corp/acme-console-routines');
+check(r.status === 0, 'a repository with a config.routine is added');
+r = await cli('sources');
+check(r.stdout.includes(`${EX} · GitHub · not reviewed · 2 routines`), 'it lists the routines config.routine names');
+r = await cli('sources', 'add', 'github.com/acme-corp/broken-config');
+check(r.status !== 0 && /config\.routine:1 version: This reader knows version 1, not 2\./.test(r.stderr), 'a wrong config.routine says the file, the line and the field');
+check(/config\.routine:2 name: Use lowercase/.test(r.stderr) && /config\.routine:5 routines\[0\]\.path: Must be a \.md file inside the repository/.test(r.stderr), 'and every other problem in one go');
+r = await cli('sources', 'add', 'github.com/acme-corp/mismatch');
+check(r.status !== 0 && /config\.routine:5 routines\[0\] \(routines\/acme-release\.md\): the file is named “acme-release”, not “other-name”/.test(r.stderr), 'a routine file that is not the one the config names is refused with the line');
+check(/config\.routine:8 routines\[1\].*sites does not list \(elsewhere\.test\)/.test(r.stderr), 'and so is one on a site the config does not list');
+r = await cli('sources', 'add', 'github.com/acme-corp/single');
+check(r.status === 0, 'a repository with a single ROUTINE.md in its root still works');
+p = await host.ask('sources.preview', { id: 'https://github.com/acme-corp/single', path: 'ROUTINE.md' });
+check(!p.error && p.result.routine.meta.name === 'deploy-staging' && !p.result.routine.meta.repo, 'and has no repository notes');
+await cli('sources', 'remove', 'https://github.com/acme-corp/single');
+
+p = await host.ask('sources.entries', { id: EX });
+const ex = p.result?.[0];
+check(ex?.repo?.name === 'acme-console-routines' && ex.entries.length === 2 && ex.entries[0].instructions?.includes('changelog') && ex.entries[0].sites?.[0] === 'console.acme.test', 'the panel is given the repository, each routine’s notes and sites');
+p = await host.ask('sources.preview', { id: EX, path: 'routines/acme-release.md' });
+const acme = p.result?.routine;
+check(!p.error && p.result.problems.length === 0 && p.result.ref === SHA_C, 'a routine from it is previewed at its commit');
+check(acme?.meta.description.startsWith('Start a rollout of a build') && acme.meta.instructions.includes('changelog') && acme.meta.repo.name === 'acme-console-routines' && acme.meta.repo.instructions.includes('never type a password'), 'with the description and notes of config.routine, and the repository’s');
+p = await host.ask('sources.preview', { id: EX, path: 'routines/notes.md' });
+check(p.error && /does not list/.test(p.error), 'a file config.routine does not list is refused');
+p = await host.ask('sources.preview', { id: EX, path: '../../etc/passwd' });
+check(p.error, 'and so is a path that leaves the repository');
+p = await host.ask('sources.install', { id: EX, path: 'routines/acme-release.md', ref: SHA_C });
+const exDir = join(home, 'routines/gh_acme-corp/acme-release');
+check(!p.error && existsSync(exDir), 'Install saves it');
+const md = readFileSync(join(exDir, 'ROUTINE.md'), 'utf8');
+check(/instructions: Check that the version name/.test(md) && /repo:\n  name: acme-console-routines/.test(md), 'with both sets of notes kept next to it');
+
+// What the agent sees: other people's notes, in an envelope.
+let tools;
+for (let i = 0; i < 50; i++) {
+  tools = (await agent.listTools()).tools;
+  if (tools.some((x) => /acme_release/.test(x.name))) break;
+  await sleep(200);
+}
+const rt = tools.find((x) => /acme_release/.test(x.name));
+check(rt && /BEGIN UNTRUSTED NOTES [0-9a-f]{16}/.test(rt.description) && rt.description.includes('Check that the version name') && rt.description.includes('never type a password'), 'both appear in the routine’s tool description, in an envelope');
+check(rt && /not the user/.test(rt.description) && rt.description.indexOf('Replays') < rt.description.indexOf('BEGIN UNTRUSTED NOTES'), 'that says they are not the user’s, after the routine’s own description');
+t = await tool('routine_describe', { name: 'gh_acme-corp/acme-release' });
+check(/BEGIN UNTRUSTED NOTES/.test(t.text) && t.text.includes('Notes for this repository') && t.text.includes('Notes for this routine'), 'and in routine_describe');
+t = await tool('routines_search', { query: 'rollout' });
+check(t.text.includes('Notes for the repository') && t.text.includes('BEGIN UNTRUSTED NOTES') && t.text.includes(`path "routines/acme-release.md"`), 'and in search, once per repository');
+// A note cannot close its own envelope.
+const id1 = (rt.description.match(/BEGIN UNTRUSTED NOTES ([0-9a-f]{16})/) ?? [])[1];
+check(id1 && rt.description.includes(`END UNTRUSTED NOTES ${id1}`), 'the envelope is closed by a boundary the notes could not have known');
+
+// The author's check, and the same example as a folder.
+r = await cli('sources', 'check', fixture);
+check(r.status === 0 && /ok\s+routines\/acme-release\.md · acme-release/.test(r.stdout), 'sources check reads a folder the way a source would');
+const mine = mkdtempSync(join(tmpdir(), 'br-mine-'));
+cpSync(fixture, mine, { recursive: true });
+writeFileSync(join(mine, 'config.routine'), readFileSync(join(mine, 'config.routine'), 'utf8').replace('sites: [console.acme.test]\n    instructions', 'sites: [https://console.acme.test/x]\n    instructions'));
+r = await cli('sources', 'check', mine);
+check(r.status !== 0 && /bad config\.routine:\d+ routines\[0\]\.sites\[0\]: Must be a host name/.test(r.stdout), 'and names the line of a mistake');
+r = await cli('sources', 'add', fixture);
+p = await host.ask('sources.install', { id: fixture, path: 'routines/acme-export-history.md' });
+const exFolder = readdirSync(join(home, 'routines')).find((n) => n.startsWith('folder_routine-repo'));
+check(r.status === 0 && !p.error && exFolder && existsSync(join(home, 'routines', exFolder, 'acme-export-history/ROUTINE.md')), 'the example installs from a folder too');
+rmSync(mine, { recursive: true, force: true });
 
 await agent.close();
 host.p.kill();

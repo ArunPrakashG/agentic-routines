@@ -1,6 +1,7 @@
-import { CROP_DRIFT, fill, hashDistance, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
+import { CROP_DRIFT, fill, hashDistance, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
 import { uploadFile } from './agent';
 import { hashAt, screenshot, type Rect } from './crop';
+import * as hooks from './hooks';
 import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from './tabs';
 
 // Replays compiled steps with no model. Before each step: page structure,
@@ -40,7 +41,23 @@ export interface ReplayState {
   handedBack?: boolean;
   error?: string;
   candidates?: Candidate[];
+  /** A test of a draft: stops at the first pause without approving it, and changed steps fail it. */
+  test?: boolean;
+  skipped: number[];
+  trace: string[];
+  finalUrl?: string;
+  /** The routine's hooks for this run, when it has any. */
+  hooks?: hooks.HookRun;
+  started?: boolean;
+  ended?: boolean;
+  /** What step.before decided for the step in hand, so it is not asked again when the step resumes after a pause. */
+  prepared?: { n: number; ov: { skip?: boolean; value?: string } };
+  /** The step whose hook-made pause the agent approved. */
+  hookApproved?: number;
 }
+
+/** A hook asked for the run to stop. */
+class HookFail extends Error {}
 
 const live = new Map<string, ReplayState>();
 const watchers = new Set<(s: ReplayState) => void>();
@@ -82,12 +99,15 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     ms: Date.now() - s.start,
     at_step: step?.n,
     step_label: step?.label,
+    ...(s.test ? { final_url: s.finalUrl } : {}),
+    ...(s.hooks ? { hooks: s.hooks.report() } : {}),
     candidates: s.candidates,
     error: s.error,
     read: Object.keys(s.read).length ? s.read : undefined,
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     fixes: s.fixes,
     crops: s.crops,
+    ...(s.test ? { test: true, skipped: s.skipped, trace: s.trace } : {}),
   };
 }
 
@@ -132,21 +152,151 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   return res;
 }
 
-async function runStep(s: ReplayState, step: Step, ref?: string): Promise<'next' | 'stop'> {
-  const value = fill(step.value, s.params, s.secrets);
-  if (step.action === 'navigate') {
+// ---------- hooks ----------
+
+interface Outcome {
+  skip?: boolean;
+  value?: string;
+}
+
+const detailOf = (d?: HookContext['detail']) => d;
+
+async function contextFor(s: ReplayState, event: HookEvent, step: Step | undefined, o: { targetRef?: string; detail?: HookContext['detail'] }): Promise<HookContext> {
+  const m = s.routine.meta;
+  const url = await browser.tabs.get(s.tabId).then((t) => t.url ?? '', () => '');
+  // Secrets stay as {{secret:name}}; values the person gave are filled in.
+  const shown = (v?: string) => v?.replace(/\{\{([a-z0-9_]+)\}\}/g, (x, n) => s.params[n] ?? x);
+  const params = Object.fromEntries(Object.entries(s.params).map(([k, v]) => [k, m.params[k]?.type === 'file' ? (v.split(/[\\/]/).pop() ?? '') : v]));
+  const dom = await ask<NonNullable<HookContext['dom']>>(s.tabId, { t: 'snapshot', ref: o.targetRef }).catch(() => undefined);
+  return {
+    event,
+    routine: { name: m.name, version: m.version, site: m.site, description: m.description },
+    params,
+    ...(step ? { step: { n: step.n, total: s.routine.steps.length, action: step.action, label: step.label, value: shown(step.value), url: shown(step.url), pause: !!step.pause } } : {}),
+    url,
+    ...(dom ? { dom } : {}),
+    ...(o.detail ? { detail: detailOf(o.detail) } : {}),
+  };
+}
+
+/** Does what the directives asked for, as far as it is allowed. What is refused is logged with why. */
+async function perform(s: ReplayState, event: HookEvent, ds: Directive[], step?: Step): Promise<Outcome> {
+  const h = s.hooks!;
+  const entry = h.last!;
+  const out: Outcome = {};
+  const refuse = (d: Directive, why: string) => entry.refused.push({ directive: JSON.stringify(d).slice(0, 80), why });
+  const late = event === 'run.end' || event === 'error';
+  for (const d of ds) {
+    try {
+      if (late && d.do !== 'note') {
+        refuse(d, 'The run is over; only a note can still be added.');
+        continue;
+      }
+      switch (d.do) {
+        case 'skip':
+          out.skip = true;
+          entry.done.push('skip this step');
+          break;
+        case 'set':
+          if (d.param) {
+            const spec = s.routine.meta.params[d.param];
+            if (!spec) refuse(d, `“${d.param}” is not a parameter of this routine.`);
+            else if (spec.type === 'file') refuse(d, 'A hook cannot choose a file.');
+            else {
+              s.params[d.param] = d.value;
+              entry.done.push(`set ${d.param}`);
+            }
+          } else if (!step || !['type', 'select', 'press'].includes(step.action)) refuse(d, 'This step takes no typed value.');
+          else if (step.value?.includes('{{secret:')) refuse(d, 'This step uses a secret, and a hook cannot change it.');
+          else {
+            out.value = d.value;
+            entry.done.push(`set the value of step ${step.n}`);
+          }
+          break;
+        case 'click':
+        case 'type':
+          await ask(s.tabId, { t: 'hookact', ref: d.ref, action: d.do, value: d.do === 'type' ? d.text : undefined });
+          await sleep(150);
+          entry.done.push(`${d.do} ${d.ref}`);
+          break;
+        case 'wait':
+          await sleep(d.ms);
+          entry.done.push(`wait ${d.ms} ms`);
+          break;
+        case 'goto':
+          if (!onSite(d.url, s.routine.meta.site)) {
+            refuse(d, `That address is not on ${s.routine.meta.site}.`);
+            break;
+          }
+          await browser.tabs.update(s.tabId, { url: d.url });
+          await sleep(200);
+          await waitLoaded(s.tabId);
+          entry.done.push(`go to ${d.url}`);
+          break;
+        case 'note':
+          h.notes.push(d.text);
+          entry.done.push('note');
+          break;
+        case 'fail':
+          entry.done.push(`stop the run: ${d.reason}`);
+          throw new HookFail(d.reason);
+        case 'pause':
+          h.pause = d.reason;
+          entry.done.push(`pause: ${d.reason}`);
+          break;
+      }
+    } catch (e) {
+      if (e instanceof HookFail) throw e;
+      refuse(d, (e as Error).message.replace(/^refused: /, ''));
+    }
+  }
+  return out;
+}
+
+/** Fires the hook for an event, if the routine has one and it may run. Never throws, except to stop the run when a hook said to. */
+async function hook(s: ReplayState, event: HookEvent, step?: Step, o: { targetRef?: string; detail?: HookContext['detail'] } = {}): Promise<Outcome> {
+  const h = s.hooks;
+  if (!h?.has(event)) return {};
+  try {
+    const ds = await h.fire(event, await contextFor(s, event, step, o));
+    return await perform(s, event, ds, step);
+  } catch (e) {
+    if (e instanceof HookFail) throw e;
+    if (h.last) h.last.error = (e as Error).message;
+    return {};
+  }
+}
+
+async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {}): Promise<'next' | 'stop'> {
+  let value = ov.value ?? fill(step.value, s.params, s.secrets);
+  const kind = step.action;
+  const hooked = ['click', 'type', 'select', 'upload', 'navigate', 'press', 'read'].includes(kind);
+  const urlOf = async () => (await browser.tabs.get(s.tabId)).url ?? '';
+  const after = async (from: string, targetRef?: string) => {
+    if (hooked) await hook(s, `action.${kind}.after` as HookEvent, step, { targetRef });
+    const to = await urlOf();
+    if (to !== from || kind === 'navigate') await hook(s, 'page.load', step, { detail: { from, to } });
+  };
+  if (kind === 'navigate') {
+    const from = await urlOf();
+    const a = await hook(s, 'action.navigate.before', step);
+    if (a.skip) return 'next';
     // Whatever the routine says, and whatever the params fill in, it never leaves its own site.
-    const url = fill(step.url, s.params) ?? '';
+    const url = fill(step.url, s.params, {}, true) ?? '';
     if (!onSite(url, s.routine.meta.site)) throw new Error(`Stopped: step ${step.n} would leave ${s.routine.meta.site}`);
     await browser.tabs.update(s.tabId, { url });
     await sleep(200);
     await waitLoaded(s.tabId);
+    await after(from);
     return 'next';
   }
-  if (step.action === 'press' && !step.target) {
-    const before = (await browser.tabs.get(s.tabId)).url ?? '';
-    await ask(s.tabId, { t: 'act', action: 'press', value });
+  if (kind === 'press' && !step.target) {
+    const before = await urlOf();
+    const a = await hook(s, 'action.press.before', step);
+    if (a.skip) return 'next';
+    await ask(s.tabId, { t: 'act', action: 'press', value: a.value ?? value });
     await settle(s.tabId, before);
+    await after(before);
     return 'next';
   }
   await waitForPage(s.tabId, step.page);
@@ -165,16 +315,22 @@ async function runStep(s: ReplayState, step: Step, ref?: string): Promise<'next'
       if (h && hashDistance(h, step.crop) > CROP_DRIFT) s.crops[step.n] = h;
     }
   }
-  const before = (await browser.tabs.get(s.tabId)).url ?? '';
-  if (step.action === 'upload') {
-    // The file is the person's to give: a path written into the routine is never read.
+  const before = await urlOf();
+  if (hooked) {
+    const a = await hook(s, `action.${kind}.before` as HookEvent, step, { targetRef: ref });
+    if (a.skip) return 'next';
+    if (a.value !== undefined) value = a.value;
+  }
+  if (kind === 'upload') {
+    // The file is the person's to give: a path written into the routine, or set by a hook, is never read.
     const param = /^\{\{([a-z0-9_]+)\}\}$/.exec(step.value ?? '')?.[1];
     if (!param || s.routine.meta.params[param]?.type !== 'file') throw new Error(`Stopped: step ${step.n} uploads a file the routine picks`);
-    await uploadFile(s.tabId, ref, value!);
+    await uploadFile(s.tabId, ref, fill(step.value, s.params)!);
   }
-  else if (step.action === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
-  else await ask(s.tabId, { t: 'act', ref, action: step.action, value });
+  else if (kind === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
+  else await ask(s.tabId, { t: 'act', ref, action: kind, value });
   await settle(s.tabId, before);
+  await after(before, ref);
   return 'next';
 }
 
@@ -190,22 +346,55 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
   }
 }
 
+/** Tells the hooks the run is over, once. A hook that fails here can only add a note. */
+async function ended(s: ReplayState) {
+  if (s.ended || !s.started) return;
+  s.ended = true;
+  await hook(s, 'run.end', undefined, { detail: { status: s.status, error: s.error } }).catch(() => ({}));
+}
+
 async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typeof result>> {
   s.status = 'running';
   notify(s);
   try {
+    if (!s.started) {
+      s.started = true;
+      await hook(s, 'run.start');
+    }
     while (s.i < s.routine.steps.length) {
       const step = s.routine.steps[s.i];
-      if (step.pause && !s.approved.has(step.n)) {
+      if (s.test && step.pause) {
+        // A test never performs a step that pauses, and never approves one. What follows is still checked.
+        s.skipped.push(step.n);
+        s.trace.push(`${step.n}. skipped “${step.label}”, it pauses in a real run`);
+        s.i++;
+        notify(s);
+        continue;
+      }
+      // A step the agent picked a candidate for has already had its hook.
+      if (s.prepared?.n !== step.n) s.prepared = { n: step.n, ov: choiceRef ? {} : await hook(s, 'step.before', step) };
+      const ov = s.prepared.ov;
+      if (ov.skip) {
+        s.trace.push(`${step.n}. skipped by a hook`);
+        s.i++;
+        notify(s);
+        continue;
+      }
+      // A hook can ask for a person to look before a step. It can never be the one who says yes.
+      const asked = s.test || s.hookApproved === step.n ? undefined : s.hooks?.pause;
+      if (s.hooks) s.hooks.pause = undefined;
+      if ((step.pause && !s.approved.has(step.n)) || asked) {
         if (s.session && goneSessions.has(s.session)) {
           s.status = 'failed';
           s.error = AGENT_GONE;
+          await ended(s);
           live.delete(s.id);
           notify(s);
           return result(s);
         }
         s.status = 'paused';
         notify(s);
+        await hook(s, 'pause.reached', step, { detail: { reason: asked } });
         await glow(s.tabId, 'paused', PAUSED_MS);
         const approved = await new Promise<boolean | undefined>((res) => {
           panelWaiters.set(s.id, res);
@@ -222,6 +411,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
         if (!approved) {
           s.status = 'failed';
           s.error = 'Stopped at the pause in the side panel';
+          await ended(s);
           live.delete(s.id);
           notify(s);
           return result(s);
@@ -230,27 +420,49 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
         s.approvedInPanel.push(`step ${step.n} “${step.label}”`);
         s.status = 'running';
         notify(s);
+        await hook(s, 'pause.approved', step);
       }
       await glow(s.tabId, 'run', DRIVING_MS);
-      if ((await runStep(s, step, choiceRef)) === 'stop') {
+      if ((await runStep(s, step, choiceRef, ov)) === 'stop') {
+        await hook(s, 'step.changed', step, { detail: { candidates: s.candidates?.length ?? 0 } });
+        if (s.test) {
+          const near = (s.candidates ?? []).map((c) => `${c.ref} ${c.role ?? ''} “${c.name ?? c.text ?? ''}”`).join('; ');
+          s.status = 'failed';
+          s.error = `${step.action} “${step.label}” was not on the page the way it was recorded${near ? `. Closest: ${near}` : ''}`;
+          await ended(s);
+          live.delete(s.id);
+          notify(s);
+          return result(s);
+        }
         notify(s);
         return result(s);
       }
       choiceRef = undefined;
+      if (s.test) {
+        const url = (await browser.tabs.get(s.tabId)).url ?? '';
+        s.trace.push(`${step.n}. ${step.action} ${step.action === 'navigate' ? (step.url ?? '') : `“${step.label}”`}${url && url !== s.finalUrl ? ` → ${url}` : ''}`);
+        s.finalUrl = url;
+      }
+      await hook(s, 'step.after', step);
       s.i++;
       notify(s);
     }
     s.status = 'done';
   } catch (e) {
     s.status = 'failed';
-    s.error = (e as Error).message;
+    s.error = e instanceof HookFail ? `Stopped by a hook: ${e.message}` : (e as Error).message;
+    await hook(s, 'error', s.routine.steps[s.i], { detail: { error: s.error } }).catch(() => ({}));
   }
+  await ended(s);
   live.delete(s.id);
+  if (s.test) s.finalUrl = await browser.tabs.get(s.tabId).then((t) => t.url, () => s.finalUrl);
   notify(s);
   return result(s);
 }
 
-export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string }) {
+export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean }) {
+  if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
+    return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const s: ReplayState = {
     id: 'rp-' + crypto.randomUUID().slice(0, 4),
     routine: p.routine,
@@ -268,6 +480,10 @@ export async function start(p: { routine: Routine; params: Record<string, string
     status: 'running',
     by: p.agent,
     session: p.session,
+    test: p.test,
+    skipped: [],
+    trace: [],
+    hooks: await hooks.forRoutine(p.routine),
   };
   live.set(s.id, s);
   return loop(s);
@@ -286,6 +502,7 @@ export async function resume(p: { run_id: string; approve?: boolean; choice?: st
       return result(s);
     }
     s.approved.add(s.routine.steps[s.i].n);
+    s.hookApproved = s.routine.steps[s.i].n;
     return loop(s);
   }
   if (s.status === 'needs_choice') {

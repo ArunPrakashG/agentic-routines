@@ -304,11 +304,20 @@ function Sources({ back }: { back: () => void }) {
                   <div class="entries">
                     {!found && <span class="meta">Reading…</span>}
                     {found?.error && <span class="err">{found.error}</span>}
+                    {found?.repo && (
+                      <div class="stack" style={{ gap: '2px' }}>
+                        <span class="name">{found.repo.name}</span>
+                        <span class="meta" style={{ whiteSpace: 'normal' }}>{found.repo.description}</span>
+                      </div>
+                    )}
+                    {found?.problems?.map((p) => (
+                      <span class="err mono" key={p} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{p}</span>
+                    ))}
                     {found?.entries.map((e) => (
                       <div class="entry" key={e.path}>
                         <div class="stack" style={{ flex: 1 }}>
                           <span class="name">{e.name}</span>
-                          <span class="meta">{e.site}</span>
+                          <span class="meta">{e.site}{e.hooks ? ` · ${e.hooks} ${e.hooks === 1 ? 'hook' : 'hooks'}` : ''}</span>
                         </div>
                         <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'gitPreview', source: x.id, path: e.path }).then(back, (er) => setError(er.message))}>
                           Review
@@ -334,7 +343,7 @@ function Sources({ back }: { back: () => void }) {
             </button>
           </form>
           <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
-            A GitHub repository or a folder on this computer. Routines are plain <code>.md</code> files in a <code>routines</code> folder.
+            A GitHub repository or a folder on this computer. A <code>config.routine</code> file in its root lists the routines, or they are <code>.md</code> files in a <code>routines</code> folder.
           </span>
           <span class="meta" style={{ whiteSpace: 'normal', lineHeight: '18px' }}>
             Only the Directory is reviewed by us. For anything else, you see every step before it installs.
@@ -349,8 +358,52 @@ function Switch({ on, label, set }: { on: boolean; label: string; set: (on: bool
   return <button class="sw" type="button" role="switch" aria-checked={on} aria-label={`${label} on`} onClick={() => set(!on)} />;
 }
 
+function HookCode({ hooks }: { hooks: Record<string, string> }) {
+  return (
+    <div class="hooks">
+      {Object.entries(hooks).map(([event, code]) => (
+        <div class="hook" key={event}>
+          <span class="mono ev">{event}</span>
+          <pre class="mono" tabIndex={0}>{code}</pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HooksReview({ r }: { r: NonNullable<PanelState['hooksReview']> }) {
+  return (
+    <div class="panel">
+      <header class="bar back">
+        <button class="icon-btn" type="button" aria-label="Close" onClick={() => send({ t: 'hooksDecide', approve: r.state === 'on' })}>
+          <Back />
+        </button>
+        <h1>Hooks</h1>
+      </header>
+      <main class="form install" style={{ gap: '16px' }}>
+        <span class="title mono">{r.name}</span>
+        <div class="warnbox" role="note">
+          <span class="wt">Code written by someone else</span>
+          <span class="meta">Hooks run on events while this routine replays. They run in a sandbox with no network, and can only ask the extension to skip a step, fill a value, click, type, wait, go to a page on this site, leave a note, stop or pause. They cannot approve a pause.</span>
+        </div>
+        {r.state === 'off' && <span class="meta" style={{ whiteSpace: 'normal' }}>Off until you allow them. If the code changes, you are asked again.</span>}
+        <HookCode hooks={r.hooks} />
+        <div class="foot2 sticky">
+          <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'hooksDecide', approve: false })}>
+            {r.state === 'on' ? 'Turn off' : 'Keep off'}
+          </button>
+          <button class="btn btn-primary" type="button" disabled={r.state === 'on'} onClick={() => send({ t: 'hooksDecide', approve: true })}>
+            {r.state === 'on' ? 'Allowed' : 'Allow these hooks'}
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 function InstallGit({ card }: { card: GitCard }) {
   const [all, setAll] = useState(false);
+  const [hooks, setHooks] = useState(false);
   const shown = all ? card.steps : card.steps.slice(0, 4);
   const blocked = card.problems.length > 0;
   return (
@@ -394,6 +447,33 @@ function InstallGit({ card }: { card: GitCard }) {
             </button>
           )}
         </section>
+        {(card.instructions || card.repoInstructions) && (
+          <div class="stack" style={{ gap: '6px' }}>
+            <span class="meta">Notes the author wrote for your agent</span>
+            {card.repoInstructions && (
+              <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+                {card.repoName ? `${card.repoName}: ` : ''}{card.repoInstructions}
+              </span>
+            )}
+            {card.instructions && (
+              <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{card.instructions}</span>
+            )}
+            <span class="meta" style={{ whiteSpace: 'normal' }}>Your agent sees these marked as written by someone else.</span>
+          </div>
+        )}
+        {card.hooks && (
+          <div class="stack" style={{ gap: '8px' }}>
+            <span class="meta">This routine has hooks: code that runs while it replays</span>
+            <HookCode hooks={card.hooks} />
+            <label class="allow">
+              <Switch on={hooks} label="Allow these hooks to run" set={setHooks} />
+              <span>Allow these hooks to run</span>
+            </label>
+            <span class="meta" style={{ whiteSpace: 'normal' }}>
+              {hooks ? 'They run in a sandbox with no network.' : 'Off, the routine runs without them. You can read and allow them later from the library.'}
+            </span>
+          </div>
+        )}
         {blocked ? (
           <div class="warnbox bad" role="alert">
             <span class="wt">It can’t be installed</span>
@@ -414,7 +494,7 @@ function InstallGit({ card }: { card: GitCard }) {
           <button class="btn btn-ghost" type="button" disabled={card.busy} onClick={() => send({ t: 'gitDecide', approve: false })}>
             Cancel
           </button>
-          <button class="btn btn-primary" type="button" disabled={card.busy || blocked} onClick={() => send({ t: 'gitDecide', approve: true })}>
+          <button class="btn btn-primary" type="button" disabled={card.busy || blocked} onClick={() => send({ t: 'gitDecide', approve: true, hooks })}>
             {card.busy ? 'Installing…' : 'Install'}
           </button>
         </div>
@@ -562,6 +642,7 @@ const GUIDELINES: Record<string, string> = {
   G6: 'Respect the site and the person',
   G7: 'Be honest about who made it',
   G8: 'Keep it working',
+  G9: 'Hooks and notes stay honest',
 };
 
 function Submissions({ s, back }: { s: PanelState; back: () => void }) {
@@ -720,6 +801,17 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                       {r.lastRun ? ` · ran ${ago(r.lastRun)}` : ''}
                     </span>
                     {r.blocked && <span class="changed">Turned off: {r.blocked}</span>}
+                    {r.hooks?.state === 'unsupported' && <span class="changed">Hooks need Chromium and are off here</span>}
+                    {r.hooks && r.hooks.state !== 'unsupported' && (
+                      <button
+                        class={r.hooks.state === 'on' ? 'hooklink' : 'hooklink off'}
+                        type="button"
+                        aria-label={`${r.hooks.state === 'on' ? 'See hooks of' : 'Review hooks of'} ${r.name}`}
+                        onClick={() => send({ t: 'hooksReview', id: `${r.owner}/${r.name}` })}
+                      >
+                        {r.hooks.state === 'on' ? 'Hooks allowed · see the code' : r.hooks.reason?.startsWith('They changed') ? 'Hooks changed, off until you read them' : 'Hooks are off until you read them'}
+                      </button>
+                    )}
                     {!!r.changed?.length && (
                       <span class="changed">
                         {r.changed.length === 1 ? 'Step' : 'Steps'} {r.changed.join(', ')} changed on the last run
@@ -1204,6 +1296,7 @@ function App() {
 
   if (!s.account) return <SignIn />;
   if (s.install) return <InstallGit card={s.install} />;
+  if (s.hooksReview) return <HooksReview r={s.hooksReview} />;
 
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (

@@ -1,5 +1,7 @@
+import { CONFIG_FILE, ConfigError, MAX_CONFIG, formatProblem, isRepoPath, parseConfigRoutine, siteListed, type RepoConfig, type RepoRoutine } from './config-routine.ts';
 import { lintForPublish, parseRoutineMd, stringifyRoutineMd } from './routine-md.ts';
 import type { Action, Routine, Step } from './types.ts';
+import { checkUrls, deriveUrls } from './urls.ts';
 
 // Where routines come from besides the person's own recordings. A source has one job: list what it
 // has and fetch one routine. The directory is reviewed by us; every other source is not.
@@ -21,19 +23,45 @@ export interface SourceEntry {
   site: string;
   description: string;
   version: number;
+  /** From config.routine: the author's notes for the agent, the hosts it is for, how many hooks it brings. */
+  instructions?: string;
+  sites?: string[];
+  /** The pages it applies to: config.routine's, else the routine file's, else worked out from its steps. */
+  urls?: string[];
+  hooks?: number;
+}
+
+/** What a repository says about itself in config.routine. */
+export interface RepoInfo {
+  name: string;
+  description: string;
+  instructions?: string;
 }
 
 export interface Fetched {
   routine: Routine;
   ref?: string;
   path: string;
+  /** Set when the repository has a config.routine that lists this file. */
+  repo?: RepoInfo;
+  entry?: RepoRoutine;
+}
+
+export interface Listing {
+  entries: SourceEntry[];
+  /** Files that look like routines but could not be read. `problems` says why, where it can. */
+  skipped: number;
+  ref?: string;
+  repo?: RepoInfo;
+  /** What is wrong with config.routine or with a file it lists, each with file, line and field where known. */
+  problems?: string[];
 }
 
 export interface Source {
   kind: 'github' | 'folder';
   /** The stable address: https://github.com/owner/repo, or a folder path. */
   id: string;
-  list(): Promise<{ entries: SourceEntry[]; skipped: number; ref?: string }>;
+  list(): Promise<Listing>;
   fetch(path: string, ref?: string): Promise<Fetched>;
 }
 
@@ -44,6 +72,8 @@ const MAX_STEPS = 200;
 const ACTIONS: Action[] = ['navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read'];
 const STEPS_BLOCK = /\n```steps\r?\n([\s\S]*?)\r?\n```\s*$/;
 export const FILE_PATH = /^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/;
+/** A routine on its own in the root of a repository. */
+export const SINGLE_PATH = 'ROUTINE.md';
 
 /** One plain file: the notes as in ROUTINE.md, then the steps in a fenced block at the end. */
 export function stringifyRoutineFile(r: Routine): string {
@@ -115,6 +145,109 @@ function checkPlaceholders(r: Routine): string[] {
   return out;
 }
 
+// ---------- a repository: config.routine, or the plain layout ----------
+
+/** How a source lets the repository layer look at files. */
+export interface RepoIO {
+  /** A file by its path in the repository, or null when it is not there. */
+  read(path: string): Promise<string | null>;
+  /** The files that count as routines when there is no config.routine: routines/*.md and a ROUTINE.md in the root. */
+  fallback(): Promise<string[]>;
+}
+
+const repoInfo = (c: RepoConfig): RepoInfo => ({ name: c.name, description: c.description, ...(c.instructions ? { instructions: c.instructions } : {}) });
+const problemAt = (i: number, r: RepoRoutine, what: string) => `${CONFIG_FILE}:${r.line} routines[${i}] (${r.path}): ${what}`;
+
+/** Reads the routine file a config entry points at, and checks it says what the entry says. */
+async function readListed(io: RepoIO, r: RepoRoutine): Promise<Routine> {
+  const text = await io.read(r.path);
+  if (text === null) throw new Error('the file is not in the repository.');
+  const routine = parseRoutineFile(text);
+  if (routine.meta.name !== r.name) throw new Error(`the file is named “${routine.meta.name}”, not “${r.name}”.`);
+  const why = checkUrls(r.urls, routine.meta.site)[0];
+  if (why) throw new Error(`urls: ${why}`);
+  if (!siteListed(r.sites, routine.meta.site)) throw new Error(`the routine works on ${routine.meta.site}, which sites does not list (${r.sites!.join(', ')}).`);
+  return routine;
+}
+
+export async function listRepo(io: RepoIO, limit = LIST_LIMIT): Promise<Listing> {
+  const cfg = await io.read(CONFIG_FILE);
+  if (cfg !== null) {
+    const { config, problems } = parseConfigRoutine(cfg);
+    // A file that is there but wrong is an error to fix, not a reason to guess at another layout.
+    if (!config) return { entries: [], skipped: 0, problems: problems.map(formatProblem) };
+    const entries: SourceEntry[] = [];
+    const out: string[] = [];
+    let skipped = Math.max(0, config.routines.length - limit);
+    for (const [i, r] of config.routines.slice(0, limit).entries()) {
+      try {
+        const routine = await readListed(io, r);
+        const { meta } = routine;
+        entries.push({ path: r.path, name: r.name, site: meta.site, description: r.description, version: meta.version, ...(r.instructions ? { instructions: r.instructions } : {}), ...(r.sites ? { sites: r.sites } : {}), urls: r.urls ?? routine.meta.urls ?? deriveUrls(routine.steps, routine.meta.site), ...(r.hooks ? { hooks: Object.keys(r.hooks).length } : {}) });
+      } catch (e) {
+        skipped++;
+        out.push(problemAt(i, r, (e as Error).message));
+      }
+    }
+    return { entries, skipped, repo: repoInfo(config), ...(out.length ? { problems: out } : {}) };
+  }
+  const entries: SourceEntry[] = [];
+  const paths = await io.fallback();
+  let skipped = Math.max(0, paths.length - limit);
+  for (const path of paths.slice(0, limit)) {
+    try {
+      const text = await io.read(path);
+      if (text === null) throw new Error('gone');
+      const { meta, steps } = parseRoutineFile(text);
+      if (path !== SINGLE_PATH && `routines/${meta.name}.md` !== path) throw new Error('name does not match the file');
+      entries.push({ path, name: meta.name, site: meta.site, description: meta.description, version: meta.version, urls: meta.urls ?? deriveUrls(steps, meta.site) });
+    } catch {
+      skipped++;
+    }
+  }
+  return { entries, skipped };
+}
+
+/** One routine from a repository, with what its config.routine adds. Nothing is installed by this. */
+export async function fetchRepo(io: RepoIO, path: string): Promise<Omit<Fetched, 'path' | 'ref'>> {
+  const cfg = await io.read(CONFIG_FILE);
+  if (cfg !== null) {
+    if (!isRepoPath(path)) throw new Error('Not a routine file.');
+    const { config, problems } = parseConfigRoutine(cfg);
+    if (!config) throw new ConfigError(problems);
+    const i = config.routines.findIndex((r) => r.path === path);
+    if (i < 0) throw new Error(`${CONFIG_FILE} does not list ${path}.`);
+    try {
+      return { routine: await readListed(io, config.routines[i]), repo: repoInfo(config), entry: config.routines[i] };
+    } catch (e) {
+      throw new Error(problemAt(i, config.routines[i], (e as Error).message));
+    }
+  }
+  if (!FILE_PATH.test(path) && path !== SINGLE_PATH) throw new Error('Not a routine file.');
+  const text = await io.read(path);
+  if (text === null) throw new Error('Not found in the repository.');
+  const routine = parseRoutineFile(text);
+  if (path !== SINGLE_PATH && `routines/${routine.meta.name}.md` !== path) throw new Error('The routine’s name does not match its file.');
+  return { routine };
+}
+
+/** The routine as it is installed: the description and notes the repository's config.routine gives, kept with it. */
+export function withRepo(f: Pick<Fetched, 'routine' | 'repo' | 'entry'>): Routine {
+  const { routine, repo, entry } = f;
+  if (!repo || !entry) return routine;
+  return {
+    ...routine,
+    meta: {
+      ...routine.meta,
+      description: entry.description,
+      instructions: entry.instructions ?? routine.meta.instructions,
+      ...(entry.urls ? { urls: entry.urls } : {}),
+      ...(entry.hooks ? { hooks: entry.hooks } : {}),
+      repo: { name: repo.name, ...(repo.instructions ? { instructions: repo.instructions } : {}) },
+    },
+  };
+}
+
 // ---------- the block list ----------
 
 export interface BlockList {
@@ -175,39 +308,42 @@ export function githubSource(key: string, doFetch: Fetch = fetch, hosts = GITHUB
     return sha;
   };
 
-  const file = async (path: string, ref: string) => {
+  const file = async (path: string, ref: string, max = MAX_FILE) => {
     const res = await get(`${RAW}/${owner}/${repo}/${ref}/${path}`);
     const len = Number(res.headers.get('content-length') ?? 0);
-    if (len > MAX_FILE) throw new Error('The file is too large.');
+    if (len > max) throw new Error('The file is too large.');
     return res.text();
   };
+
+  /** What the repository layer reads: a file at one commit, null when it is not there. */
+  const io = (ref: string, tree?: Set<string>): RepoIO => ({
+    async read(path) {
+      // The listing already has the tree, so a missing file costs no request.
+      if (tree && !tree.has(path)) return null;
+      try {
+        return await file(path, ref, path === CONFIG_FILE ? MAX_CONFIG : MAX_FILE);
+      } catch (e) {
+        if (/Not found/.test((e as Error).message)) return null;
+        throw e;
+      }
+    },
+    async fallback() {
+      return [...(tree ?? [])].filter((p) => FILE_PATH.test(p) || p === SINGLE_PATH);
+    },
+  });
 
   return {
     kind: 'github',
     id: key,
     async list() {
       const ref = await head();
-      const tree = (await (await get(`${API}/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`)).json()) as { tree?: { path: string; type: string; size?: number }[] };
-      const paths = (tree.tree ?? []).filter((t) => t.type === 'blob' && FILE_PATH.test(t.path) && (t.size ?? 0) <= MAX_FILE).map((t) => t.path);
-      const entries: SourceEntry[] = [];
-      let skipped = Math.max(0, paths.length - LIST_LIMIT);
-      for (const path of paths.slice(0, LIST_LIMIT)) {
-        try {
-          const { meta } = parseRoutineFile(await file(path, ref));
-          if (`routines/${meta.name}.md` !== path) throw new Error('name does not match the file');
-          entries.push({ path, name: meta.name, site: meta.site, description: meta.description, version: meta.version });
-        } catch {
-          skipped++;
-        }
-      }
-      return { entries, skipped, ref };
+      const t = (await (await get(`${API}/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`)).json()) as { tree?: { path: string; type: string; size?: number }[] };
+      const blobs = (t.tree ?? []).filter((x) => x.type === 'blob' && (x.size ?? 0) <= (x.path === CONFIG_FILE ? MAX_CONFIG : MAX_FILE));
+      return { ...(await listRepo(io(ref, new Set(blobs.map((x) => x.path))))), ref };
     },
     async fetch(path, ref) {
-      if (!FILE_PATH.test(path)) throw new Error('Not a routine file.');
       const sha = ref && SHA.test(ref) ? ref : await head();
-      const routine = parseRoutineFile(await file(path, sha));
-      if (`routines/${routine.meta.name}.md` !== path) throw new Error('The routine’s name does not match its file.');
-      return { routine, ref: sha, path };
+      return { ...(await fetchRepo(io(sha), path)), ref: sha, path };
     },
   };
 }

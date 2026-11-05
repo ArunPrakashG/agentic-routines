@@ -1,7 +1,7 @@
 # Agentic Routines: Record Once, Replay Without the LLM
 
 **Status:** idea (logged 2026-11-05)
-**Type:** Open-source client + paid shared routine library
+**Type:** Free, open-source client + free shared routine directory
 
 ## Origin
 - Coding agents (Claude Code, Codex) repeat the same browser chores step by step every time: drafting a Play Console release, console admin, portal downloads. Each run costs the same tokens and time as the first.
@@ -13,18 +13,16 @@
 
 ## Product
 Same architecture as Claude in Chrome: a custom MCP server plus a Chrome extension.
-1. **MCP server (stdio, works with Claude Code and Codex):** basic browser tools, all recorded, plus `routines_list`, `routine_run(name, params)`, `routine_save(name)`.
+1. **MCP server (stdio, works with Claude Code and Codex):** basic browser tools, all recorded, plus `routines_list`, `routine_run(name, params)`, `routine_propose` / `routine_edit` / `routine_save`.
 2. **Chrome extension (MV3):** actions through `chrome.debugger`, a11y snapshots, one tab group per agent session, native messaging to the server.
 3. **Compile on save:** drop navigation that a direct URL load reproduces (checked against the recorded snapshot), turn changing values into params, add pre/post checks per step.
 4. **Replay with no LLM.** On a failed step, hand the current page back to the agent, then save the fixed run as a new version.
 5. **Safety:** pause before irreversible steps (submit, publish, pay); secrets stored only as `{{secret:name}}` placeholders.
 6. **Human demos:** record yourself doing a task once from the side panel; it becomes the first version of the routine.
 
-## Money
-- **Free:** the client, local routines only (open source).
-- **Paid (~$8-15/month):** shared library of maintained routines for common sites (Play Console, App Store Connect, GST portal, cloud consoles, bank statement downloads), fixes shared across users, sync across machines.
-- **Team:** private shared routines with version history.
-- **Later:** scheduled hosted runs ("do this every month"), which is the closest fit to selling convenience.
+## Cost
+- The whole project is open source and free: the client, the directory of shared routines, publishing and installing. Nothing is sold and there are no plans or tiers.
+- The directory is reviewed for safety, and routines for common sites (Play Console, App Store Connect, cloud consoles, bank statement downloads) are shared by the people who make them.
 
 ## Landscape (checked 2026-11-05)
 - Browser Use cloud "cache script": first run is a full agent run, later runs replay a script, self-heals once on failure.
@@ -37,14 +35,14 @@ Gap: none is a drop-in layer for Claude Code and Codex, and none maintains a sha
 
 ## MVP (a few weeks)
 - Extension and server over native messaging, basic tools working from Claude Code
-- Auto-record, `routine_save` / `routine_run`, multi-locator element lookup, pre/post checks
+- Auto-record, `routine_propose` → `routine_edit` → `routine_save`, `routine_run`, multi-locator element lookup, pre/post checks
 - Navigation skipping, params, pause before irreversible steps
 - Side-panel demo recording
 - Ship as a Claude Code plugin plus a Codex config snippet
 
 ## Risks
 - **Platform risk:** Anthropic, OpenAI or Google can add record and replay to their own agents.
-- **Willingness to pay:** developers expect local tools to be free, and flat-rate plans make token savings a weak pitch.
+- **Reach:** developers expect local tools to be free and open, so the project is both and has to earn its place by working well.
 - **Not a consumer product** unless it pivots to "teach your browser once" for non-developers, where it meets Claude in Chrome, Atlas and Gemini in Chrome head on.
-- **Upkeep:** a shared library is only worth paying for if routines keep working; unmaintained routines are worse than none.
-- Plan: build open source and use it first; add the paid library only if others ask for routines.
+- **Upkeep:** a shared library is only worth using if routines keep working; unmaintained routines are worse than none.
+- Plan: build open source and use it first; grow the directory if others ask for routines.

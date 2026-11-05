@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { checkFetched, compileRun, eventLabel, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { checkFetched, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, urlScore, wrapAuthored, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as sources from './sources.ts';
@@ -12,7 +12,52 @@ import * as store from './store.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
 const VERSION = '0.1.0';
+
+const INSTRUCTIONS = `Agentic Routines records the browser work you do with these tools and replays it as one tool call with no model.
+
+Before you do a browser task by hand, look for a routine. Installed ones are the rt_ tools; routines_search finds installed routines and ones other people published, for the page you are on (pass url) or a task (pass query). Use a routine when one fits: it costs no model calls and does the same thing every time. navigate and read_page also tell you when a routine handles the page you are on. If a routine stops or fails, finish the task by hand; the run is recorded.
+
+The loop: do the task with the browser tools. When it is done, decide whether it is worth keeping. A chore the user will want again is; a one-off lookup is not. If it is, call routine_propose: it numbers every step, says what each one did, and hints at what could go. Refine with routine_edit (drop retries, replace click-through navigation and dialogs with a direct address, mark values as parameters, add notes). Call routine_test to replay the draft on the live site, then routine_save. Run a saved routine with its rt_ tool.
+
+The extension checks every edit: a step that submits, publishes, pays or deletes keeps its pause, an address stays on the routine's own site, and an address cannot carry a per-session value.`;
 const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
+
+/**
+ * The author's notes for the agent: the repository's, the routine's and the steps'. Anything somebody else wrote
+ * goes in an envelope; the user's own notes on their own routine do not need one. `steps` limits the step notes
+ * to one step, as a result does for the step it stopped at.
+ */
+export function authorNotes(r: Routine, origin?: { kind: string; source: string }, steps: number | 'all' = 'all'): string {
+  const own = !origin;
+  const by = origin ? (origin.kind === 'github' || origin.kind === 'folder' ? origin.source : `the publisher ${origin.source}`) : '';
+  const part = (label: string, t?: string) => (t ? (own ? `${label}: ${t}` : `${label}\n${wrapAuthored(t, `written by ${by}`)}`) : '');
+  const stepText = r.steps
+    .filter((s) => s.instructions && (steps === 'all' || s.n === steps))
+    .map((s) => `Step ${s.n} “${s.label}”: ${s.instructions}`)
+    .join('\n');
+  return [part('Notes for this repository', r.meta.repo?.instructions), part('Notes for this routine', r.meta.instructions), part(steps === 'all' ? 'Notes for its steps' : `Notes for step ${steps}`, stepText)].filter(Boolean).join('\n');
+}
+
+const refusedLine = (x: { directive: string; why: string }) => `${x.directive} refused: ${x.why}`;
+
+/**
+ * What the routine's hooks did on a run. The state is ours and plain; the log carries text the hooks produced
+ * (errors they threw, directives they wrote), so it goes in the envelope when somebody else wrote the routine.
+ */
+/** What an install says about hooks. They never run until the person has read the code in the side panel. */
+export function hooksLine(n = 0): string {
+  return n ? `\nIt has hooks on ${n} event${n === 1 ? '' : 's'}: code the author wrote that runs while it replays. They are off until the user reads the code in the browser side panel and allows them; until then it runs without them, and its results say so.` : '';
+}
+
+export function hookSummary(h: RunResult['hooks'], origin?: { kind: string; source: string }): string {
+  if (!h) return '';
+  if (h.state !== 'on') return `Hooks: off. ${h.reason ?? ''} The routine ran without them.`.trim();
+  const lines = h.log.filter((e) => e.done.length || e.refused.length || e.error).map((e) => `${e.event}${e.step ? ` (step ${e.step})` : ''}, ${e.ms} ms: ${[...e.done, ...e.refused.map(refusedLine), ...(e.error ? [`error: ${e.error}`] : [])].join('; ')}`);
+  const head = `Hooks ran ${h.runs} time${h.runs === 1 ? '' : 's'}${lines.length ? '' : ' and changed nothing'}.`;
+  const by = origin ? `hooks of ${origin.kind === 'github' || origin.kind === 'folder' ? origin.source : `the publisher ${origin.source}`}` : '';
+  const wrap = (t: string) => (origin ? wrapAuthored(t, by) : t);
+  return [head, lines.length ? wrap(lines.slice(0, 25).join('\n')) : '', h.notes.length ? `Notes added by the hooks:\n${wrap(h.notes.join('\n'))}` : ''].filter(Boolean).join('\n');
+}
 
 interface Listing {
   owner: string;
@@ -21,6 +66,7 @@ interface Listing {
   description: string;
   version: number;
   installs: number;
+  urls?: string[];
 }
 
 async function directory<T>(path: string, init?: RequestInit): Promise<T> {
@@ -42,6 +88,57 @@ const fail = (t: string) => ({ content: [{ type: 'text', text: t }] as Content[]
 
 function toolName(name: string) {
   return 'rt_' + name.replace(/-/g, '_');
+}
+
+/** Tool names for the enabled routines, as refreshRoutineTools registers them: a clash is told apart by the owner. */
+function toolNames(all: store.Listed[]): Map<string, string> {
+  const taken = new Set<string>();
+  const out = new Map<string, string>();
+  for (const l of all.filter((r) => r.enabled && r.surface === 'browser').slice(0, MAX_ROUTINE_TOOLS)) {
+    let name = toolName(l.name);
+    if (taken.has(name)) name = toolName(`${l.owner}-${l.name}`);
+    taken.add(name);
+    out.set(`${l.owner}/${l.name}`, name);
+  }
+  return out;
+}
+
+/** What a routine does, short: the description up to its "Use when" part, on one line. */
+function whatItDoes(description: string): string {
+  const one = description.replace(/\s+/g, ' ').trim();
+  const cut = one.search(/\.?\s*use when\b/i);
+  const head = (cut > 0 ? one.slice(0, cut) : one).replace(/[.\s]+$/, '');
+  return (head.length > 90 ? head.slice(0, 89) + '…' : head).replace(/^./, (c) => c.toLowerCase());
+}
+
+/**
+ * The line navigate and read_page add when an installed routine handles the page. The wording is documented in
+ * docs/guide/tools.md and agent skills match on it, so it only changes with the docs.
+ */
+export function routineHints(all: store.Listed[], url: string): string[] {
+  const names = toolNames(all);
+  return all
+    .filter((r) => names.has(`${r.owner}/${r.name}`))
+    .map((r) => ({ r, score: urlScore(r.urls, r.site, url) }))
+    .filter((x) => x.score >= 1)
+    .sort((a, b) => b.score - a.score || store.efficiency(store.viewStats(b.r.stats)) - store.efficiency(store.viewStats(a.r.stats)))
+    .slice(0, 2)
+    .map(({ r }) => `Routine ${names.get(`${r.owner}/${r.name}`)} handles this page: ${whatItDoes(r.description)}. Prefer it.`);
+}
+
+function ago(at: number): string {
+  const m = Math.round((Date.now() - at) / 60_000);
+  if (m < 2) return 'just now';
+  if (m < 120) return `${m} minutes ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} hours ago` : `${Math.round(h / 24)} days ago`;
+}
+
+/** How the agent's runs of a routine have gone on this machine. */
+export function statsLine(v?: store.StatsView): string {
+  if (!v) return 'Not run by an agent yet.';
+  const calls = v.calls < 0.05 ? 'no model calls' : `${v.calls.toFixed(1)} model calls per run`;
+  return `${v.runs} run${v.runs === 1 ? '' : 's'}, ${Math.round(v.success * 100)}% finished, ${calls}, median ${Math.max(1, Math.round(v.medianMs / 1000))}s${v.last ? `, last ${ago(v.last.at)} (${v.last.ok ? 'finished' : 'stopped'})` : ''}.`;
 }
 
 function clock(ms: number) {
@@ -66,7 +163,18 @@ function absoluteFiles(r: Routine, params: Record<string, string>) {
   return out;
 }
 
+function describeTest(r: RunResult): string {
+  const trace = (r.trace ?? []).join('\n');
+  const where = r.final_url ? `\nThe tab ended at ${r.final_url}.` : '';
+  const skipped = r.skipped ?? [];
+  const note = skipped.length ? `\nA test never performs a step that pauses in a real run (step ${skipped.join(', ')}), and never approves one.` : '';
+  if (r.status === 'done') return `Test passed. ${r.steps_total - skipped.length} of ${r.steps_total} steps replayed on the live site with no model.${note}\n${trace}${where}\nIf this is what you expect, call routine_save.`;
+  const after = skipped.length && (r.at_step ?? 0) > Math.min(...skipped) ? `\nThis step comes after skipped step ${Math.min(...skipped)} and may need what it does. If so this is expected: steps before it are proven, the rest can only be checked by running the routine for real and approving the pause.` : '';
+  return `Test failed at step ${r.at_step ?? '?'}${r.step_label ? ` “${r.step_label}”` : ''}: ${r.error}${note}${after}\n${trace}${where}\nEdit the draft with routine_edit (undo goes back one edit, reset to the proposal) and test again.`;
+}
+
 export function describeResult(r: RunResult): string {
+  if (r.test) return describeTest(r);
   const calls = `${r.model_calls} model call${r.model_calls === 1 ? '' : 's'}`;
   switch (r.status) {
     case 'done': {
@@ -93,7 +201,7 @@ export function describeResult(r: RunResult): string {
 }
 
 export async function runMcp(): Promise<void> {
-  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } } });
+  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: INSTRUCTIONS });
   const routineTools = new Map<string, RegisteredTool>();
   let refreshTimer: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {
@@ -106,11 +214,14 @@ export async function runMcp(): Promise<void> {
 
   // Fixes from a replay: chosen elements become the next version.
   const pendingRuns = new Map<string, { id: string; routine: Routine }>();
+  // The hint last shown, so reading the same page again stays quiet.
+  let lastHint = '';
 
   async function finish(result: RunResult & { fixes?: Record<number, Locator>; crops?: Record<number, string> }) {
     const p = pendingRuns.get(result.run_id);
     if (result.status === 'paused' || result.status === 'needs_choice' || !p) return result;
     pendingRuns.delete(result.run_id);
+    if (!result.test) await store.recordRun(p.id, { ok: result.status === 'done', calls: result.model_calls, ms: result.ms }).catch(() => {});
     const fixes = result.fixes ?? {};
     if (Object.keys(fixes).length) {
       const steps = p.routine.steps.map((s) => (fixes[s.n] ? { ...s, target: fixes[s.n], crop: result.crops?.[s.n] ?? s.crop } : s));
@@ -123,6 +234,7 @@ export async function runMcp(): Promise<void> {
 
   async function run(id: string, params: Record<string, string>) {
     const r = await store.read(id);
+    if (r.meta.surface && r.meta.surface !== 'browser') return fail(`${r.meta.name} acts on the ${r.meta.surface}, which this version cannot control. Only browser routines run.`);
     const missing = missingParams(r, params);
     if (missing.length) return fail(`${r.meta.name} needs: ${missing.join(', ')}.`);
     const filled = absoluteFiles(r, params);
@@ -130,11 +242,15 @@ export async function runMcp(): Promise<void> {
     if (files.length) await bridge.call('host.allowFiles', { paths: files });
     const result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r) }, 15 * 60_000);
     pendingRuns.set(result.run_id, { id, routine: r });
-    return text(describeResult(await finish(result)));
+    const origin = (await store.list()).find((x) => `${x.owner}/${x.name}` === id)?.origin;
+    const done = await finish(result);
+    const notes = authorNotes(r, origin, done.status !== 'done' && done.at_step ? done.at_step : 'all');
+    const hooks = hookSummary(done.hooks, origin);
+    return text(describeResult(done) + (hooks ? `\n${hooks}` : '') + (notes ? `\n\n${notes}` : ''));
   }
 
   async function refreshRoutineTools() {
-    const all = (await store.list()).filter((r) => r.enabled).slice(0, MAX_ROUTINE_TOOLS);
+    const all = (await store.list()).filter((r) => r.enabled && r.surface === 'browser').slice(0, MAX_ROUTINE_TOOLS);
     const want = new Set<string>();
     for (const r of all) want.add(want.has(toolName(r.name)) ? toolName(`${r.owner}-${r.name}`) : toolName(r.name));
     for (const [name, tool] of routineTools) {
@@ -158,7 +274,8 @@ export async function runMcp(): Promise<void> {
       const shape: Record<string, z.ZodTypeAny> = {};
       for (const [k, p] of Object.entries(r.meta.params)) shape[k] = z.string().describe(p.description ?? (p.type === 'file' ? 'Path to a file' : k));
       const elsewhere = l.origin && l.origin.kind !== 'directory' ? `Written by someone else (${l.origin.source}) and not reviewed by Agentic Routines. ` : '';
-      const description = `${elsewhere}${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}`;
+      const notes = authorNotes(r, l.origin);
+      const description = `${elsewhere}${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}${notes ? `\n\n${notes}` : ''}`;
       routineTools.get(name)?.remove();
       routineTools.set(
         name,
@@ -180,12 +297,18 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool(
     'navigate',
-    { description: 'Open a URL in the agent tab. Lists saved routines for the site, if any.', inputSchema: { url: z.string(), new_tab: z.boolean().optional(), ...tab } },
+    { description: 'Open a URL in the agent tab. If an installed routine handles the page it says so ("Routine rt_x handles this page: ... Prefer it."); use it instead of doing the task by hand.', inputSchema: { url: z.string(), new_tab: z.boolean().optional(), ...tab } },
     async (a) => {
       const res = await bridge.call<{ url: string; title: string; tab_id: number }>('browser.navigate', a);
       let out = `${res.title}\n${res.url} (tab ${res.tab_id})`;
-      const here = (await store.list()).filter((r) => r.enabled && onSite(res.url, r.site));
-      if (here.length) out += `\n\nSaved routines for this site:\n${here.map((r) => `- ${toolName(r.name)}: ${r.description.split('\n')[0]}`).join('\n')}`;
+      const listed = await store.list();
+      const hints = routineHints(listed, res.url);
+      lastHint = hints.join('\n');
+      if (hints.length) out += `\n\n${hints.join('\n')}`;
+      else {
+        const here = listed.filter((r) => r.enabled && r.surface === 'browser' && onSite(res.url, r.site));
+        if (here.length) out += `\n\nSaved routines for this site:\n${here.map((r) => `- ${toolName(r.name)}: ${r.description.split('\n')[0]}`).join('\n')}`;
+      }
       return text(out);
     },
   );
@@ -193,10 +316,18 @@ export async function runMcp(): Promise<void> {
   server.registerTool(
     'read_page',
     {
-      description: 'Read the page as an outline of roles and names. Interactive elements get a ref like ref_12 to use with click, type, select and upload.',
+      description: 'Read the page as an outline of roles and names. Interactive elements get a ref like ref_12 to use with click, type, select and upload. If an installed routine handles the page it says so at the end; prefer it to doing the task by hand.',
       inputSchema: { filter: z.enum(['interactive', 'all']).optional(), ...tab },
     },
-    async (a) => text(await bridge.call<string>('browser.read', a)),
+    async (a) => {
+      const res = await bridge.call<string | { text: string; url?: string }>('browser.read', a);
+      const page = typeof res === 'string' ? { text: res } : res;
+      const hints = page.url ? routineHints(await store.list(), page.url) : [];
+      const key = hints.join('\n');
+      if (!hints.length || lastHint === key) return text(page.text);
+      lastHint = key;
+      return text(`${page.text}\n\n${hints.join('\n')}`);
+    },
   );
 
   server.registerTool('click', { description: 'Click an element by ref.', inputSchema: { ref: z.string(), ...tab } }, async (a) =>
@@ -236,8 +367,8 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool('routines_list', { description: 'List saved routines with what each is for.' }, async () => {
     const all = await store.list();
-    if (!all.length) return text('No routines saved yet. Every browser task you do is recorded; save one with routine_save.');
-    return text(all.map((r) => `${r.owner === store.LOCAL ? '' : r.owner + '/'}${r.name} v${r.version} · ${r.site}${r.enabled ? '' : r.blocked ? ' · off, blocked' : ' · off'}${r.origin && r.origin.kind !== 'directory' ? ` · from ${r.origin.source}` : ''}\n  ${r.description.replace(/\n/g, ' ')}`).join('\n'));
+    if (!all.length) return text('No routines saved yet. Every browser task you do is recorded; when one is worth keeping, call routine_propose.');
+    return text(all.map((r) => `${r.owner === store.LOCAL ? '' : r.owner + '/'}${r.name} v${r.version} · ${r.site}${r.enabled ? '' : r.blocked ? ' · off, blocked' : ' · off'}${r.origin && r.origin.kind !== 'directory' ? ` · from ${r.origin.source}` : ''}${r.surface !== 'browser' ? ` · ${r.surface}, not supported yet` : ''}\n  ${r.description.replace(/\n/g, ' ')}${r.stats ? `\n  ${statsLine(store.viewStats(r.stats))}` : ''}`).join('\n'));
   });
 
   server.registerTool(
@@ -245,15 +376,19 @@ export async function runMcp(): Promise<void> {
     { description: 'Full notes for a routine: when to use it, when not to, values it asks for, where it pauses.', inputSchema: { name: z.string() } },
     async ({ name }) => {
       const r = await store.read(name);
+      const listed = (await store.list()).find((x) => `${x.owner}/${x.name}` === name || x.name === name);
+      const origin = listed?.origin;
       const params = Object.entries(r.meta.params).map(([k, p]) => `- ${k} (${p.type}): ${p.description ?? ''}`);
       return text(
         [
           `${r.meta.name} v${r.meta.version} · ${r.meta.site} · ${r.steps.length} steps`,
           r.meta.description,
+          `Applies to: ${(listed?.urls ?? []).join(', ') || r.meta.site}\nAgent runs on this machine: ${statsLine(store.viewStats(listed?.stats))}`,
           params.length ? `Asks each run:\n${params.join('\n')}` : 'Asks for nothing.',
           r.meta.pauses.length ? `Pauses before: ${r.meta.pauses.map((n) => `step ${n} “${r.steps[n - 1]?.label}”`).join(', ')}` : '',
           r.meta.secrets.length ? `Secrets (set AGENTIC_ROUTINES_SECRET_<NAME> or the user types them at a pause): ${r.meta.secrets.join(', ')}` : '',
           r.body,
+          authorNotes(r, origin),
         ]
           .filter(Boolean)
           .join('\n\n'),
@@ -281,10 +416,81 @@ export async function runMcp(): Promise<void> {
 
   server.registerTool(
     'run_steps',
-    { description: 'List the recorded steps of a run, numbered, to choose what routine_save leaves out.', inputSchema: { run_id: z.string().optional().describe('Defaults to the latest run') } },
+    { description: 'List the recorded steps of a run, numbered, as recorded. routine_propose shows the same steps with what each did and what could go.', inputSchema: { run_id: z.string().optional().describe('Defaults to the latest run') } },
     async ({ run_id }) => {
       const run = await bridge.call<Run>('runs.get', { run_id });
       return text(run.events.map((e, i) => `${i + 1}. ${e.action} ${eventLabel(e)}${e.value !== undefined ? `: ${e.value}` : ''}`).join('\n'));
+    },
+  );
+
+  const stepRef = z.union([z.number().int(), z.string().regex(/^\d+-\d+$/)]);
+  const opSchema = z.discriminatedUnion('op', [
+    z.object({ op: z.literal('remove'), steps: z.array(stepRef).min(1).describe('Step numbers or ranges like "3-5"') }),
+    z.object({ op: z.literal('navigate'), from: z.number().int(), to: z.number().int(), url: z.string().max(2000).describe('Replaces steps from..to with one step that opens this address. May contain {{param}}.') }),
+    z.object({ op: z.literal('open'), before: z.number().int(), url: z.string().max(2000).describe('Adds a step that opens this address before step N') }),
+    z.object({ op: z.literal('param'), name: z.string(), step: z.number().int().optional(), value: z.string().optional().describe('Every typed step with exactly this value'), description: z.string().max(300).optional(), example: z.string().optional() }),
+    z.object({ op: z.literal('fixed'), step: z.number().int().describe('Keep the recorded value, do not ask for it') }),
+    z.object({ op: z.literal('pause'), step: z.number().int(), on: z.boolean() }),
+    z.object({ op: z.literal('note'), step: z.number().int(), text: z.string().max(1000).describe('For the agent that runs the routine: what to check at this step. Empty clears it.') }),
+    z.object({ op: z.literal('first_in_list'), step: z.number().int().describe('A click that should take whatever is first in the list next time') }),
+    z.object({ op: z.literal('describe'), name: z.string().optional(), description: z.string().max(1024).optional(), do_not_use_for: z.string().max(2000).optional() }),
+    z.object({ op: z.literal('undo') }),
+    z.object({ op: z.literal('reset') }),
+  ]);
+
+  server.registerTool(
+    'routine_propose',
+    {
+      description:
+        'After you finish a browser task, decide whether it is worth keeping as a routine: yes for a chore the user will want again, no for a one-off. If yes, call this with a name and a description ("what it does. Use when ..." in the words a user would say). It returns a draft: every recorded step, numbered, with its page, what it did and what happened after it, and hints at what could go (retries, clicks that only navigated, dialogs that were answered, steps that submit). Nothing is changed or saved by this. Refine with routine_edit, then routine_test, then routine_save. Pass from_routine to refine a routine that is already saved.',
+      inputSchema: {
+        name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).describe('Lowercase with dashes, e.g. play-release'),
+        description: z.string().min(20).describe('What it does. Use when ...'),
+        do_not_use_for: z.string().optional(),
+        run_id: z.string().optional().describe('Defaults to the latest run'),
+        from_routine: z.string().optional().describe('Refine this saved routine instead of a run'),
+      },
+    },
+    async (a) => {
+      if (!/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
+      const r = await bridge.call<{ draft_id: string; text: string }>('draft.propose', a);
+      return text(`${r.text}\n\nEdit with routine_edit (draft_id "${r.draft_id}"), then routine_test, then routine_save. Values you typed are parameters unless you fix them; use { "op": "fixed", "step": N } to keep one as typed.`);
+    },
+  );
+
+  server.registerTool(
+    'routine_edit',
+    {
+      description:
+        'Change a draft from routine_propose. ops are applied in order, all or none, and the numbered draft comes back. Ops: remove steps; navigate (replace steps from..to with one direct address, e.g. instead of clicking through menus or answering a dialog); open (add a first page); param (make a typed value a parameter, or declare one to use as {{name}} in an address); fixed; pause; note (text for whoever runs the step later); first_in_list; describe; undo; reset. The extension refuses unsafe edits: a step that submits, publishes, pays or deletes cannot be removed and keeps its pause; an address must stay on the routine\'s own site and cannot carry a per-session id or token (use {{param}} or keep the clicks). If an edit is refused, the reason says what to do instead.',
+      inputSchema: { draft_id: z.string(), ops: z.array(opSchema).min(1).max(40) },
+    },
+    async ({ draft_id, ops }) => {
+      const r = await bridge.call<{ text: string }>('draft.edit', { draft_id, ops });
+      return text(r.text);
+    },
+  );
+
+  server.registerTool(
+    'routine_test',
+    {
+      description:
+        'Replay a draft once on the live site, with no model, to prove the refined steps work. It uses the values recorded, or params you pass (a draft of a saved routine has no recorded values, so pass them). It skips every step that pauses and never approves one, so nothing that submits, publishes, pays or deletes runs; the steps after a skipped one that do not depend on it are still checked. It says what each step did and where the tab ended up. A draft that replaces a saved routine can only be saved after a good test.',
+      inputSchema: { draft_id: z.string(), params: z.record(z.string(), z.string()).optional() },
+    },
+    async ({ draft_id, params }) => {
+      // The files and secrets the test needs come first, as for any run.
+      const prep = await bridge.call<{ files: string[]; needs: string[] }>('draft.test', { draft_id, params, prepare: true });
+      const files = prep.files.map((f) => (isAbsolute(f) ? f : resolvePath(process.cwd(), f)));
+      if (files.length) await bridge.call('host.allowFiles', { paths: files });
+      const secrets: Record<string, string> = {};
+      for (const n of prep.needs) {
+        const v = process.env[`AGENTIC_ROUTINES_SECRET_${n.toUpperCase()}`];
+        if (v) secrets[n] = v;
+      }
+      const r = await bridge.call<{ result?: RunResult }>('draft.test', { draft_id, params, secrets }, 15 * 60_000);
+      if (!r.result) return fail('The test did not run.');
+      return text(describeResult(r.result));
     },
   );
 
@@ -292,78 +498,113 @@ export async function runMcp(): Promise<void> {
     'routine_save',
     {
       description:
-        'Save a recorded browser run as a routine. Write description as: what it does, then "Use when ..." in the words a user would say. Pass params { name: value typed } to choose what it asks for each run; everything else stays as typed. Without params, every typed value is asked for. If you retried a step or checked your work, or if the task means "the latest" of something, read run_steps first.',
+        'Save a draft from routine_propose as a routine. Run routine_test first. The extension checks it against the same rules the directory applies, and refuses to replace a saved routine unless the latest edit tested well. Saving over a routine of the same name makes the next version.',
       inputSchema: {
-        name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).describe('Lowercase with dashes, e.g. play-release'),
-        description: z.string().min(20).describe('What it does. Use when ...'),
+        draft_id: z.string(),
+        name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
+        description: z.string().min(20).optional(),
         do_not_use_for: z.string().optional(),
-        run_id: z.string().optional().describe('Defaults to the latest run'),
-        params: z.record(z.string(), z.string()).optional(),
-        fixed: z.array(z.string()).optional().describe('Auto-detected params to keep as typed'),
-        leave_out: z.array(z.number().int()).optional().describe('Numbers from run_steps that are not part of the task, like retries and checks'),
-        first_in_list: z.array(z.number().int()).optional().describe('Numbers from run_steps of clicks that should take whatever is first in the list next time, not the item clicked now'),
       },
     },
     async (a) => {
-      if (!/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
-      const run = await bridge.call<Run>('runs.get', { run_id: a.run_id });
-      const body = a.do_not_use_for ? `## Do not use for\n${a.do_not_use_for}` : '';
-      const { routine, recorded, dropped, unmatched, pinned } = compileRun(run, { name: a.name, description: a.description, params: a.params, fixed: a.fixed, leaveOut: a.leave_out, firstInList: a.first_in_list, body, draftedBy: bridge.agent });
-      if (unmatched.length) return fail(`Not saved. These params match no value typed in this run: ${unmatched.join(', ')}. Check them against run_steps.`);
-      const saved = await bridge.call<Routine>('store.write', { routine });
-      await bridge.call('runs.markSaved', { run_id: run.id }).catch(() => {});
+      if (a.description && !/\buse when\b/i.test(a.description)) return fail('Add a "Use when ..." clause to the description so agents know when to pick this routine.');
+      const r = await bridge.call<{
+        saved: { name: string; version: number; site: string; steps: number; params: string[]; pauses: number[]; start?: string };
+        recorded: number;
+        tested?: string;
+        warnings: string[];
+        pinned: string[];
+      }>('draft.save', a);
       scheduleRefresh();
-      const params = Object.keys(saved.meta.params);
+      const x = r.saved;
       return text(
-        `Saved ${saved.meta.name} v${saved.meta.version} · ${saved.steps.length} of ${recorded} recorded steps (${dropped} replaced by a direct URL${a.leave_out?.length ? `, ${a.leave_out.length} left out` : ''})` +
-          (params.length ? ` · asks for ${params.join(', ')}` : '') +
-          (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')}` : '') +
-          (saved.steps[0]?.url ? `\nStarts at ${saved.steps[0].url}, so it stays on what that address opens.` : '') +
-          `\nRun it with ${toolName(saved.meta.name)}.` +
-          (pinned.length ? `\nThis routine stays on one specific item: ${pinned.join(', ')}. If it should follow whatever is newest, save again with first_in_list, starting from the list page.` : ''),
+        `Saved ${x.name} v${x.version} · ${x.steps} steps from ${r.recorded} recorded` +
+          (x.params.length ? ` · asks for ${x.params.join(', ')}` : '') +
+          (x.pauses.length ? ` · pauses before step ${x.pauses.join(', ')}` : '') +
+          (x.start ? `\nStarts at ${x.start}, so it stays on what that address opens.` : '') +
+          `\n${r.tested ? `Tested: ${r.tested}.` : 'Not tested. Run it once with its rt_ tool or edit and test it again if you changed anything after the last test.'}` +
+          `\nRun it with ${toolName(x.name)}.` +
+          (r.warnings.length ? `\n${r.warnings.join(' ')}` : '') +
+          (r.pinned.length ? `\nThis routine stays on one specific item: ${r.pinned.join(', ')}. If it should follow whatever is newest, use first_in_list or a {{param}} in the address.` : ''),
       );
     },
   );
 
   // ---------- the directory ----------
 
-  const line = (r: Listing) => `${r.owner}/${r.name} v${r.version} · ${r.site}${r.installs ? ` · ${r.installs} install${r.installs === 1 ? '' : 's'}` : ''}\n  ${r.description.replace(/\n/g, ' ')}`;
+  const pagesOf = (urls?: string[]) => (urls?.length ? `\n  Pages: ${urls.slice(0, 3).join(', ')}${urls.length > 3 ? ', …' : ''}` : '');
+  const line = (r: Listing) => `${r.owner}/${r.name} v${r.version} · ${r.site}${r.installs ? ` · ${r.installs} install${r.installs === 1 ? '' : 's'}` : ''}\n  ${r.description.replace(/\n/g, ' ')}${pagesOf(r.urls)}`;
 
   server.registerTool(
     'routines_search',
     {
       description:
-        'Find routines other people published for a site or task. Pass site (e.g. "play.google.com", or the host you are on) and/or words. Install one with routine_install. Check this before doing a chore by hand on a site you have no saved routine for.',
-      inputSchema: { query: z.string().max(100).optional(), site: z.string().max(253).optional() },
+        'Find routines for a page or a task: the ones you have installed (the rt_ tools) first, then ones other people published. Pass url (the page you are on) and/or query (words). A routine that lists the page you are on ranks above one that only matches the site, and among those, one that finishes without the model ranks higher. Use a routine when one fits, instead of doing the task by hand. Install a published one with routine_install.',
+      inputSchema: {
+        query: z.string().max(100).optional(),
+        site: z.string().max(253).optional(),
+        url: z.string().max(2000).optional().describe('The address of the page you are on, e.g. from tabs or navigate.'),
+      },
     },
-    async ({ query, site }) => {
+    async ({ query, site, url }) => {
+      let at: string | undefined;
+      try {
+        if (url) at = new URL(url).href;
+      } catch {
+        // Not an address; fall back to the words and site.
+      }
+      const host = (at ? new URL(at).host : site?.replace(/^https?:\/\//, '').split('/')[0])?.toLowerCase();
+      const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      // How well something that works on `s` with pages `u` fits what was asked. 0: not at all.
+      const fit = (s: string, u?: string[]) => (at ? urlScore(u, s, at) : host ? (host === s || host.endsWith('.' + s) ? 1 : 0) : 1);
+
       const q = new URLSearchParams({ limit: '10' });
       if (query) q.set('q', query);
-      if (site) q.set('site', site.replace(/^https?:\/\//, '').split('/')[0]);
+      if (host) q.set('site', host);
       const found: string[] = [];
+
+      // Installed: what the person already has, best fit first.
+      const installed = (await store.list()).filter((r) => r.enabled && r.surface === 'browser');
+      const names = toolNames(installed);
+      const mine = installed
+        .map((r) => ({ r, score: fit(r.site, r.urls) }))
+        .filter(({ r, score }) => score > 0 && words.every((w) => `${r.name} ${r.description} ${r.site}`.toLowerCase().includes(w)))
+        .sort((a, b) => b.score - a.score || store.efficiency(store.viewStats(b.r.stats)) - store.efficiency(store.viewStats(a.r.stats)))
+        .slice(0, 5);
+      for (const { r, score } of mine) {
+        const here = at && score >= 1 ? ' · handles this page' : '';
+        found.push(`Installed: ${names.get(`${r.owner}/${r.name}`)} · ${r.site}${here}\n  ${r.description.replace(/\n/g, ' ')}${pagesOf(r.urls)}\n  ${statsLine(store.viewStats(r.stats))}`);
+      }
+
       let down: Error | undefined;
       if (await sources.directoryOn()) {
         // The sources below still answer when the directory does not.
         try {
-          found.push(...(await directory<{ routines: Listing[] }>(`/routines?${q}`)).routines.map(line));
+          const rows = (await directory<{ routines: Listing[] }>(`/routines?${q}`)).routines;
+          found.push(...rows.map((r) => ({ r, score: fit(r.site, r.urls) })).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).map((x) => line(x.r)));
         } catch (e) {
           down = e as Error;
         }
       }
       // The person's own sources. Not reviewed by us, and said so on every line.
-      const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-      const host = site?.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
       for (const src of await sources.entries().catch(() => [])) {
-        for (const e of src.entries) {
-          const hay = `${e.name} ${e.description} ${e.site}`.toLowerCase();
-          if (host && !(e.site === host || host.endsWith('.' + e.site))) continue;
-          if (!words.every((w) => hay.includes(w))) continue;
-          found.push(`${src.source} · ${e.name} v${e.version} · ${e.site}  [not reviewed]\n  ${e.description.replace(/\n/g, ' ')}\n  Install with routine_install_from_git, source "${src.source}", path "${e.path}".`);
+        let told = false;
+        const fitting = src.entries
+          .map((e) => ({ e, score: fit(e.site, e.urls) }))
+          .filter(({ e, score }) => score > 0 && words.every((w) => `${e.name} ${e.description} ${e.site}`.toLowerCase().includes(w)))
+          .sort((a, b) => b.score - a.score);
+        for (const { e } of fitting) {
+          if (!told && src.repo?.instructions) {
+            told = true;
+            found.push(`Notes for the repository ${src.source}:\n${wrapAuthored(src.repo.instructions, `written by ${src.source}`)}`);
+          }
+          found.push(`${src.source} · ${e.name} v${e.version} · ${e.site}  [not reviewed]\n  ${e.description.replace(/\n/g, ' ')}${pagesOf(e.urls)}${e.instructions ? `\n  The author left notes for the agent; routine_describe shows them once it is installed.` : ''}\n  Install with routine_install_from_git, source "${src.source}", path "${e.path}".`);
         }
       }
       if (!found.length && down) return fail(down.message);
-      if (!found.length) return text('Nothing in the directory or the sources for that yet.');
-      return text(found.slice(0, 15).join('\n') + '\n\nInstall a directory routine with routine_install and the owner/name.');
+      if (!found.length) return text('Nothing installed, in the directory or in the sources for that yet.');
+      const tail = found.some((f) => !f.startsWith('Installed:') && !f.includes('[not reviewed]') && !f.startsWith('Notes for')) ? '\n\nInstall a directory routine with routine_install and the owner/name.' : '';
+      return text(found.slice(0, 15).join('\n') + tail);
     },
   );
 
@@ -399,7 +640,8 @@ export async function runMcp(): Promise<void> {
         `Installed ${owner}/${name} v${saved.meta.version} · ${saved.steps.length} steps on ${saved.meta.site}` +
           (asks.length ? ` · asks for ${asks.join(', ')}` : '') +
           (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')} for approval` : '') +
-          `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.`,
+          `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.` +
+          hooksLine(Object.keys(saved.meta.hooks ?? {}).length),
       );
     },
   );
@@ -411,11 +653,11 @@ export async function runMcp(): Promise<void> {
         'Ask the user to install a routine from one of their Git sources (see routines_search). Nothing is installed until the user has read the steps and clicked Install in the browser side panel, so this waits for them; do not say it is installed until it returns. It was written by someone else and is not reviewed by Agentic Routines. Needs a browser with the extension open.',
       inputSchema: {
         source: z.string().max(300).describe('The source address, as routines_search showed it'),
-        path: z.string().regex(/^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/).describe('The file, e.g. routines/deploy-staging.md'),
+        path: z.string().max(160).refine((p) => isRepoPath(p), 'A .md file in the repository, e.g. routines/deploy-staging.md').describe('The file, as routines_search showed it, e.g. routines/deploy-staging.md'),
       },
     },
     async ({ source, path }) => {
-      let r: { name: string; owner: string; version: number; steps: number; site: string };
+      let r: { name: string; owner: string; version: number; steps: number; site: string; hooks?: { count: number; approved: boolean } };
       try {
         r = await bridge.call('git.install', { source, path }, 11 * 60_000);
       } catch (e) {
@@ -423,7 +665,7 @@ export async function runMcp(): Promise<void> {
         return fail(`Not installed. ${(e as Error).message}`);
       }
       scheduleRefresh();
-      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Agentic Routines. Run it with ${toolName(r.name)}.`);
+      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Agentic Routines. Run it with ${toolName(r.name)}.` + (r.hooks?.approved ? `\nIt has hooks on ${r.hooks.count} event${r.hooks.count === 1 ? '' : 's'}; the user read the code and allowed them.` : hooksLine(r.hooks?.count)));
     },
   );
 

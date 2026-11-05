@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>History · Acme Console</title>
+<h1>Release history</h1>
+<p id="last"></p>
+<button id="exp" type="button">Export CSV</button>
+<p id="status" role="status"></p>
+<script>
+document.getElementById('last').textContent = 'Latest release: ' + (localStorage.published || 'none');
+document.getElementById('exp').onclick = () => { document.getElementById('status').textContent = 'Exported 1 release: ' + (localStorage.published || 'none'); };
+</script>

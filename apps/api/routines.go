@@ -50,14 +50,80 @@ type paramSpec struct {
 }
 
 type routineMeta struct {
-	Name        string               `json:"name"`
-	Site        string               `json:"site"`
+	Name string `json:"name"`
+	Site string `json:"site"`
+	// The pages it applies to: host and path globs on the site, "*" for an id.
+	Urls []string `json:"urls,omitempty"`
+	// Where it acts. Empty or "browser"; "desktop" is reserved and not accepted yet.
+	Surface     string               `json:"surface,omitempty"`
 	Description string               `json:"description"`
 	Params      map[string]paramSpec `json:"params"`
 	Secrets     []string             `json:"secrets"`
 	Pauses      []int                `json:"pauses"`
 	Returns     string               `json:"returns,omitempty"`
 	DraftedBy   string               `json:"drafted_by,omitempty"`
+	// Text for the agent that runs the routine, shown to it inside the untrusted-content envelope.
+	Instructions string `json:"instructions,omitempty"`
+	// Code on events, run by the extension in a sandbox with no network. Event name to source.
+	Hooks map[string]string `json:"hooks,omitempty"`
+}
+
+// hookEvents is the list the extension and the CLI accept (packages/core/src/hooks.ts).
+var hookEvents = map[string]bool{
+	"run.start": true, "run.end": true, "step.before": true, "step.after": true,
+	"action.click.before": true, "action.click.after": true, "action.type.before": true, "action.type.after": true,
+	"action.select.before": true, "action.select.after": true, "action.upload.before": true, "action.upload.after": true,
+	"action.navigate.before": true, "action.navigate.after": true, "action.press.before": true, "action.press.after": true,
+	"action.read.before": true, "action.read.after": true, "page.load": true, "step.changed": true,
+	"pause.reached": true, "pause.approved": true, "error": true,
+}
+
+const maxURLs = 8
+
+var (
+	urlHost    = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
+	urlSegment = regexp.MustCompile(`^(\*\*?|[A-Za-z0-9._~%:@!$&'()+,;=-]+)$`)
+)
+
+// checkURLs: at most maxURLs patterns, each a host on the routine's site and a path of names and "*",
+// with "**" allowed only as the last part. No scheme, query or spaces.
+func checkURLs(urls []string, site string) bool {
+	if len(urls) > maxURLs {
+		return false
+	}
+	for _, u := range urls {
+		if len(u) > 200 || strings.ContainsAny(u, "?# \t\n") {
+			return false
+		}
+		parts := strings.Split(u, "/")
+		if !urlHost.MatchString(parts[0]) || !onSite("https://"+parts[0]+"/", site) {
+			return false
+		}
+		for i, seg := range parts[1:] {
+			if !urlSegment.MatchString(seg) || (seg == "**" && i != len(parts)-2) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+const (
+	maxHookCode  = 8000
+	maxHookTotal = 32000
+	maxNotes     = 4000
+)
+
+// checkHooks is the same rule the extension and the CLI apply to a routine's hooks.
+func checkHooks(h map[string]string) bool {
+	total := 0
+	for ev, code := range h {
+		if !hookEvents[ev] || strings.TrimSpace(code) == "" || len(code) > maxHookCode {
+			return false
+		}
+		total += len(code)
+	}
+	return total <= maxHookTotal
 }
 
 type locator struct {
@@ -68,6 +134,7 @@ type locator struct {
 	Attrs map[string]string `json:"attrs"`
 	CSS   string            `json:"css"`
 	Near  string            `json:"near,omitempty"`
+	Modal string            `json:"modal,omitempty"`
 }
 
 type fingerprint struct {
@@ -87,6 +154,8 @@ type step struct {
 	Crop   string       `json:"crop,omitempty"`
 	Pause  string       `json:"pause,omitempty"`
 	Pick   string       `json:"pick,omitempty"`
+	// Text for the agent that runs the routine. Shown to it inside the untrusted-content envelope.
+	Instructions string `json:"instructions,omitempty"`
 }
 
 type routineIn struct {
@@ -217,6 +286,12 @@ func (r *routineIn) check(name string) string {
 		return "body_too_long"
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
 		return "bad_steps"
+	case m.Surface != "" && m.Surface != "browser":
+		return "bad_surface"
+	case !checkURLs(m.Urls, m.Site):
+		return "bad_urls"
+	case len(m.Instructions) > maxNotes || !checkHooks(m.Hooks):
+		return "bad_hooks"
 	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512 || len(m.DraftedBy) > 40:
 		return "bad_meta"
 	}
@@ -245,6 +320,9 @@ func (r *routineIn) check(name string) string {
 		if s.Pick != "" && s.Pick != "first" {
 			return "bad_steps"
 		}
+		if len(s.Instructions) > 1000 {
+			return "bad_steps"
+		}
 		// A step that leaves the site would send an installer's signed-in browser somewhere else.
 		if s.URL != "" && !onSite(s.URL, m.Site) {
 			return "step_off_site"
@@ -255,7 +333,7 @@ func (r *routineIn) check(name string) string {
 		if s.Action == "navigate" && s.URL == "" {
 			return "bad_steps"
 		}
-		if t := s.Target; t != nil && (len(t.Attrs) > 20 || len(t.CSS) > 600) {
+		if t := s.Target; t != nil && (len(t.Attrs) > 20 || len(t.CSS) > 600 || len(t.Modal) > 100) {
 			return "bad_steps"
 		}
 	}
@@ -285,6 +363,7 @@ type summary struct {
 	Version     int       `json:"version"`
 	Installs    int       `json:"installs"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	Urls        []string  `json:"urls"`
 }
 
 type full struct {
@@ -407,10 +486,10 @@ func (s *store) unpublish(ctx context.Context, ownerID, name string) error {
 // liveOnly keeps a disabled routine, or one from a blocked publisher, out of everything public.
 const liveOnly = `r.disabled = false AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.kind = 'user' AND b.value = u.handle)`
 
-const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at`
+const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at, COALESCE(r.meta->'urls', '[]'::jsonb)`
 
 func scanSummary(row pgx.Row, extra ...any) (x summary, err error) {
-	return x, row.Scan(append([]any{&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt}, extra...)...)
+	return x, row.Scan(append([]any{&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Urls}, extra...)...)
 }
 
 // search lists by words in the name, description or site, and by the site a person is on.
@@ -454,7 +533,7 @@ func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 	out := []mineRow{}
 	for rows.Next() {
 		var x mineRow
-		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Disabled, &x.DisabledReason); err != nil {
+		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Urls, &x.Disabled, &x.DisabledReason); err != nil {
 			return nil, err
 		}
 		out = append(out, x)
