@@ -1,4 +1,4 @@
-import { CROP_DRIFT, fill, hashDistance, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
+import { compareViewport, CROP_DRIFT, fill, hashDistance, isIrreversible, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { uploadFile } from './agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
@@ -15,6 +15,7 @@ interface Found {
   ref?: string;
   score?: number;
   rect?: Rect;
+  view?: Viewport;
   candidates?: (Candidate & { rect: Rect })[];
 }
 
@@ -41,6 +42,22 @@ export interface ReplayState {
   handedBack?: boolean;
   error?: string;
   candidates?: Candidate[];
+  /** Written by someone else (the directory, a Git source or a folder). Held to stricter rules. */
+  foreign: boolean;
+  /** Set when the page is a very different size from the one the routine was recorded at. */
+  viewportNote?: string;
+  /** The picture check is off for this run because of it. */
+  relaxCrop?: boolean;
+  /** Steps that paused only because they look irreversible. */
+  forcedPauses: number[];
+  /** The step an agent chose another element for, which waits for the person when that element looks irreversible. */
+  chosenAt?: number;
+  /** Why it is paused now. A forced pause is the person's alone to answer. */
+  pauseKind?: 'asked' | 'forced';
+  /** Match the window to the recorded size for the run, and put it back after. */
+  fitWindow?: boolean;
+  /** The window as it was, to put back. */
+  windowWas?: { id: number; width: number; height: number; left?: number; top?: number };
   /** A test of a draft: stops at the first pause without approving it, and changed steps fail it. */
   test?: boolean;
   skipped: number[];
@@ -85,6 +102,8 @@ export function dismiss() {
 
 /** How long a paused replay waits for the side panel before handing the pause back to the agent. */
 const PANEL_WAIT_MS = 90_000;
+/** A pause only the person can answer ends the run if they do not come to the panel. */
+const FORCED_WAIT_MS = 10 * 60_000;
 
 function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; crops: Record<number, string> } {
   const step = s.routine.steps[s.i];
@@ -105,10 +124,112 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     error: s.error,
     read: Object.keys(s.read).length ? s.read : undefined,
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
+    viewport_note: s.viewportNote,
+    forced_pauses: s.forcedPauses.length ? s.forcedPauses : undefined,
     fixes: s.fixes,
     crops: s.crops,
     ...(s.test ? { test: true, skipped: s.skipped, trace: s.trace } : {}),
   };
+}
+
+// ---------- what the extension holds to, whatever the routine or the page says ----------
+
+const originOf = (u: string) => {
+  try {
+    return new URL(u).origin;
+  } catch {
+    return '';
+  }
+};
+
+/** Where a routine's own steps were recorded. A routine from someone else gets none of this: only its site. */
+function recordedOrigins(r: Routine): Set<string> {
+  const out = new Set<string>();
+  for (const st of r.steps) for (const u of [st.url, st.page?.url]) if (u && !u.includes('{{')) out.add(originOf(u));
+  out.delete('');
+  return out;
+}
+
+/** May the replay act on this address? The routine's own site, and for the person's own routines the pages they recorded it on. */
+function mayBeOn(s: ReplayState, url: string): boolean {
+  if (!/^https?:/i.test(url)) return false;
+  if (onSite(url, s.routine.meta.site)) return true;
+  return !s.foreign && recordedOrigins(s.routine).has(originOf(url));
+}
+
+function offSite(s: ReplayState, url: string, what: string) {
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    // Not an address.
+  }
+  return new Error(`${what} ${host || 'a page'}, which is not ${s.routine.meta.site}. A routine only works on the site it was recorded for, so it stopped before touching it.`);
+}
+
+/** Looked at before every step that touches the page: a redirect or a link can have taken the tab elsewhere. */
+async function stayOnSite(s: ReplayState) {
+  const url = (await browser.tabs.get(s.tabId)).url ?? '';
+  if (!mayBeOn(s, url)) throw offSite(s, url, 'The tab is on');
+}
+
+/** Pauses a step needs: its own, and for a routine from someone else also any that looks irreversible. */
+function pauseFor(s: ReplayState, step: Step): 'asked' | 'forced' | undefined {
+  if (step.pause) return 'asked';
+  if (s.foreign && isIrreversible({ action: step.action, target: step.target })) return 'forced';
+  return undefined;
+}
+
+// ---------- viewport ----------
+
+/** Compares the page size now with the one recorded. Once per run; a very different size switches the picture check off. */
+function noteViewport(s: ReplayState, view?: Viewport) {
+  if (s.viewportNote !== undefined || !view) return;
+  const check = compareViewport(s.routine.meta.viewport, view);
+  s.viewportNote = check.note ?? '';
+  s.relaxCrop = check.match === 'different';
+  if (check.note) notify(s);
+}
+
+/** Resize the window so the page is the recorded size, only when that can be undone and nothing else is in the way. */
+async function fitWindow(s: ReplayState) {
+  const want = s.routine.meta.viewport;
+  if (!s.fitWindow || !want) return;
+  try {
+    const now = await ask<Viewport>(s.tabId, { t: 'viewport' });
+    if (compareViewport(want, now).match !== 'different') return;
+    const tab = await browser.tabs.get(s.tabId);
+    const win = await browser.windows.get(tab.windowId);
+    if (win.state !== 'normal' || win.width === undefined || win.height === undefined) {
+      s.viewportNote = `The window is ${win.state}, so it was not resized to match the recorded ${want.w}px. ${s.viewportNote ?? ''}`.trim();
+      return;
+    }
+    s.windowWas = { id: win.id!, width: win.width, height: win.height, left: win.left, top: win.top };
+    await browser.windows.update(win.id!, { width: Math.max(300, win.width + (want.w - now.w)), height: Math.max(300, win.height + (want.h - now.h)) });
+    await sleep(400);
+    // Whatever the page reports now decides: a window cannot always get that small or that big.
+    s.viewportNote = undefined;
+  } catch {
+    // Left as it is; the comparison runs on the real size.
+  }
+}
+
+/** Puts the window back. Safe to call twice. */
+async function restoreWindow(s: ReplayState) {
+  const w = s.windowWas;
+  s.windowWas = undefined;
+  if (!w) return;
+  try {
+    await browser.windows.update(w.id, { width: w.width, height: w.height, ...(w.left !== undefined ? { left: w.left, top: w.top } : {}) });
+  } catch {
+    // The window is gone.
+  }
+}
+
+/** A replay is over: forget it, and give the window back. */
+function end(s: ReplayState) {
+  live.delete(s.id);
+  void restoreWindow(s);
 }
 
 async function waitForPage(tabId: number, want?: PageFingerprint): Promise<void> {
@@ -132,6 +253,7 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   while (Date.now() < end) {
     const fix = s.fixes[step.n];
     res = await ask<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target! });
+    noteViewport(s, res.view);
     // A button can stay disabled for a moment after the step before it, and a click on it does nothing.
     if (res.kind === 'found' && !res.disabled) break;
     await wake(s.tabId);
@@ -139,7 +261,7 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   }
   if (res.kind === 'found' && res.disabled) return { kind: 'missing', candidates: res.ref ? [{ ref: res.ref, role: res.role, name: res.name, score: res.score ?? 0, rect: res.rect! }] : [] };
   // Two elements look alike: the crop decides, if exactly one is close.
-  if (res.kind === 'ambiguous' && step.crop && res.candidates) {
+  if (res.kind === 'ambiguous' && step.crop && res.candidates && !s.relaxCrop) {
     const img = await screenshot(s.tabId);
     if (img) {
       const close = res.candidates.filter((c) => {
@@ -281,15 +403,16 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     const from = await urlOf();
     const a = await hook(s, 'action.navigate.before', step);
     if (a.skip) return 'next';
-    // Whatever the routine says, and whatever the params fill in, it never leaves its own site.
+    // Whatever the routine says, and whatever the params fill in, it never leaves its own site. Checked after the values are put in.
     const url = fill(step.url, s.params, {}, true) ?? '';
-    if (!onSite(url, s.routine.meta.site)) throw new Error(`Stopped: step ${step.n} would leave ${s.routine.meta.site}`);
+    if (!mayBeOn(s, url)) throw offSite(s, url, 'This step opens');
     await browser.tabs.update(s.tabId, { url });
     await sleep(200);
     await waitLoaded(s.tabId);
     await after(from);
     return 'next';
   }
+  await stayOnSite(s);
   if (kind === 'press' && !step.target) {
     const before = await urlOf();
     const a = await hook(s, 'action.press.before', step);
@@ -308,8 +431,8 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
       return 'stop';
     }
     ref = found.ref!;
-    // Element agrees; refresh a drifted crop quietly.
-    if (step.crop && found.rect) {
+    // Element agrees; refresh a drifted crop quietly. A page of another size would give a hash for another layout.
+    if (step.crop && found.rect && !s.relaxCrop) {
       const img = await screenshot(s.tabId);
       const h = img && hashAt(img, found.rect);
       if (h && hashDistance(h, step.crop) > CROP_DRIFT) s.crops[step.n] = h;
@@ -363,7 +486,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
     }
     while (s.i < s.routine.steps.length) {
       const step = s.routine.steps[s.i];
-      if (s.test && step.pause) {
+      if (s.test && pauseFor(s, step)) {
         // A test never performs a step that pauses, and never approves one. What follows is still checked.
         s.skipped.push(step.n);
         s.trace.push(`${step.n}. skipped “${step.label}”, it pauses in a real run`);
@@ -383,12 +506,15 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
       // A hook can ask for a person to look before a step. It can never be the one who says yes.
       const asked = s.test || s.hookApproved === step.n ? undefined : s.hooks?.pause;
       if (s.hooks) s.hooks.pause = undefined;
-      if ((step.pause && !s.approved.has(step.n)) || asked) {
+      const kind = pauseFor(s, step) ?? (s.chosenAt === step.n ? 'forced' : undefined) ?? (asked ? 'asked' : undefined);
+      if ((kind && !s.approved.has(step.n)) || asked) {
+        s.pauseKind = kind;
+        if (kind === 'forced' && !s.forcedPauses.includes(step.n)) s.forcedPauses.push(step.n);
         if (s.session && goneSessions.has(s.session)) {
           s.status = 'failed';
           s.error = AGENT_GONE;
           await ended(s);
-          live.delete(s.id);
+          end(s);
           notify(s);
           return result(s);
         }
@@ -398,8 +524,10 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
         await glow(s.tabId, 'paused', PAUSED_MS);
         const approved = await new Promise<boolean | undefined>((res) => {
           panelWaiters.set(s.id, res);
-          // Runs started in the panel wait for the panel; agents get the pause back.
-          if (s.by) setTimeout(() => res(undefined), PANEL_WAIT_MS);
+          // Runs started in the panel wait for the panel; agents get the pause back. Not when the routine is from
+          // someone else and the step looks irreversible: that is the person's to answer, and the run ends if nobody does.
+          if (s.by && kind === 'asked') setTimeout(() => res(undefined), PANEL_WAIT_MS);
+          if (kind === 'forced') setTimeout(() => res(false), FORCED_WAIT_MS);
         });
         panelWaiters.delete(s.id);
         if (!live.has(s.id)) return result(s);
@@ -412,7 +540,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
           s.status = 'failed';
           s.error = 'Stopped at the pause in the side panel';
           await ended(s);
-          live.delete(s.id);
+          end(s);
           notify(s);
           return result(s);
         }
@@ -430,7 +558,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
           s.status = 'failed';
           s.error = `${step.action} “${step.label}” was not on the page the way it was recorded${near ? `. Closest: ${near}` : ''}`;
           await ended(s);
-          live.delete(s.id);
+          end(s);
           notify(s);
           return result(s);
         }
@@ -454,13 +582,13 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
     await hook(s, 'error', s.routine.steps[s.i], { detail: { error: s.error } }).catch(() => ({}));
   }
   await ended(s);
-  live.delete(s.id);
+  end(s);
   if (s.test) s.finalUrl = await browser.tabs.get(s.tabId).then((t) => t.url, () => s.finalUrl);
   notify(s);
   return result(s);
 }
 
-export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean }) {
+export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
   if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
     return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const s: ReplayState = {
@@ -484,8 +612,12 @@ export async function start(p: { routine: Routine; params: Record<string, string
     skipped: [],
     trace: [],
     hooks: await hooks.forRoutine(p.routine),
+    foreign: !!p.foreign,
+    forcedPauses: [],
+    fitWindow: p.fit,
   };
   live.set(s.id, s);
+  await fitWindow(s);
   return loop(s);
 }
 
@@ -494,10 +626,13 @@ export async function resume(p: { run_id: string; approve?: boolean; choice?: st
   if (!s) throw new Error(`No paused run ${p.run_id}`);
   s.handedBack = false;
   if (s.status === 'paused') {
+    if (s.pauseKind === 'forced' && p.approve !== false) {
+      throw new Error('This step looks irreversible and the routine is from someone else, so only the user can approve it, in the Agentic Routines side panel. Ask them; do not approve it for them.');
+    }
     if (p.approve === false) {
       s.status = 'failed';
       s.error = 'Stopped at the pause';
-      live.delete(s.id);
+      end(s);
       notify(s);
       return result(s);
     }
@@ -509,12 +644,14 @@ export async function resume(p: { run_id: string; approve?: boolean; choice?: st
     if (!p.choice) {
       s.status = 'failed';
       s.error = 'Stopped where the page changed';
-      live.delete(s.id);
+      end(s);
       notify(s);
       return result(s);
     }
     const d = await ask<{ loc: Locator; rect: Rect }>(s.tabId, { t: 'describe', ref: p.choice });
     const step = s.routine.steps[s.i];
+    // An element picked in place of the recorded one gets the same look a recorded step does.
+    if (!step.pause && isIrreversible({ action: step.action, target: d.loc })) s.chosenAt = step.n;
     s.fixes[step.n] = d.loc;
     s.modelCalls++;
     s.candidates = undefined;
@@ -533,7 +670,7 @@ export function agentGone(session: string) {
     if (s.session !== session || (s.status !== 'paused' && s.status !== 'needs_choice')) continue;
     s.status = 'failed';
     s.error = AGENT_GONE;
-    live.delete(s.id);
+    end(s);
     notify(s);
     panelWaiters.get(s.id)?.(false);
   }
@@ -551,6 +688,6 @@ export function stop(id: string) {
   if (panelWaiters.has(id)) return panelWaiters.get(id)!(false);
   s.status = 'failed';
   s.error = 'Stopped in the side panel';
-  live.delete(id);
+  end(s);
   notify(s);
 }

@@ -36,6 +36,8 @@ export interface Draft extends Snapshot {
   /** Hosts that were opened over plain http while recording, which is how a local site looks. */
   httpHosts: string[];
   runId?: string;
+  /** The window the steps were recorded in, so a run can tell when the page is laid out differently. */
+  viewport?: RoutineMeta['viewport'];
   /** Set when this refines a routine that is already saved. */
   base?: { owner: string; name: string; version: number };
   /** What the person’s own routine carries that edits do not touch: notes for the agent, hooks. Never taken from someone else’s routine. */
@@ -201,6 +203,7 @@ function buildFromRun(run: Run, meta: { name: string; description: string; doNot
     domains,
     httpHosts,
     runId: run.id,
+    viewport: events.find((e) => e.target && e.view)?.view,
     steps,
     params: b.params,
     secrets: b.secrets,
@@ -240,6 +243,7 @@ function buildFromRoutine(r: Routine & { owner?: string }, meta: { name?: string
     site: r.meta.site,
     domains,
     httpHosts: httpHosts.concat(/^[\d.]+(:\d+)?$/.test(r.meta.site) ? [r.meta.site] : []),
+    viewport: r.meta.viewport,
     base: { owner: r.owner ?? r.meta.owner ?? 'local', name: r.meta.name, version: r.meta.version },
     // Notes and hooks somebody else wrote are not carried into a routine that then reads as the person's own.
     ...((r.owner ?? r.meta.owner ?? 'local') === 'local' ? { keep: { instructions: r.meta.instructions, hooks: r.meta.hooks, requires: r.meta.requires, returns: r.meta.returns, urls: declaredUrls(r), surface: r.meta.surface } } : {}),
@@ -616,6 +620,7 @@ export function finalize(d: Draft, draftedBy?: string): { routine: Routine; pinn
       secrets,
       pauses: steps.filter((s) => s.pause).map((s) => s.n),
       urls: d.keep?.urls ?? deriveUrls(steps, d.site),
+      ...(d.viewport ? { viewport: d.viewport } : {}),
       drafted_by: draftedBy,
       ...Object.fromEntries(Object.entries(d.keep ?? {}).filter(([, v]) => v !== undefined)),
     },

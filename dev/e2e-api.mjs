@@ -471,7 +471,8 @@ const agent = new Client({ name: 'claude-code', version: '2.0.0' });
 await agent.connect(new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME: mcpHome, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: mcpHome, AGENTIC_ROUTINES_API: `http://127.0.0.1:${PORT}` }, stderr: 'inherit' }));
 const tool = async (name, args = {}) => {
   const r = await agent.callTool({ name, arguments: args }, undefined, { timeout: 30_000 });
-  return { text: r.content.map((c) => c.text ?? '').join('\n'), error: !!r.isError };
+  // Text an author wrote comes back quoted as untrusted data; these checks are about what it says.
+  return { text: r.content.map((c) => c.text ?? '').join('\n').replace(/⟨\/?untrusted [0-9a-f]+⟩/g, ''), error: !!r.isError };
 };
 
 let t = await tool('routines_search', { site: 'https://play.google.com/console/x' });

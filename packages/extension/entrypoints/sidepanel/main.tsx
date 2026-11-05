@@ -1122,6 +1122,11 @@ function Replay({ r, done }: { r: NonNullable<PanelState['replay']>; done: () =>
           <div style={{ transform: `scaleX(${Math.max(progress, 0.02)})` }} />
         </div>
         <span style={{ fontSize: '12px', color: broken ? 'var(--danger)' : 'var(--text-2)' }}>{status}</span>
+        {r.viewportNote && (
+          <span role="status" style={{ fontSize: '12px', color: 'var(--warn)' }}>
+            {r.viewportNote}
+          </span>
+        )}
       </header>
 
       <main class={paused && !r.handedBack ? 'rmain pad' : 'rmain'} aria-live="polite">
@@ -1222,7 +1227,7 @@ function Replay({ r, done }: { r: NonNullable<PanelState['replay']>; done: () =>
                 Paused before step {cur.n}
               </span>
               <span class="h">{cur.label}</span>
-              <span class="b">Nothing has been sent yet.</span>
+              <span class="b">{r.pauseKind === 'forced' ? 'This routine is from someone else and this step looks irreversible, so only you can approve it. Nothing has been sent yet.' : 'Nothing has been sent yet.'}</span>
             </div>
             <div class="foot2">
               <button class="btn btn-stop" type="button" aria-keyshortcuts="Escape" onClick={() => send({ t: 'decide', id: r.id, approve: false })}>

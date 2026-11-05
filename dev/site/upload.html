@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>Add attachments · Acme Console</title>
+<style>
+body{font:14px system-ui;margin:24px;max-width:520px}
+.zone{border:2px dashed #888;padding:24px;margin:16px 0;text-align:center}
+.hidden-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+</style>
+<h1>Add attachments</h1>
+<!-- A visible button in front of a hidden multiple-file input, the way most upload widgets are built. -->
+<button id="pick" type="button">Choose files</button>
+<input id="files" class="hidden-input" type="file" multiple accept=".aab,.txt,.bin" tabindex="-1">
+<!-- A drop zone with no input anywhere: it reads the dropped files from the drop event. -->
+<div id="zone" class="zone" role="button" tabindex="0">Drop a file here</div>
+<!-- One file only, labelled by a label whose control is hidden. -->
+<label id="single-label" for="single">Upload receipt</label>
+<input id="single" type="file" style="display:none">
+<p id="out" role="status"></p>
+<script>
+const out = document.getElementById('out');
+const show = (who, list) => { out.textContent = who + ': ' + [...list].map((f) => `${f.name} ${f.size}`).join(', '); };
+document.getElementById('pick').onclick = () => document.getElementById('files').click();
+document.getElementById('files').onchange = (e) => show('input', e.target.files);
+document.getElementById('single').onchange = (e) => show('single', e.target.files);
+const zone = document.getElementById('zone');
+zone.addEventListener('dragover', (e) => e.preventDefault());
+zone.addEventListener('drop', (e) => { e.preventDefault(); show('drop', e.dataTransfer.files); });
+</script>

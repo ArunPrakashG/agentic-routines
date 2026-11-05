@@ -41,3 +41,13 @@ A value typed into a password field is never saved. It becomes a placeholder, an
 ## What stays on your computer
 
 Routines, recordings and screenshot crops live in `~/.agentic-routines` on your machine. Crops are never published. See the [privacy page](/privacy) for the full list of what is sent when you sign in or publish.
+
+## Window size
+
+A routine records the size of the page it was recorded on (width, height and pixel ratio). A replay compares it with the page it finds.
+
+- In the same responsive band (phone, tablet, laptop, desktop, wide) nothing changes and nothing is said.
+- One band over and close in width, the replay goes on as usual.
+- Very different, say a phone-sized window for a routine recorded on a desktop: the layout can differ, so the result and the side panel say so, the picture check is switched off for that run, and the page structure and the element decide. The stored picture is not rewritten, so a later run at the right size still uses it.
+
+`routine_run` with `match_viewport: true` resizes the window to the recorded size first, when it is a normal window, and puts it back when the run ends. Routines saved before this was added have no size and replay as before.

@@ -2,6 +2,7 @@ import { parse, stringify } from 'yaml';
 import { checkHooks, readHooks } from './hooks.ts';
 import { checkUrls, readUrls } from './urls.ts';
 import { SURFACES, type RoutineMeta, type Surface } from './types.ts';
+import type { Viewport } from './viewport.ts';
 
 const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
@@ -15,6 +16,12 @@ function surfaceOf(v: unknown): Surface | undefined {
   if (v === undefined || v === null || v === 'browser') return undefined;
   if (SURFACES.includes(v as Surface)) return v as Surface;
   throw new Error(`ROUTINE.md surface “${String(v)}” is not one this version knows (browser, desktop).`);
+}
+
+function validViewport(v: unknown): Viewport | undefined {
+  const o = v as Partial<Viewport> | undefined;
+  if (!o || !(o.w! > 0 && o.w! < 20000) || !(o.h! > 0 && o.h! < 20000)) return undefined;
+  return { w: Math.round(o.w!), h: Math.round(o.h!), dpr: o.dpr! > 0 && o.dpr! < 10 ? o.dpr! : 1 };
 }
 
 export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string } {
@@ -36,6 +43,7 @@ export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string 
     requires: raw.requires,
     returns: raw.returns,
     drafted_by: raw.drafted_by ? String(raw.drafted_by) : undefined,
+    viewport: validViewport((raw as { viewport?: unknown }).viewport),
     instructions: raw.instructions ? String(raw.instructions).slice(0, 4000) : undefined,
     repo: repoOf(raw.repo),
     hooks: readHooks((raw as { hooks?: unknown }).hooks),

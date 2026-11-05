@@ -184,6 +184,8 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
       urls: deriveUrls(steps, siteOf(workUrl)),
       returns: opts.returns,
       drafted_by: opts.draftedBy,
+      // Where the pictures and the layout were seen, from the first step that has an element.
+      viewport: rest.find((e) => e.target && e.view)?.view,
     },
     body: opts.body ?? '',
     steps,
