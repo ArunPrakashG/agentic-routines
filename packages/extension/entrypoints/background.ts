@@ -1,5 +1,6 @@
 import { compileRun, type CompileOptions, type Routine } from '@browser-routines/core';
 import * as agent from '../lib/agent';
+import * as auth from '../lib/auth';
 import * as native from '../lib/native';
 import * as replay from '../lib/replay';
 import * as runs from '../lib/runs';
@@ -47,6 +48,7 @@ export default defineBackground(() => {
     const r = replay.current();
     const { lastRuns = {} } = (await browser.storage.local.get('lastRuns')) as { lastRuns?: LastRuns };
     return {
+      account: await auth.account(),
       connected: native.connected(),
       agents: [...new Set(agents.values())],
       routines: routines.map((x) => {
@@ -102,6 +104,9 @@ export default defineBackground(() => {
     if (e === 'routines.changed') refreshRoutines();
   });
   runs.onRunsChanged(push);
+  browser.storage.onChanged.addListener((changes) => {
+    if (changes.session) push();
+  });
   replay.onReplay((s) => noteRun(s).then(push));
 
   async function setRecording(on: boolean) {
@@ -156,6 +161,10 @@ export default defineBackground(() => {
         return refreshRoutines();
       case 'refresh':
         return refreshRoutines();
+      case 'signIn':
+        return auth.signIn();
+      case 'signOut':
+        return auth.signOut();
     }
   }
 
@@ -163,6 +172,7 @@ export default defineBackground(() => {
     if (port.name !== 'panel') return;
     panels.add(port);
     port.onDisconnect.addListener(() => panels.delete(port));
+    auth.check();
     port.onMessage.addListener(async (c: PanelCommand & { reqId?: number }) => {
       try {
         port.postMessage({ reqId: c.reqId, ok: true, result: await command(c) });
@@ -193,6 +203,9 @@ export default defineBackground(() => {
   if (b.sidePanel) b.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   else if (b.sidebarAction) browser.action.onClicked.addListener(() => b.sidebarAction.toggle());
   browser.action.setBadgeBackgroundColor?.({ color: '#3530E0' });
+
+  // The session stays out of reach of content scripts.
+  (browser.storage.local as any).setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
 
   // Chrome only wakes a service worker for an event, and agents need the host up.
   browser.runtime.onStartup.addListener(() => {});

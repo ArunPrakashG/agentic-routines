@@ -10,7 +10,7 @@ pnpm dev:up
 |---|---|
 | `br-claude` | Claude Code, using your login, with only this MCP server and none of your user settings or hooks |
 | `br-chrome` | Chromium from Playwright with the unpacked extension, debugging port 9333, or `BR_CDP_PORT` |
-| `br-site` | The test site on http://127.0.0.1:8765 |
+| `br-site` | The test site on http://127.0.0.1:8765, or `BR_SITE_PORT` |
 
 ```bash
 tmux attach -t br-claude
@@ -32,3 +32,11 @@ Other options:
 - `dev/up.sh --no-build` skips the build. `--headless` and `--no-claude` do what they say.
 - `BR_MODEL=haiku dev/up.sh` picks the model. `BR_DEV_DIR` moves the state folder. `BR_CHROME` picks the browser.
 - `pnpm e2e` is the scripted check: fresh headless browsers and stores, with no model calls. It covers an agent over MCP, then a person recording and replaying a demo in the real side panel with input events. It replaces a running environment. Add `--shots` to save panel screenshots to `.dev/e2e-*/shots`.
+
+## Sign-in and the API
+
+The API is a Go service in `apps/api` on Postgres and Redis. `pnpm e2e:api` builds it and runs it against throwaway Postgres and Redis containers (Docker needed) and a stand-in for Google. It uses throwaway secrets and touches nothing real.
+
+The dev scripts build the extension against `http://127.0.0.1:8787`. A plain `pnpm -C packages/extension exec wxt build` points at the deployed API instead. Set `WXT_API_URL` to override either.
+
+The Google client is in Testing status, so only its listed test users can sign in. Server setup and deploys are in `apps/api/README.md`.

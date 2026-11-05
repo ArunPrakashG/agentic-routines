@@ -21,7 +21,7 @@ A routine is a skill for the browser. It is a folder with a `ROUTINE.md` that te
    ~/.browser-routines/routines/                        Extension (Chrome, Edge, Firefox)
    <owner>/<name>/ROUTINE.md, steps.json                 recorder · replayer · checks · side panel
              ▲                                                        │
-             └──────────── sync (signed-in user) ─────── Directory API (Cloudflare) ◄── site + directory pages
+             └──────────── sync (signed-in user) ─────── Directory API ◄── site + directory pages
 ```
 
 | Part | Job | Stack |
@@ -29,7 +29,7 @@ A routine is a skill for the browser. It is a folder with a `ROUTINE.md` that te
 | Extension | Drives the browser for agents, records every run, replays routines, runs the page checks, side panel UI, Google sign-in | TypeScript, WXT (one codebase, builds MV3 for Chrome/Edge and Firefox), Preact |
 | `browser-routines` npm package | `mcp` mode for agents, `host` mode for native messaging, `setup` to write agent configs and register the host with each browser | TypeScript, Node 20, `@modelcontextprotocol/sdk` |
 | `core` package | Routine format, compiler (drop navigation, find params, mark pauses), locator matching, shared by extension and package | TypeScript |
-| Directory API | Accounts, sync, publish, versions, search, install counts, reports | Cloudflare Workers (Hono), D1, R2, Vectorize + Workers AI embeddings |
+| Directory API | Accounts, sync, publish, versions, search, install counts, reports | Go service on Postgres and Redis, behind Caddy and Cloudflare |
 | Site and directory pages | Marketing page, routine directory, user profiles, privacy page | Astro on Cloudflare Pages, reading the same API |
 
 Everything above runs on free tiers to start.
@@ -153,7 +153,7 @@ Publishing:
 1. The owner ticks "Share on the directory" on Save, or calls `routine_publish`.
 2. The package strips what can't leave the machine. Crops stay local, because they can show account names. Recorded values that aren't params are removed, and no secret values exist to strip.
 3. The API lints the routine: description present with a "Use when" clause, `site` set, every step's URL inside `site`, pauses present for detected irreversible steps.
-4. It's published as a new immutable version. Description embeddings are written to Vectorize for search.
+4. It's published as a new immutable version. The description is indexed for search (Postgres full-text search to start).
 
 Installing pins a version. When the owner publishes a new version, installed copies update on the next sync unless the user pinned the version.
 
@@ -185,7 +185,7 @@ A project can also keep routines in `.routines/` in its repo, shared through git
 packages/core        routine format, compiler, locator matching
 packages/extension   WXT extension (chrome, edge, firefox targets)
 packages/cli         npm package: mcp, host, setup
-apps/api             Cloudflare Worker: auth, sync, directory
+apps/api             Go service: auth, sync, directory
 apps/site            Astro: marketing page, directory, profiles, privacy
 docs/                this file
 design/              approved mockups and tokens

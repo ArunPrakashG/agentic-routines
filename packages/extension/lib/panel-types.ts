@@ -1,6 +1,8 @@
 import type { RecordedEvent } from '@browser-routines/core';
+import type { Account } from './auth';
 
 export interface PanelState {
+  account?: Account;
   connected: boolean;
   agents: string[];
   routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; lastRun?: number; changed?: number[] }[];
@@ -33,4 +35,6 @@ export type PanelCommand =
   | { t: 'inputs'; id: string }
   | { t: 'record'; on: boolean }
   | { t: 'remove'; id: string }
-  | { t: 'refresh' };
+  | { t: 'refresh' }
+  | { t: 'signIn' }
+  | { t: 'signOut' };

@@ -14,7 +14,7 @@ const { Client } = await import(`${SDK}/client/index.js`);
 const { StdioClientTransport } = await import(`${SDK}/client/stdio.js`);
 const { ToolListChangedNotificationSchema } = await import(`${SDK}/types.js`);
 const EXT = 'chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo';
-const SITE = 'http://127.0.0.1:8765';
+const SITE = `http://127.0.0.1:${process.env.BR_SITE_PORT ?? 8765}`;
 const shots = process.argv.includes('--shots');
 const STORE = process.env.BROWSER_ROUTINES_HOME;
 const SHOTS = join(DEV, 'shots');
@@ -73,6 +73,11 @@ async function openPanel(scheme = 'light') {
   panel = await cdp(t.webSocketDebuggerUrl);
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 844, deviceScaleFactor: 1, mobile: false });
   await panel.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }, { name: 'prefers-reduced-motion', value: 'reduce' }] });
+  // Google's own screen needs a person, so this starts signed in.
+  if (shots) mkdirSync(SHOTS, { recursive: true });
+  await shot('signin');
+  await panel.send('Runtime.evaluate', { expression: `chrome.storage.local.set({ session: { account: { email: 'test@example.com', name: 'Test' }, access: 'x', accessExp: Date.now() + 3600000, refresh: 'x' } })`, awaitPromise: true });
+  await sleep(300);
 }
 async function shot(name) {
   await sleep(700);
@@ -108,7 +113,6 @@ const call = async (name, args = {}) => {
 };
 const refFor = (outline, re) => outline.split('\n').find((l) => re.test(l))?.match(/ref_\d+/)?.[0];
 
-if (shots) mkdirSync(SHOTS, { recursive: true });
 await openPanel(process.argv.includes('--dark') ? 'dark' : 'light');
 await sleep(500);
 await shot('01-onboarding-or-empty');
