@@ -197,9 +197,9 @@ export async function runMcp(): Promise<void> {
     text(await bridge.call<string>('browser.press', a)),
   );
 
-  server.registerTool('screenshot', { description: 'Screenshot of the visible part of the tab. Prefer read_page; images cost far more context.', inputSchema: { ...tab } }, async (a) => {
-    const data = await bridge.call<string>('browser.screenshot', a);
-    return { content: [{ type: 'image', data, mimeType: 'image/png' }] as Content[] };
+  server.registerTool('screenshot', { description: 'Image of the area around the element you last acted on, or around ref. Pass full: true only when you need the whole tab. Prefer read_page: it costs less and also sees toasts and dialogs outside the area.', inputSchema: { ref: z.string().optional(), full: z.boolean().optional(), ...tab } }, async (a) => {
+    const { data, note } = await bridge.call<{ data: string; note: string }>('browser.screenshot', a);
+    return { content: [{ type: 'image', data, mimeType: 'image/png' }, { type: 'text', text: note }] as Content[] };
   });
 
   // ---------- routines ----------

@@ -1,13 +1,16 @@
 import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@browser-routines/core';
 import { uploadFile } from './agent';
 import { hashAt, screenshot, type Rect } from './crop';
-import { agentTabId, ask, settle, sleep, waitLoaded } from './tabs';
+import { agentTabId, ask, settle, sleep, waitLoaded, wake } from './tabs';
 
 // Replays compiled steps with no model. Before each step: page structure,
 // then the element, then the crop. Stops at pauses and at steps that changed.
 
 interface Found {
   kind: 'found' | 'ambiguous' | 'missing';
+  disabled?: boolean;
+  role?: string;
+  name?: string;
   ref?: string;
   score?: number;
   rect?: Rect;
@@ -106,9 +109,12 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   let res: Found = { kind: 'missing' };
   while (Date.now() < end) {
     res = await ask<Found>(s.tabId, { t: 'resolve', target: s.fixes[step.n] ?? step.target! });
-    if (res.kind === 'found') break;
+    // A button can stay disabled for a moment after the step before it, and a click on it does nothing.
+    if (res.kind === 'found' && !res.disabled) break;
+    await wake(s.tabId);
     await sleep(300);
   }
+  if (res.kind === 'found' && res.disabled) return { kind: 'missing', candidates: res.ref ? [{ ref: res.ref, role: res.role, name: res.name, score: res.score ?? 0, rect: res.rect! }] : [] };
   // Two elements look alike: the crop decides, if exactly one is close.
   if (res.kind === 'ambiguous' && step.crop && res.candidates) {
     const img = await screenshot(s.tabId);

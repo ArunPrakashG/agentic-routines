@@ -11,6 +11,8 @@ export default defineBackground(() => {
   native.onRequest(async (method, p) => {
     if (method.startsWith('browser.') || method === 'runs.get') return agent.handle(method, p);
     if (method === 'runs.markSaved') return runs.markSaved(p.run_id);
+    // A rebuilt unpacked extension only runs after a reload. Waits so the answer gets out first.
+    if (method === 'extension.reload') return void setTimeout(() => browser.runtime.reload(), 100);
     if (method === 'replay.start') return replay.start(p);
     if (method === 'replay.resume') return replay.resume(p);
     if (method === 'agent.hello') {

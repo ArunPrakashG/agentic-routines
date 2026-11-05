@@ -6,6 +6,7 @@ export type ContentMsg =
   | { t: 'read'; filter?: 'interactive' | 'all' }
   | { t: 'fingerprint' }
   | { t: 'describe'; ref: string }
+  | { t: 'rendering' }
   | { t: 'act'; ref?: string; action: string; value?: string }
   | { t: 'attach'; ref: string; files: { name: string; type: string; b64: string }[] }
   | { t: 'markUpload'; ref: string }
@@ -60,6 +61,10 @@ export default defineContentScript({
           case 'ping':
             send(true);
             break;
+          case 'rendering':
+            requestAnimationFrame(() => send({ ok: true }));
+            setTimeout(() => send({ ok: false }), 150);
+            break;
           case 'read':
             send({ ok: outline(msg.filter) });
             break;
@@ -75,7 +80,7 @@ export default defineContentScript({
             const els = interactive();
             const res = resolve(msg.target, els.map((el) => ({ item: el, loc: describe(el) })));
             const cand = (r: { item: Element; score: number }) => ({ ref: refOf(r.item), role: describe(r.item).role, name: accessibleName(r.item), score: r.score, rect: rectOf(r.item) });
-            if (res.kind === 'found') send({ ok: { kind: 'found', ...cand({ item: res.item, score: res.score }) } });
+            if (res.kind === 'found') send({ ok: { kind: 'found', disabled: res.item.hasAttribute('disabled') || res.item.getAttribute('aria-disabled') === 'true', ...cand({ item: res.item, score: res.score }) } });
             else send({ ok: { kind: res.kind, candidates: res.ranked.map(cand) } });
             break;
           }

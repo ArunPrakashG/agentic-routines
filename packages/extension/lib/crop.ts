@@ -1,4 +1,5 @@
 import { dHash } from '@browser-routines/core';
+import { rendering } from './tabs';
 
 // The third check: a perceptual hash of the area around an element.
 // captureVisibleTab only sees the active tab, and Chrome allows two calls a second.
@@ -12,16 +13,27 @@ export interface Rect {
 }
 
 const PAD = 24;
+const CAPTURE_MS = 1500;
+const AREA_W = 640;
+const AREA_H = 360;
 let last = 0;
+
+// A window on a hidden workspace never answers captureVisibleTab.
+function capture(windowId: number): Promise<string> {
+  return Promise.race([
+    browser.tabs.captureVisibleTab(windowId, { format: 'png' }),
+    new Promise<string>((_, no) => setTimeout(() => no(new Error('The browser window is not visible')), CAPTURE_MS)),
+  ]);
+}
 
 export async function screenshot(tabId: number): Promise<ImageBitmap | null> {
   const tab = await browser.tabs.get(tabId);
-  if (!tab.active) return null;
+  if (!tab.active || !(await rendering(tabId))) return null;
   const wait = last + 520 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   last = Date.now();
   try {
-    const url = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    const url = await capture(tab.windowId);
     const blob = await (await fetch(url)).blob();
     return await createImageBitmap(blob);
   } catch {
@@ -49,9 +61,47 @@ export async function cropHash(tabId: number, r: Rect): Promise<string | undefin
   return img ? hashAt(img, r) : undefined;
 }
 
+/** What an agent sees unless it asks for more: an area around an element, else the whole tab at half size. */
+export async function areaBase64(tabId: number, around?: Rect): Promise<{ data: string; area: boolean }> {
+  const data = await pngBase64(tabId);
+  const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+  const tab = await browser.tabs.get(tabId);
+  const dpr = img.width / (tab.width || img.width);
+  const vw = img.width / dpr;
+  const vh = img.height / dpr;
+  const onScreen = around && around.w > 0 && around.h > 0 && around.x < vw && around.y < vh && around.x + around.w > 0 && around.y + around.h > 0;
+  let [x, y, w, h, outW, outH] = [0, 0, vw, vh, Math.round(vw / 2), Math.round(vh / 2)];
+  if (onScreen) {
+    w = Math.min(vw, Math.max(AREA_W, around.w + PAD * 2));
+    h = Math.min(vh, Math.max(AREA_H, around.h + PAD * 2));
+    x = Math.min(vw - w, Math.max(0, around.x + around.w / 2 - w / 2));
+    y = Math.min(vh - h, Math.max(0, around.y + around.h / 2 - h / 2));
+    [outW, outH] = [Math.round(w), Math.round(h)];
+  }
+  const c = new OffscreenCanvas(outW, outH);
+  c.getContext('2d')!.drawImage(img, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, outW, outH);
+  const bytes = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { data: btoa(bin), area: !!onScreen };
+}
+
 export async function pngBase64(tabId: number): Promise<string> {
   const tab = await browser.tabs.get(tabId);
   if (!tab.active) await browser.tabs.update(tabId, { active: true });
-  const url = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
-  return url.slice(url.indexOf(',') + 1);
+  try {
+    const url = await capture(tab.windowId);
+    return url.slice(url.indexOf(',') + 1);
+  } catch (e) {
+    // Firefox has no debugger API, so a hidden window stays an error there.
+    if (!browser.debugger) throw e;
+    const target = { tabId };
+    await browser.debugger.attach(target, '1.3');
+    try {
+      const { data } = (await browser.debugger.sendCommand(target, 'Page.captureScreenshot', { format: 'png' })) as { data: string };
+      return data;
+    } finally {
+      await browser.debugger.detach(target).catch(() => {});
+    }
+  }
 }

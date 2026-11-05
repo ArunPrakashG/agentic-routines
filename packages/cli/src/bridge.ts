@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readdir, readFile, rm } from 'node:fs/promises';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
@@ -55,6 +56,7 @@ export class Bridge {
   private nextId = 1;
   /** MCP client name, e.g. "claude-code". */
   agent?: string;
+  private session = randomUUID();
   private waiting = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
 
   constructor(private onEvent: (e: Event) => void = () => {}) {}
@@ -112,7 +114,7 @@ export class Bridge {
       }, timeoutMs);
       this.waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       // The extension records which agent did what.
-      if (this.agent && !/^(store|host)\./.test(method)) params = { ...(params as object), agent: this.agent };
+      if (this.agent && !/^(store|host)\./.test(method)) params = { ...(params as object), agent: this.agent, session: this.session };
       sock.write(JSON.stringify({ id, method, params }) + '\n');
     });
   }

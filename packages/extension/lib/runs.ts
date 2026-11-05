@@ -1,7 +1,7 @@
 import type { RecordedEvent, Run } from '@browser-routines/core';
 
 // Every agent run is recorded. A new run starts after 10 idle minutes,
-// after a save, or when the agent changes.
+// after a save, when the agent changes, or when a new agent session starts.
 
 const KEEP = 20;
 const IDLE_MS = 10 * 60_000;
@@ -9,6 +9,8 @@ const IDLE_MS = 10 * 60_000;
 export interface StoredRun extends Run {
   updatedAt: number;
   saved?: boolean;
+  /** One MCP server process, so two sessions of the same agent stay apart. */
+  session?: string;
 }
 
 let cache: StoredRun[] | undefined;
@@ -30,11 +32,11 @@ async function persist() {
 
 const newId = () => 'run-' + crypto.randomUUID().slice(0, 4);
 
-export async function record(source: string, event: RecordedEvent, forceNew = false): Promise<StoredRun> {
+export async function record(source: string, event: RecordedEvent, session?: string): Promise<StoredRun> {
   const runs = await load();
   let cur = runs.find((r) => r.source === source && !r.saved);
-  if (!cur || forceNew || Date.now() - cur.updatedAt > IDLE_MS) {
-    cur = { id: newId(), source, startedAt: Date.now(), updatedAt: Date.now(), events: [] };
+  if (!cur || cur.session !== session || Date.now() - cur.updatedAt > IDLE_MS) {
+    cur = { id: newId(), source, session, startedAt: Date.now(), updatedAt: Date.now(), events: [] };
     runs.unshift(cur);
     if (runs.length > KEEP) runs.length = KEEP;
   }
@@ -55,9 +57,9 @@ export async function markNavigated(source: string, url: string) {
   }
 }
 
-export async function get(id?: string): Promise<StoredRun> {
+export async function get(id?: string, session?: string): Promise<StoredRun> {
   const runs = await load();
-  const r = id ? runs.find((x) => x.id === id) : runs.find((x) => !x.saved && x.events.length);
+  const r = id ? runs.find((x) => x.id === id) : runs.find((x) => !x.saved && x.events.length && (!session || x.session === session));
   if (!r) throw new Error(id ? `No run ${id}` : 'No recorded run. Do the task with the browser tools first.');
   return r;
 }
