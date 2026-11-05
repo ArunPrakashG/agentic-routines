@@ -1,0 +1,23 @@
+{
+  "version": "0.1.0",
+  "commit": "278ef35",
+  "dirty": false,
+  "files": [
+    {
+      "name": "browser-routines-0.1.0-chrome.zip",
+      "sha256": "79d897434c1be57d5b18e8e8f4df57cb16f6fa1af4020b5b049d39bb94df0057"
+    },
+    {
+      "name": "browser-routines-0.1.0-firefox.zip",
+      "sha256": "e07bb48a059b21a43bc2d2f955b3d4d66406e9295c5819cbc360875768b5ac1c"
+    },
+    {
+      "name": "browser-routines-0.1.0-sources.zip",
+      "sha256": "7dbc6648c8a77dba220c6b486abbc6db3a2c887f7fbce2421544f4f19a22f015"
+    },
+    {
+      "name": "browser-routines-0.1.0.tgz",
+      "sha256": "92166014b0268ab0e610d9589bb11d2325fc4c2dc43d080fb1338c3b863c3cde"
+    }
+  ]
+}
