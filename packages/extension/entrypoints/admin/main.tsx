@@ -7,7 +7,7 @@ import '../sidepanel/tokens.css';
 import './admin.css';
 import { render } from 'preact';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import * as auth from '../../lib/auth';
+import * as auth from '../../lib/remote/auth';
 
 // The reviewer's page. Every submission is read by a person before it goes live; this is where they do it.
 // It talks to /admin on the API as the signed-in account, which the API only answers for its allow-list.

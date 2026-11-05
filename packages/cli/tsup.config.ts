@@ -16,5 +16,5 @@ const text = {
 export default defineConfig([
   { ...shared, format: ['esm'], entry: ['src/index.ts'], noExternal: ['@agentic-routines/core', '@agentic-routines/browsers'], esbuildPlugins: [text] },
   // CommonJS, as bundled dependencies use require.
-  { ...shared, format: ['cjs'], entry: ['src/host-main.ts'], noExternal: [/.*/] },
+  { ...shared, format: ['cjs'], entry: { 'host-main': 'src/host/main.ts' }, noExternal: [/.*/] },
 ]);

@@ -8,7 +8,12 @@ The browser extension: recorder, replayer, page checks and the side panel. One c
 | `entrypoints/content.ts` | The script in each page: reads the structure, performs steps, draws the glow, cursor and outline that show a tab is being driven |
 | `entrypoints/sidepanel/` | The side panel UI: library, save, replay, pauses, publish |
 | `entrypoints/admin/` | The review page for directory submissions (reviewers only) |
-| `lib/` | Logic shared by the entrypoints (agent bridge, replay, page helpers, directory client). `lib/platform/` holds what differs between Chromium and Gecko |
+| `lib/agent/` | What the agent drives: the commands from the native host, the recorded runs and the drafts being refined |
+| `lib/replay/` | The replay engine: page, element and screenshot checks, pauses and hooks |
+| `lib/page/` | Reaching the page: the content script's structure reader and overlay, and the service worker's tab helpers |
+| `lib/remote/` | Everything that leaves the extension: sign-in, the directory and Git sources |
+| `lib/panel/` | The messages between the side panel and the service worker |
+| `lib/platform/` | What differs between Chromium and Gecko |
 | `public/` | Icons |
 | `wxt.config.ts` | Manifest, permissions and the pinned development extension id |
 

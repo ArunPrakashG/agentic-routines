@@ -9,10 +9,10 @@ import './panel.css';
 import { compileRun, siteOf, type ParamSpec } from '@agentic-routines/core';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { Account as AccountInfo } from '../../lib/auth';
-import type { LiveRoutine, Submission } from '../../lib/directory';
-import type { GitCard, SourceEntries, SourcesData } from '../../lib/git';
-import type { PanelCommand, PanelState } from '../../lib/panel-types';
+import type { Account as AccountInfo } from '../../lib/remote/auth';
+import type { LiveRoutine, Submission } from '../../lib/remote/directory';
+import type { GitCard, SourceEntries, SourcesData } from '../../lib/remote/git';
+import type { PanelCommand, PanelState } from '../../lib/panel/types';
 
 // ---------- connection to the background ----------
 

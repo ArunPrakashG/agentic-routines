@@ -99,12 +99,21 @@ The [website](https://agenticroutines.arunprakashg.com) has the docs, the direct
 | [`packages/cli`](packages/cli) | The `agentic-routines` npm package: `setup`, `doctor`, `mcp` and the native `host` |
 | [`packages/core`](packages/core) | Routine format, compiler and locator matching, shared by both |
 | [`packages/browsers`](packages/browsers) | Every supported browser in one table: where it keeps native host manifests, which ids it accepts |
+| [`plugins/agentic-routines`](plugins/agentic-routines) | The Claude Code plugin: a skill that tells the agent to look for a routine first, and hooks. Listed by `.claude-plugin/marketplace.json` |
 | [`apps/api`](apps/api) | Accounts and the directory. A Go service on Postgres and Redis |
 | [`apps/site`](apps/site) | The website and docs, built with Astro |
 | [`docs`](docs) | The documentation pages (`guide/`), architecture, directory guidelines and privacy |
 | [`releases`](releases) | Release scripts, store listing text and every released version |
 | [`design`](design) | Approved mockups and tokens |
 | [`dev`](dev) | Local environment, end-to-end tests, the benchmark and the README image scripts |
+
+Inside the larger ones:
+
+| Path | What it is |
+|---|---|
+| `packages/extension/lib/` | `agent/` runs, drafts and the native host line · `replay/` the replay engine · `page/` dom, overlay, hidden-text and tab helpers · `remote/` sign-in, directory and Git sources · `panel/` side panel messages · `platform/` Chromium and Gecko |
+| `packages/cli/src/` | `mcp/` the MCP server · `host/` the native host and the upload checks · `commands/` `setup`, `doctor`, `agents` and `sources` · `store/` routines and sources on disk |
+| `dev/` | `env/` the local environment · `e2e/` the end-to-end checks · `images/` the README screenshots · `fixtures/` and `site/` the test data and the test site · `bench/` the benchmark |
 
 ## Development
 
@@ -125,7 +134,7 @@ pnpm e2e:api      # the API, on throwaway Postgres and Redis (Docker)
 AR_CDP_PORT=9444 pnpm e2e
 ```
 
-[`dev/README.md`](dev/README.md) has the local environment, [`releases/README.md`](releases/README.md) has how a release is made, and the API and site have their own READMEs in [`apps/api`](apps/api/README.md) and [`apps/site`](apps/site/README.md). The images in this file are made by `dev/shots.mjs` and `dev/readme-images.mjs`, from a real run of the extension against a small test site.
+[`dev/README.md`](dev/README.md) has the local environment, [`releases/README.md`](releases/README.md) has how a release is made, and the API and site have their own READMEs in [`apps/api`](apps/api/README.md) and [`apps/site`](apps/site/README.md). The images in this file are made by `dev/images/shots.mjs` and `dev/images/readme-images.mjs`, from a real run of the extension against a small test site.
 
 ## Contributing
 

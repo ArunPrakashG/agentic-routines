@@ -4,10 +4,10 @@ Draft, written before the build. Three parts, one pull request each. Where the b
 
 ## What exists today
 
-- Every browser tool call an agent makes is recorded by the extension (`lib/runs.ts`) as a `RecordedEvent`: action, page URL, locator, typed value, crop hash, and the URL it navigated to.
-- `routine_save` (`packages/cli/src/mcp.ts`) calls `compileRun` (`packages/core/src/compile.ts`). It silently drops every navigation step before the first real action and starts the routine at that page ("replaced by a direct URL"). Everything else is kept as recorded, minus steps the agent names in `leave_out`.
-- Saved routines are `ROUTINE.md` plus `steps.json`, written by the host (`store.ts`). The extension replays them (`lib/replay.ts`) with a page check, an element check and a crop check before each step, and stops at pauses.
-- Git sources are one file per routine under `routines/` (`core/src/sources.ts`), installed after the person clicks Install in the side panel (`lib/git.ts`).
+- Every browser tool call an agent makes is recorded by the extension (`lib/agent/runs.ts`) as a `RecordedEvent`: action, page URL, locator, typed value, crop hash, and the URL it navigated to.
+- `routine_save` (`packages/cli/src/mcp/server.ts`) calls `compileRun` (`packages/core/src/compile.ts`). It silently drops every navigation step before the first real action and starts the routine at that page ("replaced by a direct URL"). Everything else is kept as recorded, minus steps the agent names in `leave_out`.
+- Saved routines are `ROUTINE.md` plus `steps.json`, written by the host (`packages/cli/src/store/routines.ts`). The extension replays them (`lib/replay/replay.ts`) with a page check, an element check and a crop check before each step, and stops at pauses.
+- Git sources are one file per routine under `routines/` (`core/src/sources.ts`), installed after the person clicks Install in the side panel (`lib/remote/git.ts`).
 - The directory API (`apps/api/routines.go`) re-validates every published routine field by field.
 
 ## Part A: the agent refines, nothing is rewritten silently
