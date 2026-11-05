@@ -68,11 +68,19 @@ export interface ParamSpec {
   example?: string;
 }
 
+/** Where a routine acts. Only the browser is implemented; the other value is reserved so the format does not break when it is. */
+export type Surface = 'browser' | 'desktop';
+export const SURFACES: Surface[] = ['browser', 'desktop'];
+
 export interface RoutineMeta {
   name: string;
   owner?: string;
   version: number;
   site: string;
+  /** The pages it applies to, as globs (host and path, with * for an id). Worked out from the recorded pages unless the author sets them. */
+  urls?: string[];
+  /** Where it acts. Absent means browser. */
+  surface?: Surface;
   /** What it does and when to use it. Must contain a "Use when" clause to publish. */
   description: string;
   params: Record<string, ParamSpec>;

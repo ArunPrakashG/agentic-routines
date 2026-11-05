@@ -45,8 +45,12 @@ type paramSpec struct {
 }
 
 type routineMeta struct {
-	Name        string               `json:"name"`
-	Site        string               `json:"site"`
+	Name string `json:"name"`
+	Site string `json:"site"`
+	// The pages it applies to: host and path globs on the site, "*" for an id.
+	Urls []string `json:"urls,omitempty"`
+	// Where it acts. Empty or "browser"; "desktop" is reserved and not accepted yet.
+	Surface     string               `json:"surface,omitempty"`
 	Description string               `json:"description"`
 	Params      map[string]paramSpec `json:"params"`
 	Secrets     []string             `json:"secrets"`
@@ -67,6 +71,36 @@ var hookEvents = map[string]bool{
 	"action.navigate.before": true, "action.navigate.after": true, "action.press.before": true, "action.press.after": true,
 	"action.read.before": true, "action.read.after": true, "page.load": true, "step.changed": true,
 	"pause.reached": true, "pause.approved": true, "error": true,
+}
+
+const maxURLs = 8
+
+var (
+	urlHost    = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
+	urlSegment = regexp.MustCompile(`^(\*\*?|[A-Za-z0-9._~%:@!$&'()+,;=-]+)$`)
+)
+
+// checkURLs: at most maxURLs patterns, each a host on the routine's site and a path of names and "*",
+// with "**" allowed only as the last part. No scheme, query or spaces.
+func checkURLs(urls []string, site string) bool {
+	if len(urls) > maxURLs {
+		return false
+	}
+	for _, u := range urls {
+		if len(u) > 200 || strings.ContainsAny(u, "?# \t\n") {
+			return false
+		}
+		parts := strings.Split(u, "/")
+		if !urlHost.MatchString(parts[0]) || !onSite("https://"+parts[0]+"/", site) {
+			return false
+		}
+		for i, seg := range parts[1:] {
+			if !urlSegment.MatchString(seg) || (seg == "**" && i != len(parts)-2) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 const (
@@ -170,6 +204,10 @@ func (r *routineIn) check(name string) string {
 		return "body_too_long"
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
 		return "bad_steps"
+	case m.Surface != "" && m.Surface != "browser":
+		return "bad_surface"
+	case !checkURLs(m.Urls, m.Site):
+		return "bad_urls"
 	case len(m.Instructions) > maxNotes || !checkHooks(m.Hooks):
 		return "bad_hooks"
 	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512 || len(m.DraftedBy) > 40:
@@ -240,6 +278,7 @@ type summary struct {
 	Version     int       `json:"version"`
 	Installs    int       `json:"installs"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	Urls        []string  `json:"urls"`
 }
 
 type full struct {
@@ -361,10 +400,10 @@ func (s *store) unpublish(ctx context.Context, ownerID, name string) error {
 // liveOnly keeps a disabled routine, or one from a blocked publisher, out of everything public.
 const liveOnly = `r.disabled = false AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.kind = 'user' AND b.value = u.handle)`
 
-const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at`
+const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at, COALESCE(r.meta->'urls', '[]'::jsonb)`
 
 func scanSummary(row pgx.Row, extra ...any) (x summary, err error) {
-	return x, row.Scan(append([]any{&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt}, extra...)...)
+	return x, row.Scan(append([]any{&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Urls}, extra...)...)
 }
 
 // search lists by words in the name, description or site, and by the site a person is on.
@@ -408,7 +447,7 @@ func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 	out := []mineRow{}
 	for rows.Next() {
 		var x mineRow
-		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Disabled, &x.DisabledReason); err != nil {
+		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Urls, &x.Disabled, &x.DisabledReason); err != nil {
 			return nil, err
 		}
 		out = append(out, x)

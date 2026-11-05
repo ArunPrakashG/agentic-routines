@@ -112,7 +112,9 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.read': {
       const tabId = await working(p.tab_id);
-      return ask<string>(tabId, { t: 'read', filter: p.filter });
+      const text = await ask<string>(tabId, { t: 'read', filter: p.filter });
+      // The address lets the CLI point at a routine for this page.
+      return { text, url: (await browser.tabs.get(tabId)).url };
     }
     case 'browser.click': {
       const tabId = await working(p.tab_id);

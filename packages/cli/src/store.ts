@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { hookHash, parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
+import { deriveUrls, hookHash, parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
+import type { Surface } from '@agentic-routines/core';
 import { paths } from './paths.ts';
 
 // Routines live at ~/.agentic-routines/routines/<owner>/<name>/{ROUTINE.md,steps.json}.
@@ -22,6 +23,63 @@ export interface Listed {
   blocked?: string;
   /** Its hooks: how many events have code, and the hash approval is pinned to. */
   hooks?: { count: number; hash: string };
+  /** The pages it applies to: the ones it declares, else worked out from its steps. */
+  urls: string[];
+  /** Where it acts. Only the browser is implemented. */
+  surface: Surface;
+  /** How the agent's runs of it have gone on this machine. */
+  stats?: Stats;
+}
+
+/** Efficiency of a routine as the agent has run it. Kept in the routine's folder, never sent anywhere. */
+export interface Stats {
+  runs: number;
+  /** The last STATS_WINDOW finished runs, newest last. */
+  recent: { ok: boolean; calls: number; ms: number; at: number }[];
+  last?: { at: number; ok: boolean };
+}
+
+const STATS_WINDOW = 20;
+
+export interface StatsView {
+  runs: number;
+  /** Over the recent runs, 0 to 1. */
+  success: number;
+  /** Model calls per run over the recent runs. */
+  calls: number;
+  medianMs: number;
+  last?: { at: number; ok: boolean };
+}
+
+export function viewStats(s?: Stats): StatsView | undefined {
+  if (!s?.recent.length) return undefined;
+  const r = s.recent;
+  const ms = r.map((x) => x.ms).sort((a, b) => a - b);
+  const mid = Math.floor(ms.length / 2);
+  return {
+    runs: s.runs,
+    success: r.filter((x) => x.ok).length / r.length,
+    calls: r.reduce((n, x) => n + x.calls, 0) / r.length,
+    medianMs: ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2,
+    last: s.last,
+  };
+}
+
+/** Higher is better: finishes reliably and needs the model rarely. A routine never run has no say either way. */
+export function efficiency(v?: StatsView): number {
+  return v ? v.success - 0.15 * Math.min(v.calls, 4) : 0.4;
+}
+
+/** Count one finished run of a routine. Paused runs are not counted until they end. */
+export async function recordRun(id: string, r: { ok: boolean; calls: number; ms: number }): Promise<void> {
+  const [owner, name] = await locate(id);
+  const f = join(dir(owner, name), '.stats.json');
+  const s = (await readJson<Stats>(f)) ?? { runs: 0, recent: [] };
+  const at = Date.now();
+  s.runs += 1;
+  s.recent = [...s.recent, { ...r, at }].slice(-STATS_WINDOW);
+  s.last = { at, ok: r.ok };
+  await atomicWrite(f, JSON.stringify(s) + '\n');
 }
 
 function dir(owner: string, name: string) {
@@ -58,11 +116,13 @@ export async function list(): Promise<Listed[]> {
       try {
         const md = await readFile(join(paths.routines(), owner, name, 'ROUTINE.md'), 'utf8');
         const { meta } = parseRoutineMd(md);
+        const urls = meta.urls ?? deriveUrls(await readJson<Step[]>(join(paths.routines(), owner, name, 'steps.json')) ?? [], meta.site);
+        const stats = await readJson<Stats>(join(paths.routines(), owner, name, '.stats.json'));
         const disabled = await readFile(join(paths.routines(), owner, name, '.disabled'), 'utf8').then(() => true, () => false);
         const origin = await readJson<Origin>(join(paths.routines(), owner, name, '.origin.json'));
         const blocked = (await readJson<{ reason: string }>(join(paths.routines(), owner, name, '.blocked.json')))?.reason;
         const n = Object.keys(meta.hooks ?? {}).length;
-        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked, hooks: n ? { count: n, hash: await hookHash(meta.hooks) } : undefined });
+        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked, hooks: n ? { count: n, hash: await hookHash(meta.hooks) } : undefined, urls, surface: meta.surface ?? 'browser', stats });
       } catch {
         // Not a routine folder.
       }

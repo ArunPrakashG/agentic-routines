@@ -230,7 +230,7 @@ var checkText = map[string]string{
 	"bad_name": "The name is not a valid routine name.", "bad_description": "The description needs a clear \"Use when\" clause.",
 	"bad_site": "The site is not a valid host.", "body_too_long": "The notes are too long.", "bad_steps": "A step is malformed or there are too many.",
 	"bad_meta": "The details are too large.", "bad_params": "A value the person fills in is malformed.", "bad_secrets": "A secret name is malformed.",
-	"bad_pauses": "A pause points at a step that does not exist.", "bad_hooks": "The hooks or the notes for the agent are too long, or a hook is on an unknown event.", "step_off_site": "A step leaves the routine's site.",
+	"bad_pauses": "A pause points at a step that does not exist.", "bad_urls": "The pages the routine applies to are not host-and-path patterns on its site.", "bad_surface": "Only browser routines are accepted for now.", "bad_hooks": "The hooks or the notes for the agent are too long, or a hook is on an unknown event.", "step_off_site": "A step leaves the routine's site.",
 }
 
 // autoChecks tells the reviewer where to look. A pass is not an approval.

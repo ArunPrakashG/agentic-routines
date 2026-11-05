@@ -449,6 +449,8 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
 }
 
 export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean }) {
+  if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
+    return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const s: ReplayState = {
     id: 'rp-' + crypto.randomUUID().slice(0, 4),
     routine: p.routine,
