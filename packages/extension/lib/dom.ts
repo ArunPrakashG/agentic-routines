@@ -116,6 +116,7 @@ export function describe(el: Element): Locator {
     }
   }
   const isField = /^(input|textarea|select)$/i.test(el.tagName);
+  const dialog = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true]');
   return {
     tag: el.tagName.toLowerCase(),
     role: role(el),
@@ -124,6 +125,7 @@ export function describe(el: Element): Locator {
     attrs,
     css: cssPath(el),
     near: nearestHeading(el) || undefined,
+    modal: dialog ? clean(accessibleName(dialog) || dialog.querySelector('h1,h2,h3,[role=heading]')?.textContent || '', 60) || 'dialog' : undefined,
   };
 }
 

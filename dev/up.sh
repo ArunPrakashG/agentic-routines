@@ -3,9 +3,11 @@
 # touched: the browser, the routine store and the agent config all live there.
 #   dev/up.sh [--headless] [--no-claude] [--no-build]
 # AR_DEV_DIR moves the state folder, AR_CHROME picks the browser, AR_MODEL the agent's model.
+# AR_TMUX_PREFIX renames the tmux sessions (default br), so two checkouts can run side by side.
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 DEV=${AR_DEV_DIR:-$ROOT/.dev}
+P=${AR_TMUX_PREFIX:-br}
 HEADLESS=; CLAUDE=1; BUILD=1
 for a in "$@"; do
   case "$a" in
@@ -37,7 +39,7 @@ CLI=$ROOT/packages/cli/dist/index.js
 EXT=$ROOT/packages/extension/.output/chrome-mv3
 
 if [ -n "$BUILD" ]; then
-  (cd "$ROOT" && WXT_API_URL=${WXT_API_URL:-http://127.0.0.1:8787} pnpm -r build >/dev/null)
+  (cd "$ROOT" && WXT_API_URL=${WXT_API_URL:-http://127.0.0.1:${AR_API_PORT:-8787}} pnpm -r build >/dev/null)
 fi
 [ -f "$CLI" ] && [ -d "$EXT" ] || { echo "Nothing built. Run without --no-build." >&2; exit 1; }
 
@@ -54,8 +56,8 @@ cp "$ROOT"/dev/fixtures/* "$DEV/workspace/"
 env HOME="$BHOME" AGENTIC_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/bin:/bin" "$NODE" "$CLI" setup >/dev/null
 
 touch "$DEV/.started"
-tmux new-session -d -s br-site "python3 -m http.server $SITE_PORT --bind 127.0.0.1 --directory '$ROOT/dev/site'"
-tmux new-session -d -s br-chrome "env HOME='$BHOME' AGENTIC_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
+tmux new-session -d -s "$P-site" "python3 -m http.server $SITE_PORT --bind 127.0.0.1 --directory '$ROOT/dev/site'"
+tmux new-session -d -s "$P-chrome" "env HOME='$BHOME' AGENTIC_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
 
 i=0; until curl -s 127.0.0.1:$CDP_PORT/json/version >/dev/null || [ $i -gt 100 ]; do i=$((i+1)); sleep 0.2; done
 # Only a host from this browser counts: a crash leaves the old one's file behind.
@@ -69,10 +71,10 @@ if [ -n "$CLAUDE" ]; then
 JSON
   # Your own login, but only this server and none of your user settings or hooks.
   # Default permissions, because auto mode opens a dialog that edits your real settings.
-  tmux new-session -d -s br-claude -c "$DEV/workspace" -x 120 -y 40 "'$(command -v claude)' --mcp-config '$DEV/mcp.json' --strict-mcp-config --setting-sources project,local --permission-mode default --allowedTools mcp__agentic-routines --model '${AR_MODEL:-sonnet}'"
+  tmux new-session -d -s "$P-claude" -c "$DEV/workspace" -x 120 -y 40 "'$(command -v claude)' --mcp-config '$DEV/mcp.json' --strict-mcp-config --setting-sources project,local --permission-mode default --allowedTools mcp__agentic-routines --model '${AR_MODEL:-sonnet}'"
 fi
 
-echo "Site     http://127.0.0.1:$SITE_PORT/ (tmux: br-site)"
-echo "Browser  CDP on $CDP_PORT (tmux: br-chrome)"
-[ -n "$CLAUDE" ] && echo "Agent    tmux attach -t br-claude"
+echo "Site     http://127.0.0.1:$SITE_PORT/ (tmux: $P-site)"
+echo "Browser  CDP on $CDP_PORT (tmux: $P-chrome)"
+[ -n "$CLAUDE" ] && echo "Agent    tmux attach -t $P-claude"
 echo "State    $DEV"

@@ -25,6 +25,8 @@ export interface Locator {
   css: string;
   /** Nearest heading or section label above the element. */
   near?: string;
+  /** The dialog the element sat in, by its name, when it sat in one. */
+  modal?: string;
 }
 
 /** A cheap description of the page, used before every step. */
@@ -52,6 +54,8 @@ export interface Step {
   pause?: 'auto' | 'author';
   /** Click whatever is first in the list now, not the item that was recorded. */
   pick?: 'first';
+  /** Text for the agent about this step: what to check, what a good result looks like. */
+  instructions?: string;
 }
 
 export interface ParamSpec {
@@ -138,4 +142,12 @@ export interface RunResult {
   updated_to?: number;
   /** Pauses the user approved in the side panel, which the agent otherwise cannot see. */
   approved_in_panel?: string[];
+  /** A test of a draft: it stops at the first pause without approving it. */
+  test?: boolean;
+  /** Test only: steps that pause in a real run, which a test does not perform. */
+  skipped?: number[];
+  /** Test only: what each step did, in order. */
+  trace?: string[];
+  /** Test only: where the tab ended up. */
+  final_url?: string;
 }

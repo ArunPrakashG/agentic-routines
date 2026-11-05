@@ -27,8 +27,13 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `routine_resume` | Continue a paused replay. `approve` goes past a pause or stops. `choice` picks the element for a changed step. |
 | `routines_list` | Saved routines and what each is for. |
 | `routine_describe` | The full notes: when to use it, when not to, values it asks for, where it pauses. |
-| `run_steps` | The numbered steps of a recorded run, to choose what to leave out when saving. |
-| `routine_save` | Save a recorded run as a routine. Write the description as what it does, then "Use when ...". |
+| `run_steps` | The recorded steps of a run, numbered, as they happened. |
+| `routine_propose` | After a task, the agent decides whether it is worth keeping. This turns the run into a draft: every step numbered, with its page, what it did and what happened after it, plus hints at what could go. Changes nothing. |
+| `routine_edit` | Refine a draft: remove steps, replace clicks and dialogs with a direct address, make values parameters, add pauses and notes, undo, reset. The extension refuses unsafe edits. |
+| `routine_test` | Replay the draft on the live site. Steps that pause are skipped, never performed. |
+| `routine_save` | Save the draft as a routine. A routine that replaces a saved one needs a good test first. |
+
+See [Refine a routine](/docs/refine) for the loop.
 
 At most 30 routine tools are exposed at once. The rest are reached with `routines_list` and `routine_run`.
 

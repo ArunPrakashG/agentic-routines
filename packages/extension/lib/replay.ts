@@ -40,6 +40,11 @@ export interface ReplayState {
   handedBack?: boolean;
   error?: string;
   candidates?: Candidate[];
+  /** A test of a draft: stops at the first pause without approving it, and changed steps fail it. */
+  test?: boolean;
+  skipped: number[];
+  trace: string[];
+  finalUrl?: string;
 }
 
 const live = new Map<string, ReplayState>();
@@ -82,12 +87,14 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     ms: Date.now() - s.start,
     at_step: step?.n,
     step_label: step?.label,
+    ...(s.test ? { final_url: s.finalUrl } : {}),
     candidates: s.candidates,
     error: s.error,
     read: Object.keys(s.read).length ? s.read : undefined,
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     fixes: s.fixes,
     crops: s.crops,
+    ...(s.test ? { test: true, skipped: s.skipped, trace: s.trace } : {}),
   };
 }
 
@@ -135,7 +142,7 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
 async function runStep(s: ReplayState, step: Step, ref?: string): Promise<'next' | 'stop'> {
   const value = fill(step.value, s.params, s.secrets);
   if (step.action === 'navigate') {
-    await browser.tabs.update(s.tabId, { url: fill(step.url, s.params) });
+    await browser.tabs.update(s.tabId, { url: fill(step.url, s.params, {}, true) });
     await sleep(200);
     await waitLoaded(s.tabId);
     return 'next';
@@ -188,6 +195,14 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
   try {
     while (s.i < s.routine.steps.length) {
       const step = s.routine.steps[s.i];
+      if (s.test && step.pause) {
+        // A test never performs a step that pauses, and never approves one. What follows is still checked.
+        s.skipped.push(step.n);
+        s.trace.push(`${step.n}. skipped “${step.label}”, it pauses in a real run`);
+        s.i++;
+        notify(s);
+        continue;
+      }
       if (step.pause && !s.approved.has(step.n)) {
         if (s.session && goneSessions.has(s.session)) {
           s.status = 'failed';
@@ -225,10 +240,23 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
       }
       await glow(s.tabId, 'run', DRIVING_MS);
       if ((await runStep(s, step, choiceRef)) === 'stop') {
+        if (s.test) {
+          const near = (s.candidates ?? []).map((c) => `${c.ref} ${c.role ?? ''} “${c.name ?? c.text ?? ''}”`).join('; ');
+          s.status = 'failed';
+          s.error = `${step.action} “${step.label}” was not on the page the way it was recorded${near ? `. Closest: ${near}` : ''}`;
+          live.delete(s.id);
+          notify(s);
+          return result(s);
+        }
         notify(s);
         return result(s);
       }
       choiceRef = undefined;
+      if (s.test) {
+        const url = (await browser.tabs.get(s.tabId)).url ?? '';
+        s.trace.push(`${step.n}. ${step.action} ${step.action === 'navigate' ? (step.url ?? '') : `“${step.label}”`}${url && url !== s.finalUrl ? ` → ${url}` : ''}`);
+        s.finalUrl = url;
+      }
       s.i++;
       notify(s);
     }
@@ -238,11 +266,12 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
     s.error = (e as Error).message;
   }
   live.delete(s.id);
+  if (s.test) s.finalUrl = await browser.tabs.get(s.tabId).then((t) => t.url, () => s.finalUrl);
   notify(s);
   return result(s);
 }
 
-export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string }) {
+export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean }) {
   const s: ReplayState = {
     id: 'rp-' + crypto.randomUUID().slice(0, 4),
     routine: p.routine,
@@ -260,6 +289,9 @@ export async function start(p: { routine: Routine; params: Record<string, string
     status: 'running',
     by: p.agent,
     session: p.session,
+    test: p.test,
+    skipped: [],
+    trace: [],
   };
   live.set(s.id, s);
   return loop(s);
