@@ -1,8 +1,9 @@
 ---
 import { marked } from 'marked';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
-const md = readFileSync(new URL('../../../../docs/directory-guidelines.md', import.meta.url), 'utf8').replace(/^# .*\n/, '');
+const md = readFileSync(join(process.cwd(), '../../docs/directory-guidelines.md'), 'utf8').replace(/^# .*\n/, '');
 const html = await marked.parse(md);
 ---
 <Base title="Directory guidelines" description="The rules every routine is reviewed against before it is listed in the Agentic Routines directory.">

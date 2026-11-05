@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { marked } from 'marked';
 
 // The pages of the documentation, in reading order. Each is docs/guide/<slug>.md in the repository.
@@ -13,7 +14,8 @@ export const pages = [
 ] as const;
 
 export async function render(slug: string): Promise<{ title: string; html: string }> {
-  const md = readFileSync(new URL(`../../../../docs/guide/${slug}.md`, import.meta.url), 'utf8');
+  // Relative to the site's folder, which is where astro runs: the built chunk's own location moves between Astro versions.
+  const md = readFileSync(join(process.cwd(), '../../docs/guide', `${slug}.md`), 'utf8');
   const title = md.match(/^# (.*)$/m)?.[1] ?? slug;
   return { title, html: await marked.parse(md.replace(/^# .*\n/, '')) };
 }
