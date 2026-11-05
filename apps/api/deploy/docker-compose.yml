@@ -1,8 +1,9 @@
 # The Browser Routines API on ovh-arun, as ~/infra/apps/browserroutines/docker-compose.yml.
 # Kept in the repo (apps/api/deploy/) and copied there by deploy.sh; edit it here, not on the server.
 #
-# The main Caddy (~/infra/proxy) serves browserroutines.arunprakashg.com and proxies to this
-# container over the "proxy" network. Postgres and Redis are the shared ones, reached over
+# The main Caddy (~/infra/proxy) serves browserroutines.arunprakashg.com: /api/* and /healthz go to the API
+# container, everything else to browserroutines-site (the static website, shipped by apps/site/deploy/deploy.sh).
+# Both are reached over the "proxy" network. Postgres and Redis are the shared ones, reached over
 # "shared_services": database and role "browserroutines", Redis database 1.
 # .env next to this file (mode 600, never in the repo) holds DATABASE_URL, REDIS_URL, TAG (the
 # image to run), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET and ADMIN_EMAILS (who may review submissions).
@@ -27,6 +28,25 @@ services:
     # Lets requests in flight finish.
     stop_grace_period: 15s
     networks: [proxy, shared_services]
+
+  # The static site from apps/site, shipped into ./site (conf/Caddyfile and www/current).
+  browserroutines-site:
+    image: caddy:2.11.4-alpine
+    container_name: browserroutines-site
+    restart: unless-stopped
+    volumes:
+      - ./site/conf:/etc/caddy:ro
+      - ./site/www:/srv:ro
+    tmpfs: [/config, /data]
+    expose: ["8080"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]   # the caddy binary carries this file capability and won't exec without it
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 32m
+    cpus: 0.25
+    pids_limit: 32
+    networks: [proxy]
 
 networks:
   proxy:

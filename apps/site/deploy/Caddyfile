@@ -1,0 +1,44 @@
+# The site's own Caddy (container browserroutines-site on ovh-arun). The main Caddy terminates TLS, adds the
+# shared security headers and proxies everything but /api/* and /healthz here. deploy.sh copies this file to
+# ~/infra/apps/browserroutines/site/conf/ and restarts the container when it changes (the admin API is off).
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	encode zstd gzip
+	root * /srv/current
+
+	header {
+		# The pages read the API on the same address; nothing else is loaded from anywhere.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		-Server
+	}
+
+	# Built files carry a content hash in their name, so they never change: cache them for good, in the
+	# browser and on Cloudflare. Pages are revalidated by the browser every time (a 304 when unchanged) and
+	# kept five minutes on the edge; deploy.sh purges the edge so a release shows at once.
+	@hashed path /_astro/*
+	@meta path /favicon.svg /robots.txt /sitemap.xml
+	@pages not path /_astro/* /favicon.svg /robots.txt /sitemap.xml
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header @meta Cache-Control "public, max-age=3600"
+	header @pages Cache-Control "public, max-age=0, s-maxage=300, must-revalidate"
+
+	# Clean URLs: /privacy serves privacy.html, and the .html address redirects to it.
+	@dothtml path_regexp dothtml ^/(directory|guidelines|privacy|r|u)\.html$
+	redir @dothtml /{re.dothtml.1} permanent
+	@index path /index /index.html
+	redir @index / permanent
+	try_files {path} {path}.html
+	file_server
+
+	handle_errors {
+		root * /srv/current
+		rewrite * /404.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+}
