@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { compileRun, eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@browser-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
+import * as sources from './sources.ts';
 import * as store from './store.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
@@ -156,7 +157,8 @@ export async function runMcp(): Promise<void> {
       }
       const shape: Record<string, z.ZodTypeAny> = {};
       for (const [k, p] of Object.entries(r.meta.params)) shape[k] = z.string().describe(p.description ?? (p.type === 'file' ? 'Path to a file' : k));
-      const description = `${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}`;
+      const elsewhere = l.origin && l.origin.kind !== 'directory' ? `Written by someone else (${l.origin.source}) and not reviewed by Browser Routines. ` : '';
+      const description = `${elsewhere}${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}`;
       routineTools.get(name)?.remove();
       routineTools.set(
         name,
@@ -235,7 +237,7 @@ export async function runMcp(): Promise<void> {
   server.registerTool('routines_list', { description: 'List saved routines with what each is for.' }, async () => {
     const all = await store.list();
     if (!all.length) return text('No routines saved yet. Every browser task you do is recorded; save one with routine_save.');
-    return text(all.map((r) => `${r.owner === store.LOCAL ? '' : r.owner + '/'}${r.name} v${r.version} · ${r.site}${r.enabled ? '' : ' · off'}\n  ${r.description.replace(/\n/g, ' ')}`).join('\n'));
+    return text(all.map((r) => `${r.owner === store.LOCAL ? '' : r.owner + '/'}${r.name} v${r.version} · ${r.site}${r.enabled ? '' : r.blocked ? ' · off, blocked' : ' · off'}${r.origin && r.origin.kind !== 'directory' ? ` · from ${r.origin.source}` : ''}\n  ${r.description.replace(/\n/g, ' ')}`).join('\n'));
   });
 
   server.registerTool(
@@ -338,9 +340,30 @@ export async function runMcp(): Promise<void> {
       const q = new URLSearchParams({ limit: '10' });
       if (query) q.set('q', query);
       if (site) q.set('site', site.replace(/^https?:\/\//, '').split('/')[0]);
-      const { routines } = await directory<{ routines: Listing[] }>(`/routines?${q}`);
-      if (!routines.length) return text('Nothing in the directory for that yet.');
-      return text(routines.map(line).join('\n') + '\n\nInstall with routine_install and the owner/name.');
+      const found: string[] = [];
+      let down: Error | undefined;
+      if (await sources.directoryOn()) {
+        // The sources below still answer when the directory does not.
+        try {
+          found.push(...(await directory<{ routines: Listing[] }>(`/routines?${q}`)).routines.map(line));
+        } catch (e) {
+          down = e as Error;
+        }
+      }
+      // The person's own sources. Not reviewed by us, and said so on every line.
+      const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      const host = site?.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+      for (const src of await sources.entries().catch(() => [])) {
+        for (const e of src.entries) {
+          const hay = `${e.name} ${e.description} ${e.site}`.toLowerCase();
+          if (host && !(e.site === host || host.endsWith('.' + e.site))) continue;
+          if (!words.every((w) => hay.includes(w))) continue;
+          found.push(`${src.source} · ${e.name} v${e.version} · ${e.site}  [not reviewed]\n  ${e.description.replace(/\n/g, ' ')}\n  Install with routine_install_from_git, source "${src.source}", path "${e.path}".`);
+        }
+      }
+      if (!found.length && down) return fail(down.message);
+      if (!found.length) return text('Nothing in the directory or the sources for that yet.');
+      return text(found.slice(0, 15).join('\n') + '\n\nInstall a directory routine with routine_install and the owner/name.');
     },
   );
 
@@ -360,9 +383,10 @@ export async function runMcp(): Promise<void> {
       if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.map((i) => i.message).join(' ') || 'Bad owner.'}`);
       const routine: Routine = { meta: { ...f.meta, name, owner, version: f.version }, body: f.body, steps: f.steps };
       // Through the host when a browser is open, so its panel shows it at once.
-      const saved = await bridge.call<Routine>('store.write', { routine, owner }).catch((e) => {
+      const origin = { kind: 'directory' as const, source: owner };
+      const saved = await bridge.call<Routine>('store.write', { routine, owner, origin }).catch((e) => {
         if (!(e instanceof NotConnected)) throw e;
-        return store.write(routine, owner);
+        return store.write(routine, owner, origin);
       });
       directory(`/routines/${owner}/${name}/installs`, { method: 'POST' }).catch(() => {});
       scheduleRefresh();
@@ -373,6 +397,29 @@ export async function runMcp(): Promise<void> {
           (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')} for approval` : '') +
           `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.`,
       );
+    },
+  );
+
+  server.registerTool(
+    'routine_install_from_git',
+    {
+      description:
+        'Ask the user to install a routine from one of their Git sources (see routines_search). Nothing is installed until the user has read the steps and clicked Install in the browser side panel, so this waits for them; do not say it is installed until it returns. It was written by someone else and is not reviewed by Browser Routines. Needs a browser with the extension open.',
+      inputSchema: {
+        source: z.string().max(300).describe('The source address, as routines_search showed it'),
+        path: z.string().regex(/^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/).describe('The file, e.g. routines/deploy-staging.md'),
+      },
+    },
+    async ({ source, path }) => {
+      let r: { name: string; owner: string; version: number; steps: number; site: string };
+      try {
+        r = await bridge.call('git.install', { source, path }, 11 * 60_000);
+      } catch (e) {
+        if (e instanceof NotConnected) return fail('Not installed. Installing from Git needs the user to click Install in the browser side panel, and no browser is connected. Ask the user to open the browser with the extension.');
+        return fail(`Not installed. ${(e as Error).message}`);
+      }
+      scheduleRefresh();
+      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Browser Routines. Run it with ${toolName(r.name)}.`);
     },
   );
 

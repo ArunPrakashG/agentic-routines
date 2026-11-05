@@ -2,6 +2,7 @@ import { compileRun, type CompileOptions, type Routine } from '@browser-routines
 import * as agent from '../lib/agent';
 import * as auth from '../lib/auth';
 import * as directory from '../lib/directory';
+import * as git from '../lib/git';
 import * as native from '../lib/native';
 import { platform } from '../lib/platform';
 import * as replay from '../lib/replay';
@@ -22,6 +23,8 @@ export default defineBackground(() => {
     if (method === 'directory.publish') return askToPublish(p.id, agent.agentName(p.agent));
     // The status of what the person sent. Reading only: an agent cannot approve, withdraw or change any of it.
     if (method === 'directory.submissions') return directory.mine();
+    // An agent can ask. The person reads the steps and clicks Install in the panel; nothing is installed before that.
+    if (method === 'git.install') return askToInstall(String(p.source), String(p.path), agent.agentName(p.agent));
     if (method === 'replay.start') return replay.start(p);
     if (method === 'replay.resume') return replay.resume(p);
     if (method === 'agent.hello') {
@@ -43,8 +46,49 @@ export default defineBackground(() => {
   let publishing: { routine: Routine; card: directory.PublishCard; waiter?: { ok: (v: unknown) => void; no: (e: Error) => void } } | undefined;
   type Published = Record<string, { as: string; version: number }>;
 
+  // The same for a routine from a Git source or a folder.
+  type Waiter = { ok: (v: unknown) => void; no: (e: Error) => void };
+  let installing: { card: git.GitCard; waiter?: Waiter } | undefined;
+
   function badge() {
-    browser.action.setBadgeText({ text: recording ? 'REC' : publishing && !publishing.card.done ? '1' : '' });
+    browser.action.setBadgeText({ text: recording ? 'REC' : (publishing && !publishing.card.done) || installing ? '1' : '' });
+  }
+
+  async function beginInstall(source: string, path: string, by?: string, waiter?: Waiter) {
+    if (installing) throw new Error('Another routine is waiting for the user to approve installing it. Try again after that.');
+    const card = await git.preview(source, path, by);
+    installing = { card, waiter };
+    badge();
+    push();
+  }
+
+  function askToInstall(source: string, path: string, by: string) {
+    return new Promise((ok, no) => beginInstall(source, path, by, { ok, no }).catch(no));
+  }
+
+  async function decideInstall(approve: boolean) {
+    const i = installing;
+    if (!i || i.card.busy) return;
+    if (!approve) {
+      i.waiter?.no(new Error('The user chose not to install it.'));
+      installing = undefined;
+      badge();
+      return;
+    }
+    if (i.card.problems.length) return;
+    i.card.busy = true;
+    i.card.error = undefined;
+    push();
+    try {
+      const saved = await git.install(i.card);
+      i.waiter?.ok({ name: saved.meta.name, owner: (saved.meta as { owner?: string }).owner ?? '', version: saved.meta.version, steps: saved.steps.length, site: saved.meta.site });
+      installing = undefined;
+      await refreshRoutines();
+    } catch (e) {
+      i.card.error = (e as Error).message;
+      i.card.busy = false;
+    }
+    badge();
   }
 
   async function beginPublish(id: string, by?: string, waiter?: NonNullable<typeof publishing>['waiter']) {
@@ -127,6 +171,7 @@ export default defineBackground(() => {
       runs: all.filter((x) => !x.saved && x.events.length).map((x) => ({ id: x.id, source: x.source, startedAt: x.startedAt, updatedAt: x.updatedAt, events: x.events })),
       recording: recording?.runId,
       publish: publishing?.card,
+      install: installing?.card,
       replay: r && {
         id: r.id,
         name: r.routine.meta.name,
@@ -211,6 +256,23 @@ export default defineBackground(() => {
         return beginPublish(c.id);
       case 'publishDecide':
         return decidePublish(c.approve, c.handle);
+      case 'sources':
+        return git.list();
+      case 'sourceAdd':
+        return git.add(c.address);
+      case 'sourceRemove':
+        return git.remove(c.id);
+      case 'sourceSet':
+        return git.setEnabled(c.id, c.enabled);
+      case 'sourceEntries':
+        return git.entries(c.id, c.fresh);
+      case 'gitPreview':
+        return beginInstall(c.source, c.path);
+      case 'gitDecide':
+        return decideInstall(c.approve);
+      case 'enable':
+        await native.call('store.setEnabled', { id: c.id, enabled: c.enabled });
+        return refreshRoutines();
       case 'submissions':
         return directory.mine();
       case 'withdraw':
