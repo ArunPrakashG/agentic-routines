@@ -106,6 +106,8 @@ Rules, borrowed from how skills work:
 
 Results are short text: steps run, model calls, pauses, time. No page snapshots come back from a replay.
 
+**Directory tools.** `routines_search` and `routine_install` read the public directory and need no account; install writes the routine under its owner and checks it again on this side (description, every step on the routine's own site) whatever the directory said. `routine_publish` only asks: the side panel shows what becomes public, including typed values and addresses with details, and the person approves there. An agent cannot publish on its own. The session lives in the extension, so publishing always goes through it.
+
 ## Replay and the page checks
 
 For each step, the replayer checks in order and stops at the first one that settles it:

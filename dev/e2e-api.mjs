@@ -3,9 +3,10 @@
 //   node dev/e2e-api.mjs
 import { spawnSync } from 'node:child_process';
 import { createHash, createSign, generateKeyPairSync, randomUUID } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
+import { isDeepStrictEqual } from 'node:util';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -306,6 +307,15 @@ check((await call(null, 'GET', '/me/routines')).status === 401, 'and nobody else
 check((await call(p2, 'DELETE', '/routines/play-release')).status === 204 && (await call(null, 'GET', '/routines/ptwo/play-release')).status === 404, 'a routine can be taken down');
 check((await call(p2, 'DELETE', '/routines/play-release')).status === 404, 'only once');
 check((await call(null, 'GET', '/routines/pone/play-release')).ok, "and taking down yours leaves nobody else's");
+
+// What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e.mjs, BR_CAPTURE=1).
+// Its host is the local test site, so it is moved to a real-looking one.
+const sent = JSON.parse(readFileSync(join(ROOT, 'dev/fixtures/published-routine.json'), 'utf8').replaceAll('127.0.0.1:8767', 'console.acme.example'));
+res = await call(p1, 'PUT', `/routines/${sent.meta.name}`, sent);
+check(res.ok, 'a routine as the extension compiles and sends it is accepted');
+const back = await (await call(null, 'GET', `/routines/pone/${sent.meta.name}`)).json();
+check(isDeepStrictEqual(back.steps, sent.steps) && isDeepStrictEqual(back.meta.params, sent.meta.params), 'and comes back whole');
+await call(p1, 'DELETE', `/routines/${sent.meta.name}`);
 
 // ---------- an agent uses the directory ----------
 const CLI = join(ROOT, 'packages/cli');

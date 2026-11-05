@@ -314,6 +314,106 @@ if (panel) {
   await evalIn((u) => u.startsWith(SITE), 'delete localStorage.variant');
 }
 
+// ---------- 9. publishing to the directory ----------
+if (panel) {
+  const { createServer } = await import('node:http');
+  // A stand-in for the directory: the real service is checked by e2e-api.mjs, this checks what the extension sends and shows.
+  const seen = [];
+  let handleTries = 0;
+  const api = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (d) => (raw += d));
+    req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      const body = raw ? JSON.parse(raw) : undefined;
+      seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, body });
+      if (req.url === '/api/v1/me/handle') {
+        if (++handleTries === 1) return void ((res.statusCode = 409), res.end('{"error":"handle_taken"}'));
+        return void res.end(JSON.stringify({ handle: body.handle }));
+      }
+      const m = req.url.match(/^\/api\/v1\/routines\/([a-z0-9-]+)$/);
+      if (req.method === 'PUT' && m) return void res.end(JSON.stringify({ owner: 'tester', name: m[1], version: 1 }));
+      res.statusCode = 404;
+      res.end('{}');
+    });
+  });
+  await new Promise((r) => api.listen(8787, '127.0.0.1', r));
+
+  const waitText = async (re, ms = 8000) => {
+    for (let i = 0; i < ms / 100; i++) {
+      if (re.test(await panelText())) return true;
+      await sleep(100);
+    }
+    return false;
+  };
+  const setVal = (sel, v) =>
+    panelEval(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value').set; set.call(el, ${JSON.stringify(v)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  const ask = (name) =>
+    client
+      .callTool({ name: 'routine_publish', arguments: { name } }, undefined, { timeout: 60_000 })
+      .then((r) => ({ text: r.content.map((c) => c.text ?? '').join('\n'), error: !!r.isError }), (e) => ({ text: e.message, error: true }));
+  if (/Back to routines/.test(await panelText())) await panelClick('Back to routines');
+
+  // An agent asks. Nothing is public until the person says yes in the panel.
+  const asked = ask('acme-draft');
+  check(await waitText(/Claude Code wants to publish/), 'the panel shows that the agent wants to publish');
+  let txt = await panelText();
+  check(/acme-draft/.test(txt) && /These values become public/.test(txt) && /Big one\./.test(txt), 'it lists the typed values that become public');
+  check(!seen.some((x) => x.method === 'PUT'), 'nothing was sent yet');
+  await shot('12-publish-ask');
+  await setVal('.pubcard input.input', 'taken');
+  await panelClick('Publish');
+  check(await waitText(/That name is taken/), 'a name that is taken says so');
+  await setVal('.pubcard input.input', 'tester');
+  await panelClick('Publish');
+  check(await waitText(/Published as tester\/acme-draft/), 'the card says it is published');
+  const done = await asked;
+  check(!done.error && /Published tester\/acme-draft v1/.test(done.text), 'and the agent that asked is told');
+  await shot('13-publish-done');
+
+  const put = seen.find((x) => x.method === 'PUT' && x.url === '/api/v1/routines/acme-draft');
+  check(put?.auth === 'Bearer x' && seen.filter((x) => x.url === '/api/v1/me/handle').length === 2, 'the name was claimed after the retry, then the routine was sent as the person');
+  check(put?.body.meta.name === 'acme-draft' && put.body.steps.length > 1 && put.body.meta.params.release_name?.type === 'string' && put.body.meta.site, 'with its meta, params and every step');
+  check(!JSON.stringify(put?.body).includes('"example"') && !('owner' in put.body.meta), 'and no example values or owner');
+  if (process.env.BR_CAPTURE) writeFileSync(join(FIXTURES, 'published-routine.json'), JSON.stringify(put.body, null, 2) + '\n');
+  await panelClick('Done');
+  txt = await panelText();
+  check(/published v1/.test(txt), 'the library marks it published');
+  await shot('14-library-published');
+
+  // Saying no.
+  const refused = ask('acme-release');
+  check(await waitText(/Claude Code wants to publish/), 'a second ask shows its card');
+  await panelClick('Not now');
+  const no = await refused;
+  check(no.error && /chose not to publish/.test(no.text), 'saying no tells the agent');
+  await sleep(500);
+  check(!/wants to publish/.test(await panelText()) && !seen.some((x) => x.url.endsWith('/acme-release')), 'and nothing was sent');
+
+  // From the library, with no agent asking.
+  await panelClick('Publish acme-release');
+  check((await waitText(/Anyone can see and install it/)) && /acme-release/.test(await panelText()), 'the Publish button in the library opens the card');
+  await panelClick('Not now');
+
+  // From the Save view.
+  await call('navigate', { url: `${SITE}/index.html` });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Apps”/) });
+  await sleep(600);
+  check(await panelEval(`(() => { const b = [...document.querySelectorAll('.unsaved button')].pop(); if (!b) return false; b.click(); return true; })()`), 'opened Save for the new run');
+  await sleep(400);
+  await setVal('input.input', 'acme-tiny');
+  await setVal('textarea', 'Open the apps list on the test console. Use when the user asks to look at the apps.');
+  check(/Publish to the directory/.test(await panelText()), 'the Save view offers to publish');
+  await panelEval(`document.querySelector('footer input[type=checkbox]').click()`);
+  await panelClick('Save routine');
+  // Not the Save view's own checkbox label: the card says who can see it.
+  const opened = (await waitText(/Anyone can see and install it/)) && /acme-tiny/.test(await panelText());
+  check(opened, 'saving with Publish ticked opens the card for it');
+  await panelClick('Not now');
+  api.close();
+}
+
 const wrapper = await (await import('node:fs/promises')).readFile(join(STORE, 'bin/host'), 'utf8');
 check(wrapper.includes(join(STORE, 'bin/host.cjs')) && !wrapper.includes('dist/'), 'the host runs from its own copy');
 
