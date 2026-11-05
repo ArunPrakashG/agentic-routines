@@ -2,6 +2,7 @@ import { compileRun, type CompileOptions, type Routine } from '@browser-routines
 import * as agent from '../lib/agent';
 import * as auth from '../lib/auth';
 import * as native from '../lib/native';
+import { platform } from '../lib/platform';
 import * as replay from '../lib/replay';
 import * as runs from '../lib/runs';
 import { ask } from '../lib/tabs';
@@ -198,10 +199,7 @@ export default defineBackground(() => {
     if (cmd === 'record') setRecording(!recording);
   });
 
-  // Chrome opens the side panel from the toolbar button; Firefox toggles its sidebar.
-  const b = browser as any;
-  if (b.sidePanel) b.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
-  else if (b.sidebarAction) browser.action.onClicked.addListener(() => b.sidebarAction.toggle());
+  platform.openPanelOnClick();
   browser.action.setBadgeBackgroundColor?.({ color: '#3530E0' });
 
   // The session stays out of reach of content scripts.

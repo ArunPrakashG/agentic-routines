@@ -1,6 +1,7 @@
 import type { Locator, PageFingerprint, RecordedEvent } from '@browser-routines/core';
 import { areaBase64, cropHash, pngBase64, type Rect } from './crop';
 import * as native from './native';
+import { platform } from './platform';
 import * as runs from './runs';
 import { agentTabId, ask, settle, setAgentTab, waitLoaded } from './tabs';
 
@@ -24,18 +25,14 @@ const AGENTS: Record<string, string> = {
 };
 export const agentName = (raw?: string) => (raw ? (AGENTS[raw] ?? raw) : 'Agent');
 
-/** Put a local file into a file input. Chrome sets the path directly; Firefox streams it through the host. */
+/** Put a local file into a file input. With a DevTools session the path is set directly; otherwise it streams through the host. */
 export async function uploadFile(tabId: number, ref: string, path: string) {
-  if (browser.debugger && (await ask<boolean>(tabId, { t: 'markUpload', ref }))) {
-    const target = { tabId };
-    await browser.debugger.attach(target, '1.3');
-    try {
-      const { result } = (await browser.debugger.sendCommand(target, 'Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]")' })) as any;
-      await browser.debugger.sendCommand(target, 'DOM.setFileInputFiles', { files: [path], objectId: result.objectId });
-      await browser.debugger.sendCommand(target, 'Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]").removeAttribute("data-br-upload")' });
-    } finally {
-      await browser.debugger.detach(target).catch(() => {});
-    }
+  if (platform.cdp && (await ask<boolean>(tabId, { t: 'markUpload', ref }))) {
+    await platform.cdp(tabId, async (send) => {
+      const { result } = await send<any>('Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]")' });
+      await send('DOM.setFileInputFiles', { files: [path], objectId: result.objectId });
+      await send('Runtime.evaluate', { expression: 'document.querySelector("[data-br-upload]").removeAttribute("data-br-upload")' });
+    });
     return;
   }
   const parts: string[] = [];

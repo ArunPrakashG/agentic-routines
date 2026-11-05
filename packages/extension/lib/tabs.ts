@@ -1,4 +1,5 @@
 import type { ContentMsg } from '../entrypoints/content';
+import { platform } from './platform';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -28,17 +29,13 @@ export async function ask<T = unknown>(tabId: number, msg: ContentMsg): Promise<
 // A window on a hidden workspace stops drawing, and a page waiting for a frame stops with it.
 export const rendering = (tabId: number) => ask<boolean>(tabId, { t: 'rendering' }).catch(() => true);
 
-/** Draws one frame if the window has stopped drawing. Firefox has no debugger API, so it stays as it is. */
+/** Draws one frame if the window has stopped drawing. Browsers without a DevTools session leave it as it is. */
 export async function wake(tabId: number) {
-  if (!browser.debugger || (await rendering(tabId))) return;
-  const target = { tabId };
+  if (!platform.cdp || (await rendering(tabId))) return;
   try {
-    await browser.debugger.attach(target, '1.3');
-    await browser.debugger.sendCommand(target, 'Page.captureScreenshot', { format: 'jpeg', quality: 1 });
+    await platform.cdp(tabId, (send) => send('Page.captureScreenshot', { format: 'jpeg', quality: 1 }));
   } catch {
     // Something else is attached, or the page is restricted.
-  } finally {
-    await browser.debugger.detach(target).catch(() => {});
   }
 }
 

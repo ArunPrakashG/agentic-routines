@@ -4,9 +4,15 @@
   "description": "Record a browser task once from your agent, replay it without the model.",
   "license": "MIT",
   "type": "module",
-  "bin": { "browser-routines": "dist/index.js" },
-  "files": ["dist"],
-  "engines": { "node": ">=20" },
+  "bin": {
+    "browser-routines": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "rm -rf dist && tsup",
     "typecheck": "tsc -p ."
@@ -20,6 +26,7 @@
   },
   "devDependencies": {
     "@browser-routines/core": "workspace:*",
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.0",
+    "@browser-routines/browsers": "workspace:*"
   }
 }

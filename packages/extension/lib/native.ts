@@ -1,5 +1,6 @@
 // The line to the native host, which the MCP server talks to.
 // An open port also keeps the service worker alive.
+import { platform } from './platform';
 
 const HOST = 'com.browser_routines.host';
 
@@ -29,14 +30,6 @@ export function onHostEvent(fn: (event: string, data: unknown) => void) {
 
 export function connected() {
   return !!port;
-}
-
-function browserName() {
-  const ua = navigator.userAgent;
-  if (/Firefox\//.test(ua)) return 'Firefox';
-  if (/Edg\//.test(ua)) return 'Edge';
-  if ((navigator as any).brave) return 'Brave';
-  return 'Chrome';
 }
 
 export function connect() {
@@ -75,7 +68,7 @@ export function connect() {
     for (const fn of listeners) fn(false);
     setTimeout(connect, (retry = Math.min(retry * 2, 30_000)));
   });
-  call('host.hello', { browser: browserName() }).then(
+  call('host.hello', { browser: platform.name }).then(
     () => {
       retry = 1000;
       for (const fn of listeners) fn(true);

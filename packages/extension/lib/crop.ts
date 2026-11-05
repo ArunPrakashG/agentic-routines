@@ -1,4 +1,5 @@
 import { dHash } from '@browser-routines/core';
+import { platform } from './platform';
 import { rendering } from './tabs';
 
 // The third check: a perceptual hash of the area around an element.
@@ -93,15 +94,8 @@ export async function pngBase64(tabId: number): Promise<string> {
     const url = await capture(tab.windowId);
     return url.slice(url.indexOf(',') + 1);
   } catch (e) {
-    // Firefox has no debugger API, so a hidden window stays an error there.
-    if (!browser.debugger) throw e;
-    const target = { tabId };
-    await browser.debugger.attach(target, '1.3');
-    try {
-      const { data } = (await browser.debugger.sendCommand(target, 'Page.captureScreenshot', { format: 'png' })) as { data: string };
-      return data;
-    } finally {
-      await browser.debugger.detach(target).catch(() => {});
-    }
+    // Without a DevTools session a hidden window stays an error.
+    if (!platform.cdp) throw e;
+    return platform.cdp(tabId, async (send) => (await send<{ data: string }>('Page.captureScreenshot', { format: 'png' })).data);
   }
 }

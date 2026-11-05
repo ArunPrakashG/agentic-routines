@@ -1,5 +1,6 @@
 {
   "name": "browser-routines-monorepo",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.18.3",
@@ -9,7 +10,10 @@
     "dev:up": "dev/up.sh",
     "dev:down": "dev/down.sh",
     "e2e": "dev/e2e.sh",
-    "e2e:api": "node dev/e2e-api.mjs"
+    "e2e:api": "node dev/e2e-api.mjs",
+    "check:store": "node releases/scripts/check-store.mjs",
+    "release": "node releases/scripts/build.mjs",
+    "release:version": "node releases/scripts/version.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

@@ -1,0 +1,10 @@
+{
+  "nativeMessaging": "Talks to the local companion program that the user's coding agent starts, so routines and recorded runs reach the agent and the agent can drive the browser. Nothing is sent over the network by this.",
+  "tabs": "Opens, switches and reads the address and title of tabs, so a routine can run in the tab it was started for and the panel can show which site it is on.",
+  "scripting": "Injects the content script into pages that were open before the extension loaded, so recording and replay work without a reload.",
+  "storage": "Keeps settings, the list of recent runs and the signed-in session on this device.",
+  "identity": "Runs the Google sign-in window. Sign-in is optional and is only used to tie routines to an account.",
+  "sidePanel": "Shows the Browser Routines panel: routines, recorded runs and the replay controls.",
+  "debugger": "Used for three things a normal extension cannot do: set a local file on a page's file input (uploads), take a screenshot of a window that is on a hidden desktop, and draw one frame in a window that has stopped drawing. It is attached for the length of one action and detached straight after.",
+  "<all_urls>": "A routine can be recorded and replayed on any site the user chooses, so the extension cannot list the sites ahead of time. It acts only on the tab the user or their agent is working in."
+}

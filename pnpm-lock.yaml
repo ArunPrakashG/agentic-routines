@@ -15,6 +15,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/browsers: {}
+
   packages/cli:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -33,6 +35,9 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@browser-routines/browsers':
+        specifier: workspace:*
+        version: link:../browsers
       '@browser-routines/core':
         specifier: workspace:*
         version: link:../core
