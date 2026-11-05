@@ -1,3 +1,4 @@
+import { urlPattern } from './match.ts';
 import type { Locator, ParamSpec, RecordedEvent, Routine, Run, Step } from './types.ts';
 
 const IRREVERSIBLE =
@@ -50,10 +51,14 @@ export interface CompileOptions {
   name: string;
   description: string;
   owner?: string;
-  /** Param names the agent wants, mapped to the value it typed. Matched by value. */
+  /** Param names mapped to the value typed. Given at all, these are the only params. */
   params?: Record<string, string>;
   /** Auto-detected params to keep as typed. */
   fixed?: string[];
+  /** Recorded step numbers that are not part of the task, like retries and checks. */
+  leaveOut?: number[];
+  /** Recorded step numbers that should click whatever is first in the list. */
+  firstInList?: number[];
   body?: string;
   returns?: string;
 }
@@ -62,7 +67,17 @@ export interface Compiled {
   routine: Routine;
   recorded: number;
   dropped: number;
+  /** Values in opts.params that were never typed in this run. */
+  unmatched: string[];
+  /** Steps that only work on the item they were recorded on. */
+  pinned: string[];
 }
+
+export function eventLabel(e: RecordedEvent): string {
+  return e.action === 'navigate' ? shortUrl(e.url) : e.fieldLabel || targetLabel(e.target);
+}
+
+const isItemUrl = (u?: string) => !!u && urlPattern(u).includes(':id');
 
 /** Was this event just getting to the page where the work happens? */
 function isNavigation(e: RecordedEvent): boolean {
@@ -70,11 +85,18 @@ function isNavigation(e: RecordedEvent): boolean {
 }
 
 export function compileRun(run: Run, opts: CompileOptions): Compiled {
-  const events = run.events.filter((e) => e.action !== 'wait');
+  const numberOf = new Map(run.events.map((e, i) => [e, i + 1]));
+  const leaveOut = new Set(opts.leaveOut ?? []);
+  const first = new Set(opts.firstInList ?? []);
+  const events = run.events.filter((e) => e.action !== 'wait' && !leaveOut.has(numberOf.get(e)!));
   if (events.length === 0) throw new Error('This run has no steps');
+  for (const n of first) {
+    const e = run.events[n - 1];
+    if (e?.action !== 'click' || leaveOut.has(n)) throw new Error(`first_in_list: step ${n} is not a click in this routine`);
+  }
 
   // Navigation that a direct URL can replace: everything before the first real action.
-  let k = events.findIndex((e) => !isNavigation(e));
+  let k = events.findIndex((e) => !isNavigation(e) || first.has(numberOf.get(e)!));
   if (k === -1) k = events.length - 1;
   const workUrl = events[k].url;
   const rest = events.slice(k).filter((e, i) => !(i === 0 && e.action === 'navigate'));
@@ -82,8 +104,10 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
   const steps: Step[] = [{ n: 1, action: 'navigate', label: shortUrl(workUrl), url: workUrl }];
   const params: Record<string, ParamSpec> = {};
   const secrets: string[] = [];
-  const byValue = new Map(Object.entries(opts.params ?? {}).map(([name, v]) => [v, name]));
+  const byValue = new Map(Object.entries(opts.params ?? {}).map(([name, v]) => [v, snake(name)]));
   const fixed = new Set(opts.fixed ?? []);
+  const used = new Set<string>();
+  const pinned: string[] = isItemUrl(workUrl) ? [`it starts at ${shortUrl(workUrl)}`] : [];
 
   const uniq = (base: string, taken: Record<string, unknown> | string[]) => {
     const has = (n: string) => (Array.isArray(taken) ? taken.includes(n) : n in taken);
@@ -96,12 +120,21 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
     const step: Step = {
       n: steps.length + 1,
       action: e.action,
-      label: e.action === 'navigate' ? shortUrl(e.url) : e.fieldLabel || targetLabel(e.target),
+      label: eventLabel(e),
       target: e.target,
       page: e.page,
       crop: e.crop,
     };
     if (e.action === 'navigate') step.url = e.url;
+    const number = numberOf.get(e)!;
+    if (first.has(number)) {
+      step.pick = 'first';
+      step.label = 'First in the list';
+      // A crop of the recorded row says nothing about the row that is first next time.
+      delete step.crop;
+    } else if (e.action === 'click' && isItemUrl(e.navigatedTo)) {
+      pinned.push(`step ${number} opens “${step.label}”`);
+    }
 
     if (e.field === 'password') {
       const name = uniq(snake(e.fieldLabel || 'password'), secrets);
@@ -112,7 +145,8 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
       const named = byValue.get(e.value);
       const auto = snake(e.fieldLabel || targetLabel(e.target) || (e.action === 'upload' ? 'file' : 'text'));
       const name = named ?? uniq(auto, params);
-      if (!named && fixed.has(auto)) {
+      if (named) used.add(e.value);
+      if (!named && (opts.params || fixed.has(auto))) {
         step.value = e.value;
       } else {
         const spec: ParamSpec = { type: e.action === 'upload' ? 'file' : 'string', example: e.value };
@@ -148,7 +182,8 @@ export function compileRun(run: Run, opts: CompileOptions): Compiled {
     body: opts.body ?? '',
     steps,
   };
-  return { routine, recorded: run.events.length, dropped: k };
+  const unmatched = Object.entries(opts.params ?? {}).filter(([, v]) => !used.has(v)).map(([name]) => name);
+  return { routine, recorded: run.events.length, dropped: k, unmatched, pinned };
 }
 
 /** Put values into a step: "{{version_name}}" -> "2.15.0 (215)". */

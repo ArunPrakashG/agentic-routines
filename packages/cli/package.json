@@ -8,7 +8,7 @@
   "files": ["dist"],
   "engines": { "node": ">=20" },
   "scripts": {
-    "build": "tsup",
+    "build": "rm -rf dist && tsup",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

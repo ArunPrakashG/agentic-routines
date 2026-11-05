@@ -50,6 +50,8 @@ export interface Step {
   crop?: string;
   /** Replay stops here and waits for approval. */
   pause?: 'auto' | 'author';
+  /** Click whatever is first in the list now, not the item that was recorded. */
+  pick?: 'first';
 }
 
 export interface ParamSpec {

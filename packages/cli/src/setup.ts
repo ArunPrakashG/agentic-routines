@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
@@ -26,10 +26,6 @@ function mcpCommand(): string[] {
   return [process.execPath, script, 'mcp'];
 }
 
-function hostCommand(): string[] {
-  return [process.execPath, realpathSync(process.argv[1]), 'host'];
-}
-
 interface Line {
   ok: boolean;
   name: string;
@@ -38,14 +34,17 @@ interface Line {
 
 async function writeHostWrapper(): Promise<string> {
   await mkdir(paths.bin(), { recursive: true, mode: 0o700 });
-  const [node, script] = hostCommand();
+  const node = process.execPath;
+  // A copy of its own, as npx can prune the cache this script runs from. Running setup again updates it.
+  const script = join(paths.bin(), 'host.cjs');
+  await copyFile(join(dirname(realpathSync(process.argv[1])), 'host-main.cjs'), script);
   if (platform() === 'win32') {
     const p = join(paths.bin(), 'host.bat');
-    await writeFile(p, `@echo off\r\n"${node}" "${script}" host %*\r\n`);
+    await writeFile(p, `@echo off\r\n"${node}" "${script}" %*\r\n`);
     return p;
   }
   const p = join(paths.bin(), 'host');
-  await writeFile(p, `#!/bin/sh\nexec "${node}" "${script}" host "$@"\n`);
+  await writeFile(p, `#!/bin/sh\nexec "${node}" "${script}" "$@"\n`);
   await chmod(p, 0o755);
   return p;
 }

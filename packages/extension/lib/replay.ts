@@ -34,6 +34,8 @@ export interface ReplayState {
   status: RunResult['status'] | 'running';
   /** Agent that started it; absent when started from the side panel. */
   by?: string;
+  /** The session of that agent, to notice when it goes away. */
+  session?: string;
   /** The panel stopped waiting and gave the pause back to the agent. */
   handedBack?: boolean;
   error?: string;
@@ -108,7 +110,8 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   const end = Date.now() + 8_000;
   let res: Found = { kind: 'missing' };
   while (Date.now() < end) {
-    res = await ask<Found>(s.tabId, { t: 'resolve', target: s.fixes[step.n] ?? step.target! });
+    const fix = s.fixes[step.n];
+    res = await ask<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target! });
     // A button can stay disabled for a moment after the step before it, and a click on it does nothing.
     if (res.kind === 'found' && !res.disabled) break;
     await wake(s.tabId);
@@ -174,6 +177,13 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
     while (s.i < s.routine.steps.length) {
       const step = s.routine.steps[s.i];
       if (step.pause && !s.approved.has(step.n)) {
+        if (s.session && goneSessions.has(s.session)) {
+          s.status = 'failed';
+          s.error = AGENT_GONE;
+          live.delete(s.id);
+          notify(s);
+          return result(s);
+        }
         s.status = 'paused';
         notify(s);
         const approved = await new Promise<boolean | undefined>((res) => {
@@ -182,6 +192,7 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
           if (s.by) setTimeout(() => res(undefined), PANEL_WAIT_MS);
         });
         panelWaiters.delete(s.id);
+        if (!live.has(s.id)) return result(s);
         if (approved === undefined) {
           s.handedBack = true;
           notify(s);
@@ -190,6 +201,8 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
         if (!approved) {
           s.status = 'failed';
           s.error = 'Stopped at the pause in the side panel';
+          live.delete(s.id);
+          notify(s);
           return result(s);
         }
         s.approved.add(step.n);
@@ -215,7 +228,7 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
   return result(s);
 }
 
-export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string }) {
+export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string }) {
   const s: ReplayState = {
     id: 'rp-' + crypto.randomUUID().slice(0, 4),
     routine: p.routine,
@@ -232,6 +245,7 @@ export async function start(p: { routine: Routine; params: Record<string, string
     start: Date.now(),
     status: 'running',
     by: p.agent,
+    session: p.session,
   };
   live.set(s.id, s);
   return loop(s);
@@ -268,6 +282,22 @@ export async function resume(p: { run_id: string; approve?: boolean; choice?: st
     return loop(s, p.choice);
   }
   throw new Error(`Run ${p.run_id} is ${s.status}`);
+}
+
+const AGENT_GONE = 'The agent that started this replay disconnected';
+const goneSessions = new Set<string>();
+
+/** Nobody is left to answer a pause or a changed step, so the replay ends. A running one ends at its next pause. */
+export function agentGone(session: string) {
+  goneSessions.add(session);
+  for (const s of live.values()) {
+    if (s.session !== session || (s.status !== 'paused' && s.status !== 'needs_choice')) continue;
+    s.status = 'failed';
+    s.error = AGENT_GONE;
+    live.delete(s.id);
+    notify(s);
+    panelWaiters.get(s.id)?.(false);
+  }
 }
 
 /** Approve or stop from the side panel. */

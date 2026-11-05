@@ -137,7 +137,7 @@ await shot('02-library-unsaved-run');
 t = await call('routine_save', {
   name: 'acme-release',
   description: 'Upload an app bundle to Acme internal testing and start the rollout. Use when the user asks to release a build to internal testing.',
-  params: { version_name: '2.14.0 (214)', release_notes: 'Faster search.' },
+  params: { app_bundle: join(FIXTURES, 'kavyam-2.14.0.aab'), version_name: '2.14.0 (214)', release_notes: 'Faster search.' },
 });
 log(t);
 check(/Saved acme-release v1/.test(t), 'routine saved');
@@ -243,6 +243,62 @@ if (panel) {
   check(md.includes('Big one.') && md.includes('{{release_name}}'), 'fixed value kept, other value is a param');
   await shot('11-library-two');
 }
+
+// ---------- 7. choosing what a routine keeps ----------
+{
+  await call('navigate', { url: `${SITE}/apps.html` });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Kavyam”/) });
+  page = await call('read_page');
+  await call('type', { ref: refFor(page, /“Release name”/), text: 'typo' });
+  await call('type', { ref: refFor(page, /“Release name”/), text: '3.0.0' });
+  await call('type', { ref: refFor(page, /“Release notes”/), text: 'Stays the same.' });
+  const steps = await call('run_steps');
+  log(steps.replace(/\n/g, ' / '));
+  const num = (re) => Number(steps.split('\n').find((l) => re.test(l))?.match(/^\d+/)?.[0]);
+  const bad = await client.callTool({ name: 'routine_save', arguments: { name: 'acme-bad', description: 'Never saved. Use when testing the check.', params: { nope: 'never typed' } } });
+  check(bad.isError && /nope/.test(bad.content[0].text), 'a param that was never typed is refused');
+  t = await call('routine_save', { name: 'acme-latest', description: 'Name a release of the first app. Use when the user asks for this.', params: { release_name: '3.0.0' }, leave_out: [num(/: typo/)], first_in_list: [num(/click .*Kavyam/)] });
+  log(t.replace(/\n/g, ' '));
+  const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(STORE, 'routines/local/acme-latest/steps.json'), 'utf8'));
+  const list = saved.steps ?? saved;
+  check(JSON.stringify(list).includes('{{release_name}}') && JSON.stringify(list).includes('Stays the same.') && !JSON.stringify(list).includes('release_notes}}'), 'only the named value is a param');
+  check(!JSON.stringify(list).includes('typo'), 'left out the retried step');
+  check(/apps\.html/.test(list[0].url) && list.some((x) => x.pick === 'first'), 'starts at the list and picks the first row');
+
+  await call('navigate', { url: `${SITE}/apps.html` });
+  page = await call('read_page');
+  await call('click', { ref: refFor(page, /“Swap order”/) });
+  t = await call('routine_run', { name: 'acme-latest', params: { release_name: '3.0.1' } });
+  log(t.split('\n')[0]);
+  const tabs = JSON.parse(await call('tabs'));
+  check(/^Done/.test(t) && tabs.some((x) => x.active && /app=2/.test(x.url)), 'replay follows the row that is first now');
+}
+
+// ---------- 8. the agent goes away during a pause ----------
+{
+  await evalIn((u) => u.startsWith(SITE), "localStorage.variant = 'b'");
+  const other = new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME, PATH: process.env.PATH, BROWSER_ROUTINES_HOME: STORE }, stderr: 'inherit' });
+  const c2 = new Client({ name: 'claude-code', version: '2.0.0' });
+  await c2.connect(other);
+  c2.callTool({ name: 'routine_run', arguments: { name: 'acme-release', params: { app_bundle: join(FIXTURES, 'kavyam-2.15.0.aab'), version_name: '9.9.9', release_notes: 'Nobody home.' } } }, undefined, { timeout: 60_000 }).catch(() => {});
+  let paused = false;
+  for (let i = 0; i < 40 && !paused; i++) {
+    await sleep(500);
+    paused = /Paused before step/.test(await panelText());
+  }
+  check(paused, 'a second agent paused in the panel');
+  await c2.close();
+  await sleep(1500);
+  const after = await panelText();
+  log(after.split('\n').slice(0, 6).join(' / '));
+  check(!/Paused before step/.test(after), 'the pause ends when its agent disconnects');
+  check(/disconnected/.test(after), 'the panel says the agent is gone');
+  await evalIn((u) => u.startsWith(SITE), 'delete localStorage.variant');
+}
+
+const wrapper = await (await import('node:fs/promises')).readFile(join(STORE, 'bin/host'), 'utf8');
+check(wrapper.includes(join(STORE, 'bin/host.cjs')) && !wrapper.includes('dist/'), 'the host runs from its own copy');
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 await client.close();
