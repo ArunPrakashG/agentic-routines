@@ -1,4 +1,4 @@
-import type { Routine, SourceEntry } from '@agentic-routines/core';
+import { hookHash, type Hooks, type Routine, type SourceEntry } from '@agentic-routines/core';
 import * as native from './native';
 
 // Installing from a Git source or a folder. The host does the fetching and every check; this side
@@ -13,7 +13,14 @@ export interface GitCard {
   description: string;
   site: string;
   version: number;
+  /** The author's notes for the agent, and the repository's. Shown to the person before they install. */
+  instructions?: string;
+  repoName?: string;
+  repoInstructions?: string;
   steps: { n: number; action: string; label: string; value?: string; pause: boolean }[];
+  /** The code of its hooks, shown in full. Off unless the person turns them on here. */
+  hooks?: Hooks;
+  hookHash?: string;
   pauses: number;
   params: string[];
   /** Why it cannot be installed. Empty when it can. */
@@ -30,6 +37,8 @@ export interface SourceInfo {
   kind: 'github' | 'folder';
   enabled: boolean;
   routines?: number;
+  /** What is wrong with config.routine or a file it lists, with file, line and field. */
+  problems?: string[];
   checkedAt?: number;
   error?: string;
 }
@@ -42,6 +51,9 @@ export interface SourceEntries {
   kind: 'github' | 'folder';
   entries: SourceEntry[];
   skipped: number;
+  /** From the repository's config.routine. */
+  repo?: { name: string; description: string; instructions?: string };
+  problems?: string[];
   error?: string;
 }
 
@@ -73,7 +85,12 @@ export async function preview(source: string, path: string, by?: string): Promis
     description: r.meta.description,
     site: r.meta.site,
     version: r.meta.version,
+    instructions: r.meta.instructions,
+    repoName: r.meta.repo?.name,
+    repoInstructions: r.meta.repo?.instructions,
     steps: r.steps.map((s) => ({ n: s.n, action: s.action, label: s.label, value: s.value, pause: !!s.pause })),
+    hooks: r.meta.hooks && Object.keys(r.meta.hooks).length ? r.meta.hooks : undefined,
+    hookHash: r.meta.hooks && Object.keys(r.meta.hooks).length ? await hookHash(r.meta.hooks) : undefined,
     pauses: r.meta.pauses.length,
     params: Object.keys(r.meta.params),
     problems: p.problems,

@@ -29,9 +29,12 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
 } else {
   console.log(`agentic-routines
 
-  setup [--dry-run]   Connect your browsers and agents (Claude Code, Codex, Copilot, OpenCode)
-  doctor              Check what is connected and what is not
-  sources             List, add, remove, turn on or off the places routines can come from
+  setup [--dry-run]   Connect your browsers and agents (Claude Code, Codex, Copilot, OpenCode) and tell
+                      them to use Agentic Routines for the browser and to prefer a saved routine
+        [--exclusive] Also turn off other browser tools in those agents (--no-exclusive turns them back on)
+        [--remove]    Take it all back out: tool server, guidance, plugin, hook and host
+  doctor              Check what is connected and what is not, guidance and exclusivity included
+  sources             List, add, remove, turn on or off the places routines can come from; "sources check <folder>" checks a repository
   export <routine>    Print a routine as one file to put in a Git repository's routines folder
   mcp                 Run the MCP server (agents start this)
   host                Run the native host (browsers start this)`);

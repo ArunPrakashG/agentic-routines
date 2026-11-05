@@ -6,10 +6,14 @@ import { marked } from 'marked';
 export const pages = [
   { slug: 'getting-started', title: 'Getting started', summary: 'Add the extension, connect your agent, record a first routine.' },
   { slug: 'how-it-works', title: 'How it works', summary: 'What is recorded, what a save changes, and how a replay checks each step.' },
+  { slug: 'refine', title: 'Refine a routine', summary: 'How an agent proposes, edits, tests and saves a routine, and what the extension refuses.' },
+  { slug: 'agents', title: 'How agents choose', summary: 'How an agent is told to prefer a saved routine, and how to make Agentic Routines its only browser.' },
   { slug: 'routines', title: 'Routine format', summary: 'ROUTINE.md, parameters, pauses and the steps behind a routine.' },
+  { slug: 'hooks', title: 'Hooks and instructions', summary: 'Notes for the agent, and code that runs on events during a replay, with what it may do and how it is approved.' },
   { slug: 'tools', title: 'Agent tools', summary: 'Every tool the MCP server gives your agent.' },
   { slug: 'safety', title: 'Untrusted content', summary: 'What an agent should not trust, and what the extension enforces.' },
   { slug: 'cli', title: 'Command line', summary: 'setup, doctor, sources and export.' },
+  { slug: 'repositories', title: 'Routine repositories', summary: 'config.routine: what a Git repository of routines says about itself, with a full example.' },
   { slug: 'sharing', title: 'Sharing and publishing', summary: 'The directory, GitHub repositories and what review involves.' },
   { slug: 'development', title: 'Development', summary: 'Repository layout, running it locally and adding a browser.' },
 ] as const;

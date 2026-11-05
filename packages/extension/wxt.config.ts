@@ -22,7 +22,11 @@ export default defineConfig({
     description: 'Record a browser task once from your agent, replay it without the model.',
     homepage_url: 'https://github.com/ArunPrakashG/agentic-routines',
     ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
-    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger'])],
+    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', 'offscreen'])],
+    // Hook code runs in the sandbox page, which can reach nothing: no network, no extension API. Chromium only.
+    ...(browser === 'firefox'
+      ? {}
+      : { content_security_policy: { sandbox: "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'" } }),
     host_permissions: ['<all_urls>'],
     action: { default_title: 'Agentic Routines' },
     commands: {

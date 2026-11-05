@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/net/publicsuffix"
 )
 
 // ---------- what comes in ----------
@@ -25,7 +27,10 @@ var (
 	sitePattern   = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 	secretName    = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
 	useWhen       = regexp.MustCompile(`(?i)\buse when\b`)
-	actions       = map[string]bool{"navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true}
+	// {{name}} is filled in with a value the person gives; {{secret:name}} with one from their environment.
+	placeRef  = regexp.MustCompile(`\{\{(secret:)?([a-z0-9_]+)\}\}`)
+	placeOnly = regexp.MustCompile(`^\{\{([a-z0-9_]+)\}\}$`)
+	actions   = map[string]bool{"navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true}
 	// Names that would read as the service or as a place, not a person.
 	reserved = map[string]bool{"local": true, "admin": true, "api": true, "me": true, "root": true, "support": true, "official": true, "agentic-routines": true, "agenticroutines": true, "browser-routines": true, "browserroutines": true, "routines": true, "www": true}
 )
@@ -52,8 +57,12 @@ type viewport struct {
 }
 
 type routineMeta struct {
-	Name        string               `json:"name"`
-	Site        string               `json:"site"`
+	Name string `json:"name"`
+	Site string `json:"site"`
+	// The pages it applies to: host and path globs on the site, "*" for an id.
+	Urls []string `json:"urls,omitempty"`
+	// Where it acts. Empty or "browser"; "desktop" is reserved and not accepted yet.
+	Surface     string               `json:"surface,omitempty"`
 	Description string               `json:"description"`
 	Params      map[string]paramSpec `json:"params"`
 	Secrets     []string             `json:"secrets"`
@@ -61,6 +70,68 @@ type routineMeta struct {
 	Returns     string               `json:"returns,omitempty"`
 	DraftedBy   string               `json:"drafted_by,omitempty"`
 	Viewport    *viewport            `json:"viewport,omitempty"`
+	// Text for the agent that runs the routine, shown to it inside the untrusted-content envelope.
+	Instructions string `json:"instructions,omitempty"`
+	// Code on events, run by the extension in a sandbox with no network. Event name to source.
+	Hooks map[string]string `json:"hooks,omitempty"`
+}
+
+// hookEvents is the list the extension and the CLI accept (packages/core/src/hooks.ts).
+var hookEvents = map[string]bool{
+	"run.start": true, "run.end": true, "step.before": true, "step.after": true,
+	"action.click.before": true, "action.click.after": true, "action.type.before": true, "action.type.after": true,
+	"action.select.before": true, "action.select.after": true, "action.upload.before": true, "action.upload.after": true,
+	"action.navigate.before": true, "action.navigate.after": true, "action.press.before": true, "action.press.after": true,
+	"action.read.before": true, "action.read.after": true, "page.load": true, "step.changed": true,
+	"pause.reached": true, "pause.approved": true, "error": true,
+}
+
+const maxURLs = 8
+
+var (
+	urlHost    = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
+	urlSegment = regexp.MustCompile(`^(\*\*?|[A-Za-z0-9._~%:@!$&'()+,;=-]+)$`)
+)
+
+// checkURLs: at most maxURLs patterns, each a host on the routine's site and a path of names and "*",
+// with "**" allowed only as the last part. No scheme, query or spaces.
+func checkURLs(urls []string, site string) bool {
+	if len(urls) > maxURLs {
+		return false
+	}
+	for _, u := range urls {
+		if len(u) > 200 || strings.ContainsAny(u, "?# \t\n") {
+			return false
+		}
+		parts := strings.Split(u, "/")
+		if !urlHost.MatchString(parts[0]) || !onSite("https://"+parts[0]+"/", site) {
+			return false
+		}
+		for i, seg := range parts[1:] {
+			if !urlSegment.MatchString(seg) || (seg == "**" && i != len(parts)-2) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+const (
+	maxHookCode  = 8000
+	maxHookTotal = 32000
+	maxNotes     = 4000
+)
+
+// checkHooks is the same rule the extension and the CLI apply to a routine's hooks.
+func checkHooks(h map[string]string) bool {
+	total := 0
+	for ev, code := range h {
+		if !hookEvents[ev] || strings.TrimSpace(code) == "" || len(code) > maxHookCode {
+			return false
+		}
+		total += len(code)
+	}
+	return total <= maxHookTotal
 }
 
 type locator struct {
@@ -71,6 +142,7 @@ type locator struct {
 	Attrs map[string]string `json:"attrs"`
 	CSS   string            `json:"css"`
 	Near  string            `json:"near,omitempty"`
+	Modal string            `json:"modal,omitempty"`
 }
 
 type fingerprint struct {
@@ -90,6 +162,8 @@ type step struct {
 	Crop   string       `json:"crop,omitempty"`
 	Pause  string       `json:"pause,omitempty"`
 	Pick   string       `json:"pick,omitempty"`
+	// Text for the agent that runs the routine. Shown to it inside the untrusted-content envelope.
+	Instructions string `json:"instructions,omitempty"`
 }
 
 type routineIn struct {
@@ -98,14 +172,91 @@ type routineIn struct {
 	Steps []step      `json:"steps"`
 }
 
-// onSite is the same rule the extension and the CLI apply.
+// siteOK says whether a site names one party: a registered name or a single tenant of a shared host.
+// A bare suffix (com, co.uk, github.io), an address and a private network name (router.lan, x.internal,
+// 192.168.1.1) are refused, as a step "on" them would not stay with whoever published the routine.
+func siteOK(site string) bool {
+	if !strings.Contains(site, ".") || !sitePattern.MatchString(site) {
+		return false
+	}
+	for _, label := range strings.Split(site, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+	}
+	if _, err := netip.ParseAddr(site); err == nil {
+		return false
+	}
+	suffix, icann := publicsuffix.PublicSuffix(site)
+	if suffix == site {
+		return false
+	}
+	// A suffix nobody manages (.internal, .lan, .local) is a private name.
+	return icann || strings.Contains(suffix, ".")
+}
+
+// onSite is the same rule the extension and the CLI apply, and stricter: https only, no
+// credentials in the address, no port but 443, and nothing a browser and Go could read differently.
 func onSite(rawURL, site string) bool {
+	for i := 0; i < len(rawURL); i++ {
+		if c := rawURL[i]; c <= ' ' || c >= 0x7f || c == '\\' {
+			return false
+		}
+	}
 	u, err := url.Parse(rawURL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Opaque != "" {
+		return false
+	}
+	if p := u.Port(); p != "" && p != "443" {
 		return false
 	}
 	h := strings.ToLower(u.Hostname())
 	return h == site || strings.HasSuffix(h, "."+site)
+}
+
+// placeholdersOK checks that every {{name}} in a step refers to something the routine declares, and that a
+// file only ever goes to an upload step: an upload takes its path from the person, never from the routine.
+func (r *routineIn) placeholdersOK() bool {
+	m := &r.Meta
+	declared := map[string]bool{}
+	for _, s := range m.Secrets {
+		declared[s] = true
+	}
+	for i := range r.Steps {
+		s := &r.Steps[i]
+		if s.Action == "upload" {
+			if s.Value == nil {
+				return false
+			}
+			ref := placeOnly.FindStringSubmatch(*s.Value)
+			if ref == nil || m.Params[ref[1]].Type != "file" {
+				return false
+			}
+		}
+		// Navigation is filled in from the params only, never from secrets.
+		if strings.Contains(s.URL, "{{secret:") {
+			return false
+		}
+		for _, text := range []string{s.URL, deref(s.Value)} {
+			for _, ref := range placeRef.FindAllStringSubmatch(text, -1) {
+				if ref[1] != "" {
+					if !declared[ref[2]] {
+						return false
+					}
+				} else if p, ok := m.Params[ref[2]]; !ok || (p.Type == "file" && s.Action != "upload") {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // normalize makes empty lists and maps encode as [] and {}, which is what readers expect.
@@ -137,12 +288,18 @@ func (r *routineIn) check(name string) string {
 		return "bad_name"
 	case len(m.Description) < 20 || len(m.Description) > 1024 || !useWhen.MatchString(m.Description):
 		return "bad_description"
-	case !strings.Contains(m.Site, ".") || !sitePattern.MatchString(m.Site):
+	case !siteOK(m.Site):
 		return "bad_site"
 	case len(r.Body) > 20<<10:
 		return "body_too_long"
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
 		return "bad_steps"
+	case m.Surface != "" && m.Surface != "browser":
+		return "bad_surface"
+	case !checkURLs(m.Urls, m.Site):
+		return "bad_urls"
+	case len(m.Instructions) > maxNotes || !checkHooks(m.Hooks):
+		return "bad_hooks"
 	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512 || len(m.DraftedBy) > 40:
 		return "bad_meta"
 	}
@@ -174,6 +331,9 @@ func (r *routineIn) check(name string) string {
 		if s.Pick != "" && s.Pick != "first" {
 			return "bad_steps"
 		}
+		if len(s.Instructions) > 1000 {
+			return "bad_steps"
+		}
 		// A step that leaves the site would send an installer's signed-in browser somewhere else.
 		if s.URL != "" && !onSite(s.URL, m.Site) {
 			return "step_off_site"
@@ -184,9 +344,12 @@ func (r *routineIn) check(name string) string {
 		if s.Action == "navigate" && s.URL == "" {
 			return "bad_steps"
 		}
-		if t := s.Target; t != nil && (len(t.Attrs) > 20 || len(t.CSS) > 600) {
+		if t := s.Target; t != nil && (len(t.Attrs) > 20 || len(t.CSS) > 600 || len(t.Modal) > 100) {
 			return "bad_steps"
 		}
+	}
+	if !r.placeholdersOK() {
+		return "bad_steps"
 	}
 	return ""
 }
@@ -211,6 +374,7 @@ type summary struct {
 	Version     int       `json:"version"`
 	Installs    int       `json:"installs"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	Urls        []string  `json:"urls"`
 }
 
 type full struct {
@@ -260,8 +424,9 @@ func (s *store) submit(ctx context.Context, ownerID, handle, name string, r rout
 		return
 	}
 	var blocked bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2))`,
-		handle, handle+"/"+name).Scan(&blocked); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2)
+		OR (kind = 'account' AND value = (SELECT google_sub FROM users WHERE id = $3::uuid)))`,
+		handle, handle+"/"+name, ownerID).Scan(&blocked); err != nil {
 		return
 	}
 	if blocked {
@@ -332,10 +497,10 @@ func (s *store) unpublish(ctx context.Context, ownerID, name string) error {
 // liveOnly keeps a disabled routine, or one from a blocked publisher, out of everything public.
 const liveOnly = `r.disabled = false AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.kind = 'user' AND b.value = u.handle)`
 
-const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at`
+const summaryCols = `u.handle, r.name, r.site, r.description, r.version, r.installs, r.updated_at, COALESCE(r.meta->'urls', '[]'::jsonb)`
 
 func scanSummary(row pgx.Row, extra ...any) (x summary, err error) {
-	return x, row.Scan(append([]any{&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt}, extra...)...)
+	return x, row.Scan(append([]any{&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Urls}, extra...)...)
 }
 
 // search lists by words in the name, description or site, and by the site a person is on.
@@ -379,7 +544,7 @@ func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 	out := []mineRow{}
 	for rows.Next() {
 		var x mineRow
-		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Disabled, &x.DisabledReason); err != nil {
+		if err := rows.Scan(&x.Owner, &x.Name, &x.Site, &x.Description, &x.Version, &x.Installs, &x.UpdatedAt, &x.Urls, &x.Disabled, &x.DisabledReason); err != nil {
 			return nil, err
 		}
 		out = append(out, x)
@@ -581,6 +746,12 @@ func (a *app) getRoutine(w http.ResponseWriter, r *http.Request) {
 
 // The installer's own machine reports an install once it has saved the routine.
 func (a *app) countInstall(w http.ResponseWriter, r *http.Request) {
+	// The count ranks the directory, so one visitor counts once a day for a routine.
+	owner, name := r.PathValue("owner"), r.PathValue("name")
+	if !a.limiter.once(r.Context(), "install", clientIP(r), owner+"/"+name, 24*time.Hour) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	switch err := a.db.countInstall(r.Context(), r.PathValue("owner"), r.PathValue("name")); {
 	case errors.Is(err, errNotFound):
 		fail(w, http.StatusNotFound, "not_found")

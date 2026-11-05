@@ -25,6 +25,7 @@ Agentic Routines records what your agent does in the browser. Save it as a routi
 - Pauses before steps that cannot be undone.
 - Never stores secrets. Recordings stay on your computer.
 - Record a demo by doing the task yourself.
+- Free and open source. No account fees, no paid tier.
 
 Needs one free command to connect your browser and agent: `npx agentic-routines setup`.
 

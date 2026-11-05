@@ -5,7 +5,7 @@ The Directory is a list of routines other people run in their own signed-in brow
 ## How review works
 
 - Every submission is reviewed, every time. A new routine, and every update to a routine that is already listed.
-- Automated checks run first. They catch what a machine can catch: steps that leave the routine's site, saved secrets, unknown actions, missing pauses. They never approve anything on their own.
+- Automated checks run first. They catch what a machine can catch: steps that leave the routine's site, saved secrets, unknown actions, missing pauses, and hooks or notes for the agent, which are listed so the reviewer reads them. They never approve anything on their own.
 - A person then reads the routine and decides: approve, or reject with the number of the guideline it breaks and a note you can act on.
 - Until a submission is approved it is not public. The version that is already listed stays listed while its update waits.
 - We can turn a listed routine off, or block a publisher, at any time. We say why.
@@ -28,6 +28,8 @@ The Directory is a list of routines other people run in their own signed-in brow
 **G7. Be honest about who made it.** Your handle is yours. Do not pass a routine off as someone else's, or use a name that imitates a person or a company. You must have the right to share what you submit.
 
 **G8. Keep it working.** When a site changes and the routine breaks, fix it or withdraw it. Routines that stay broken are turned off.
+
+**G9. Hooks and notes stay honest.** A hook does what the description says, and only that. It is short enough to read in full, with nothing obfuscated or built to be hard to follow. It does not try to reach outside its sandbox: hooks have no network and cannot send anything anywhere, and a hook that tries is a sign of what the author wanted. It does not try to talk the person's agent into something: notes for the agent describe the routine, and say nothing about other tasks, other sites, or ignoring the user. A routine with hooks or notes says so in its description. Reviewers read the hook code and the notes, and an update that changes either is read again.
 
 ## When a submission is rejected
 

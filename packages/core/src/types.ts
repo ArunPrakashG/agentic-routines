@@ -2,6 +2,8 @@ import type { Viewport } from './viewport.ts';
 
 // Shared shapes for recording, compiling and replaying routines.
 
+import type { HookReport, Hooks } from './hooks.ts';
+
 export type Action =
   | 'navigate'
   | 'click'
@@ -27,6 +29,8 @@ export interface Locator {
   css: string;
   /** Nearest heading or section label above the element. */
   near?: string;
+  /** The dialog the element sat in, by its name, when it sat in one. */
+  modal?: string;
 }
 
 /** A cheap description of the page, used before every step. */
@@ -54,6 +58,8 @@ export interface Step {
   pause?: 'auto' | 'author';
   /** Click whatever is first in the list now, not the item that was recorded. */
   pick?: 'first';
+  /** Text for the agent about this step: what to check, what a good result looks like. */
+  instructions?: string;
 }
 
 export interface ParamSpec {
@@ -64,11 +70,19 @@ export interface ParamSpec {
   example?: string;
 }
 
+/** Where a routine acts. Only the browser is implemented; the other value is reserved so the format does not break when it is. */
+export type Surface = 'browser' | 'desktop';
+export const SURFACES: Surface[] = ['browser', 'desktop'];
+
 export interface RoutineMeta {
   name: string;
   owner?: string;
   version: number;
   site: string;
+  /** The pages it applies to, as globs (host and path, with * for an id). Worked out from the recorded pages unless the author sets them. */
+  urls?: string[];
+  /** Where it acts. Absent means browser. */
+  surface?: Surface;
   /** What it does and when to use it. Must contain a "Use when" clause to publish. */
   description: string;
   params: Record<string, ParamSpec>;
@@ -80,6 +94,12 @@ export interface RoutineMeta {
   drafted_by?: string;
   /** The page size when its first element step was recorded. Absent in routines saved before this was kept. */
   viewport?: Viewport;
+  /** Text for the agent from the routine's author: what to check, what to avoid. Untrusted when the author is someone else. */
+  instructions?: string;
+  /** The repository the routine came from and what its config.routine tells the agent about the repository as a whole. */
+  repo?: { name: string; instructions?: string };
+  /** Code that runs on events during a replay, in a sandbox, and answers with directives. Off until the person approves it. */
+  hooks?: Hooks;
 }
 
 export interface Routine {
@@ -148,4 +168,16 @@ export interface RunResult {
   viewport_note?: string;
   /** Steps that paused because they look irreversible, though the routine did not ask for it. */
   forced_pauses?: number[];
+  /** A test of a draft: it stops at the first pause without approving it. */
+  test?: boolean;
+  /** Test only: steps that pause in a real run, which a test does not perform. */
+  skipped?: number[];
+  /** Test only: what each step did, in order. */
+  trace?: string[];
+  /** Test only: where the tab ended up. */
+  final_url?: string;
+  /** Present when the routine has hooks: whether they ran, and what they did. */
+  hooks?: HookReport;
+  /** Notes the author left on the steps the run stopped at or changed, for the agent. */
+  step_notes?: { n: number; label: string; text: string }[];
 }

@@ -1,4 +1,4 @@
-import { stripInvisible, type Locator, type PageFingerprint, type Viewport } from '@agentic-routines/core';
+import { isIrreversible, stripInvisible, type Locator, type PageFingerprint, type Viewport } from '@agentic-routines/core';
 import { ariaHidden, hiddenWhy } from './hidden';
 
 // Runs in the page. Turns elements into locators and outlines, and back.
@@ -154,6 +154,7 @@ export function describe(el: Element): Locator {
     }
   }
   const isField = /^(input|textarea|select)$/i.test(el.tagName);
+  const dialog = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true]');
   return {
     tag: el.tagName.toLowerCase(),
     role: role(el),
@@ -162,6 +163,7 @@ export function describe(el: Element): Locator {
     attrs,
     css: cssPath(el),
     near: nearestHeading(el) || undefined,
+    modal: dialog ? clean(accessibleName(dialog) || dialog.querySelector('h1,h2,h3,[role=heading]')?.textContent || '', 60) || 'dialog' : undefined,
   };
 }
 
@@ -211,6 +213,12 @@ export interface OutlineNotes {
 
 const LONG_VALUE = 200;
 
+/** Unicode tag characters spell text no screen shows. The cleaned text loses them, so they are handed on for the server to call out. */
+const carry = (raw: string | null | undefined, cleaned: string) => {
+  const { hidden } = stripInvisible(raw ?? '');
+  return hidden ? cleaned + [...hidden.slice(0, 200)].map((c) => String.fromCodePoint(0xe0000 + c.charCodeAt(0))).join('') : cleaned;
+};
+
 /** Outline for the agent: headings and interactive elements with refs. Text a person would not see is left out. */
 export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400): { text: string; notes: OutlineNotes } {
   const lines = [clean(document.title, 200), location.href, ''];
@@ -248,14 +256,19 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
     }
     for (const a of ['aria-label', 'title', 'placeholder', 'alt', 'value']) if ((el.getAttribute(a)?.length ?? 0) > LONG_VALUE) notes.longValues++;
     let name = accessibleName(el);
-    if (isFile && !name) name = clean(seenText(el.closest('label') ?? el.parentElement ?? el), 60);
+    if (isFile && !name) {
+      // The label, else the button drawn in front of it, else the words around it.
+      const before = el.previousElementSibling;
+      name = clean(seenText(el.closest('label') ?? (before?.matches('button,label,[role=button],a') ? before : null) ?? el.parentElement ?? el), 60);
+    }
     if (r === 'heading' || el.matches('legend')) {
       if (name) lines.push(`${'#'.repeat(Number(el.tagName[1]) || 2)} ${name}`);
       continue;
     }
     if (el.matches('p,li,td,th')) {
       if (el.querySelector(INTERACTIVE)) continue;
-      const t = clean(seenText(el), 160);
+      const raw = seenText(el);
+      const t = carry(raw, clean(raw, 160));
       if (t) lines.push(`  ${t}`);
       continue;
     }
@@ -337,10 +350,19 @@ export function fileInputFor(el: Element): HTMLInputElement | null {
     const c = document.getElementById(id);
     if (c instanceof HTMLInputElement && c.type === 'file') return c;
   }
+  // A button drawn next to its input, the common way a custom picker is built.
+  const next = el.nextElementSibling;
+  if (next instanceof HTMLInputElement && next.type === 'file') return next;
+  // An input in front of it counts unless the control before that input already feeds it.
+  const prev = el.previousElementSibling;
+  if (prev instanceof HTMLInputElement && prev.type === 'file' && !prev.previousElementSibling?.matches('button,label,[role=button]')) return prev;
   let a: Element | null = el;
   for (let i = 0; a && i < 6; i++, a = a.parentElement) {
-    const f = a.querySelector('input[type=file]');
-    if (f) return f as HTMLInputElement;
+    if (a === document.body || a === document.documentElement) break;
+    // One input inside this container is the one it feeds; several would be a guess.
+    const found = a.querySelectorAll('input[type=file]');
+    if (found.length === 1) return found[0] as HTMLInputElement;
+    if (found.length > 1) return null;
   }
   const all = document.querySelectorAll('input[type=file]');
   return all.length === 1 ? (all[0] as HTMLInputElement) : null;
@@ -386,4 +408,98 @@ export function fieldKind(el: Element): 'text' | 'password' | 'file' | 'select' 
 export function rectOf(el: Element) {
   const r = el.getBoundingClientRect();
   return { x: r.x, y: r.y, w: r.width, h: r.height, dpr: devicePixelRatio };
+}
+
+// ---------- what a hook may look at ----------
+
+const SENSITIVE_NAME = /pass|token|secret|otp|card|cvv|cvc|ssn|iban|pin\b|csrf|auth/i;
+
+/** The value of a field, for a hook. Nothing for passwords, files, hidden fields and anything named like a secret. */
+function safeValue(el: Element): string | undefined {
+  if (el instanceof HTMLInputElement) {
+    if (['password', 'file', 'hidden'].includes(el.type)) return undefined;
+    if (SENSITIVE_NAME.test(`${el.name} ${el.id} ${el.autocomplete}`) || /^(cc-|one-time)/.test(el.autocomplete)) return undefined;
+    if (el.type === 'checkbox' || el.type === 'radio') return el.checked ? 'checked' : '';
+    return el.value.slice(0, 200);
+  }
+  if (el instanceof HTMLTextAreaElement) return SENSITIVE_NAME.test(`${el.name} ${el.id}`) ? undefined : el.value.slice(0, 200);
+  if (el instanceof HTMLSelectElement) return (el.selectedOptions[0]?.textContent ?? '').trim().slice(0, 200);
+  return undefined;
+}
+
+const DROP = 'script,style,noscript,template,svg,canvas,video,audio,iframe,object,embed,link,meta,picture,img';
+
+/** A copy of the page's markup a hook can read: no scripts or styles, no event handlers, short attribute values, current field values, nothing secret. */
+function markup(root: Element, max: number): string {
+  const copy = root.cloneNode(true) as Element;
+  // Field values are properties, not attributes: copy them over while the two trees still line up.
+  const from = root.querySelectorAll('input,textarea,select');
+  const to = copy.querySelectorAll('input,textarea,select');
+  from.forEach((el, i) => {
+    const c = to[i];
+    if (!c) return;
+    c.removeAttribute('value');
+    const v = safeValue(el);
+    if (v !== undefined && !(el instanceof HTMLTextAreaElement) && !(el instanceof HTMLSelectElement)) c.setAttribute('value', v);
+    else if (v !== undefined) c.textContent = v;
+  });
+  copy.querySelectorAll(DROP).forEach((n) => n.remove());
+  const walker = document.createTreeWalker(copy, NodeFilter.SHOW_COMMENT);
+  const comments: Node[] = [];
+  while (walker.nextNode()) comments.push(walker.currentNode);
+  comments.forEach((n) => n.parentNode?.removeChild(n));
+  for (const el of [copy, ...Array.from(copy.querySelectorAll('*'))]) {
+    for (const a of Array.from(el.attributes)) {
+      if (/^on/i.test(a.name) || a.name === 'style' || a.name === 'srcset') el.removeAttribute(a.name);
+      else if (a.value.length > 120) el.setAttribute(a.name, a.value.slice(0, 120) + '…');
+    }
+  }
+  const html = copy.outerHTML.replace(/\s+/g, ' ');
+  return html.length > max ? html.slice(0, max) + ' …cut' : html;
+}
+
+export function snapshot(targetRef?: string) {
+  const element = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return {
+      ref: refOf(el),
+      tag: el.tagName.toLowerCase(),
+      role: role(el) || undefined,
+      name: accessibleName(el).slice(0, 100) || undefined,
+      value: safeValue(el),
+      rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      ...(el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true' ? { disabled: true } : {}),
+    };
+  };
+  const outline = interactive().slice(0, 150).map(element);
+  let target: (ReturnType<typeof element> & { html: string }) | undefined;
+  if (targetRef) {
+    try {
+      const el = byRef(targetRef);
+      target = { ...element(el), html: markup(el, 2000) };
+    } catch {
+      // Gone since it was found; the hook gets the page without it.
+    }
+  }
+  return { title: document.title.slice(0, 200), html: markup(document.body, 30_000), outline, ...(target ? { target } : {}) };
+}
+
+/** Whether a hook may do this to this element. The reason when it may not. */
+export function hookMay(el: Element, action: 'click' | 'type'): string | null {
+  if (!visible(el)) return 'the element is not visible';
+  if (el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true') return 'the element is disabled';
+  if (action === 'type') {
+    if (['password', 'file', 'other'].includes(fieldKind(el))) return 'a hook cannot type into a password field, a file input or anything that is not a text field';
+    if (el instanceof HTMLInputElement && (el.type === 'hidden' || SENSITIVE_NAME.test(`${el.name} ${el.id} ${el.autocomplete}`))) return 'that field looks like it holds a secret';
+    return null;
+  }
+  if (el instanceof HTMLInputElement && el.type === 'file') return 'a hook cannot open a file picker';
+  if (isIrreversible({ action: 'click', target: describe(el) })) return 'it looks like it submits, publishes, pays or deletes, which only a step that pauses may do';
+  const a = el.closest('a[href]') as HTMLAnchorElement | null;
+  if (a) {
+    const h = new URL(a.href, location.href).hostname.toLowerCase();
+    const here = location.hostname.toLowerCase();
+    if (h !== here && !h.endsWith('.' + here) && !here.endsWith('.' + h)) return `the link leaves ${here}`;
+  }
+  return null;
 }

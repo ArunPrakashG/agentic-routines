@@ -163,8 +163,9 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.read': {
       const tabId = await working(p.tab_id);
-      // Text and what was left out of it, so the MCP server can say so.
-      return ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter });
+      // Text and what was left out of it, so the MCP server can say so. The address lets the CLI point at a routine for this page.
+      const out = await ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter });
+      return { ...out, url: (await browser.tabs.get(tabId)).url };
     }
     case 'browser.llm': {
       const tabId = await working(p.tab_id);

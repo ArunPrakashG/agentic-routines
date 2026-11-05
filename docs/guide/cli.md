@@ -6,10 +6,13 @@ npx agentic-routines <command>
 
 | Command | What it does |
 |---|---|
-| `setup [--dry-run]` | Connects your browsers and agents: Claude Code, Codex, GitHub Copilot and OpenCode. `--dry-run` shows the changes without writing them. |
-| `doctor` | Checks what is connected and what is not. |
+| `setup [--dry-run]` | Connects your browsers and agents: Claude Code, Codex, GitHub Copilot and OpenCode. It also tells each agent to use Agentic Routines for the browser and to prefer a saved routine (see [How agents choose](/docs/agents)). `--dry-run` shows the changes without writing them. |
+| `setup --exclusive` | The same, and turns off other browser tools in those agents. `--no-exclusive` turns them back on. |
+| `setup --remove` | Takes it all back out: tool server, guidance, plugin, hooks and the browser connection. Saved routines stay. |
+| `doctor` | Checks what is connected and what is not, including the guidance and exclusive mode. |
 | `sources` | Lists the places routines can come from. |
 | `sources add <address>` | Adds a GitHub repository, such as `github.com/owner/repository`. Nothing is installed until you click Install in the side panel. |
+| `sources check <folder>` | Reads a folder the way a source would and prints every problem in its `config.routine`, with the file, line and field. Run it before you push a [routine repository](/docs/repositories). |
 | `sources remove <address>` | Removes a source. |
 | `sources on <address>` / `off <address>` | Turns a source on or off. |
 | `export <routine>` | Prints a routine as one file, ready to commit under a repository's `routines/` folder. |

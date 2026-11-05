@@ -60,6 +60,6 @@ Transform and opacity only. Reduced motion shows the final frame.
 
 ## Agent parity
 
-`routines_list()`, `routine_save(name, run_id)`, `routine_run(name, params)`, `routine_resume(run_id, approve)`, `routines_search(query)`, `routine_install(id)`, `routine_publish(name)`. Every panel action has one. Secrets appear only as `{{secret:name}}`.
+`routines_list()`, `routine_propose(run_id)`, `routine_edit(draft_id, edits)`, `routine_test(draft_id)`, `routine_save(draft_id)`, `routine_run(name, params)`, `routine_resume(run_id, approve)`, `routines_search(query)`, `routine_install(id)`, `routine_publish(name)`. Every panel action has one. Secrets appear only as `{{secret:name}}`.
 
 Token, cost and time numbers in the mockups are estimates, not measurements.
