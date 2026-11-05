@@ -281,6 +281,67 @@ function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
   );
 }
 
+function PublishCard({ card }: { card: NonNullable<PanelState['publish']> }) {
+  const [handle, setHandle] = useState('');
+  const bad = card.needsHandle && !/^[a-z0-9][a-z0-9-]{2,29}$/.test(handle.trim().toLowerCase());
+  if (card.done) {
+    return (
+      <section class="pubcard" aria-label="Published">
+        <div class="stack" style={{ gap: '6px' }}>
+          <span class="title">Published as {card.done.as}</span>
+          <span class="meta">Version {card.done.version}. Anyone can find it in the directory and install it.</span>
+        </div>
+        <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'publishDecide', approve: false })}>
+          Done
+        </button>
+      </section>
+    );
+  }
+  return (
+    <section class="pubcard" aria-label="Publish to the directory">
+      <div class="stack" style={{ gap: '6px' }}>
+        <span class="k">{card.by ? `${card.by} wants to publish` : 'Publish to the directory'}</span>
+        <span class="title mono">{card.name}</span>
+        <span class="meta">
+          {card.site} · {card.steps} steps. Anyone can see and install it.
+        </span>
+      </div>
+      {card.shown.length > 0 ? (
+        <div class="stack" style={{ gap: '4px' }}>
+          <span class="label">These values become public</span>
+          {card.shown.map((l) => (
+            <span class="publine mono" key={l}>
+              {l}
+            </span>
+          ))}
+          {card.more > 0 && <span class="meta">and {card.more} more</span>}
+        </div>
+      ) : (
+        <span class="meta">No typed values or addresses with details in it. Your own example values stay on this machine.</span>
+      )}
+      {card.needsHandle && (
+        <label class="field">
+          <span>Your name in the directory. You pick it once.</span>
+          <input class="input" type="text" value={handle} spellcheck={false} placeholder="arun" aria-invalid={!!handle && bad} onInput={(e) => setHandle(e.currentTarget.value.toLowerCase())} />
+        </label>
+      )}
+      {card.error && (
+        <span class="err" role="alert">
+          {card.error}
+        </span>
+      )}
+      <div class="foot2">
+        <button class="btn btn-ghost" type="button" disabled={card.busy} onClick={() => send({ t: 'publishDecide', approve: false })}>
+          Not now
+        </button>
+        <button class="btn btn-primary" type="button" disabled={card.busy || bad} onClick={() => send({ t: 'publishDecide', approve: true, handle })}>
+          {card.busy ? 'Publishing…' : 'Publish'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
   const recording = !!s.recording;
   const empty = !s.routines.length && !s.runs.length;
@@ -310,6 +371,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
         </main>
       ) : (
         <main class="lib">
+          {s.publish && <PublishCard card={s.publish} />}
           {s.runs.map((r) => {
             const live = r.id === s.recording;
             const site = r.events[0] ? siteOf(r.events[0].url) : 'New run';
@@ -341,6 +403,8 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                     <span class="desc">{r.description.split(/\bUse when\b/i)[0].trim() || r.description}</span>
                     <span class="meta">
                       {r.site} · v{r.version}
+                      {r.draftedBy ? ` · drafted by ${r.draftedBy}` : ''}
+                      {r.published ? ` · published v${r.published.version}` : ''}
                       {r.lastRun ? ` · ran ${ago(r.lastRun)}` : ''}
                     </span>
                     {!!r.changed?.length && (
@@ -349,6 +413,11 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                       </span>
                     )}
                   </div>
+                  {r.owner === 'local' && !s.publish && (
+                    <button class="btn btn-ghost sm" type="button" aria-label={`Publish ${r.name}`} onClick={() => send({ t: 'publish', id: `local/${r.name}` })}>
+                      Publish
+                    </button>
+                  )}
                   <button
                     class="icon-btn"
                     type="button"
@@ -373,6 +442,7 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
   const [name, setName] = useState(() => (run?.events[0] ? suggestName(run.events.find((e) => e.action !== 'navigate')?.url ?? run.events[0].url) : ''));
   const [desc, setDesc] = useState('');
   const [fixed, setFixed] = useState<string[]>([]);
+  const [publish, setPublish] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -401,7 +471,7 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
     setBusy(true);
     setErr('');
     try {
-      await send({ t: 'save', runId, name, description: desc.trim(), fixed });
+      await send({ t: 'save', runId, name, description: desc.trim(), fixed, publish });
       back();
     } catch (e) {
       setErr((e as Error).message);
@@ -500,6 +570,10 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
         {err && <span class="err">{err}</span>}
       </main>
       <footer class="foot2">
+        <label class="check" style={{ gridColumn: '1 / -1' }}>
+          <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.currentTarget.checked)} style={{ width: '16px', height: '16px', margin: 0, accentColor: 'var(--accent)' }} />
+          Publish to the directory
+        </label>
         <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'discard', runId }).then(back)}>
           Discard
         </button>

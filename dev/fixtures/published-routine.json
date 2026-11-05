@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "name": "acme-draft",
+    "site": "127.0.0.1:8767",
+    "description": "Fill in a release draft without submitting. Use when the user asks to prepare a release.",
+    "params": {
+      "release_name": {
+        "type": "string",
+        "description": "Release name"
+      }
+    },
+    "secrets": [],
+    "pauses": []
+  },
+  "body": "",
+  "steps": [
+    {
+      "n": 1,
+      "action": "navigate",
+      "label": "127.0.0.1:8767/release.html",
+      "url": "http://127.0.0.1:8767/release.html"
+    },
+    {
+      "n": 2,
+      "action": "type",
+      "label": "Release name",
+      "target": {
+        "tag": "input",
+        "role": "textbox",
+        "name": "Release name",
+        "attrs": {
+          "id": "rname",
+          "name": "release_name"
+        },
+        "css": "#rname",
+        "near": "Create internal testing release"
+      },
+      "page": {
+        "url": "http://127.0.0.1:8767/release.html",
+        "title": "New release · Acme Console",
+        "landmarks": [
+          "Create internal testing release",
+          "App bundle",
+          "Release name",
+          "Release notes"
+        ]
+      },
+      "crop": "00c0c000000000c0",
+      "value": "{{release_name}}"
+    },
+    {
+      "n": 3,
+      "action": "type",
+      "label": "Release notes",
+      "target": {
+        "tag": "textarea",
+        "role": "textbox",
+        "name": "Release notes",
+        "attrs": {
+          "id": "notes",
+          "name": "notes"
+        },
+        "css": "#notes",
+        "near": "Create internal testing release"
+      },
+      "page": {
+        "url": "http://127.0.0.1:8767/release.html",
+        "title": "New release · Acme Console",
+        "landmarks": [
+          "Create internal testing release",
+          "App bundle",
+          "Release name",
+          "Release notes"
+        ]
+      },
+      "crop": "0040000000000080",
+      "value": "Big one."
+    },
+    {
+      "n": 4,
+      "action": "click",
+      "label": "Next",
+      "target": {
+        "tag": "button",
+        "role": "button",
+        "name": "Next",
+        "text": "Next",
+        "attrs": {
+          "id": "next",
+          "type": "button"
+        },
+        "css": "#next",
+        "near": "Create internal testing release"
+      },
+      "page": {
+        "url": "http://127.0.0.1:8767/release.html",
+        "title": "New release · Acme Console",
+        "landmarks": [
+          "Create internal testing release",
+          "App bundle",
+          "Release name",
+          "Release notes"
+        ]
+      },
+      "crop": "200000122a000000"
+    }
+  ]
+}

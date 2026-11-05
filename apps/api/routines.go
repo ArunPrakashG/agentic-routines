@@ -50,6 +50,7 @@ type routineMeta struct {
 	Secrets     []string             `json:"secrets"`
 	Pauses      []int                `json:"pauses"`
 	Returns     string               `json:"returns,omitempty"`
+	DraftedBy   string               `json:"drafted_by,omitempty"`
 }
 
 type locator struct {
@@ -132,7 +133,7 @@ func (r *routineIn) check(name string) string {
 		return "body_too_long"
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
 		return "bad_steps"
-	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512:
+	case len(m.Params) > 30 || len(m.Secrets) > 10 || len(m.Pauses) > maxSteps || len(m.Returns) > 512 || len(m.DraftedBy) > 40:
 		return "bad_meta"
 	}
 	for k, p := range m.Params {

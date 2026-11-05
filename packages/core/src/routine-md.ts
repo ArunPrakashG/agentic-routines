@@ -19,6 +19,7 @@ export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string 
     pauses: raw.pauses ?? [],
     requires: raw.requires,
     returns: raw.returns,
+    drafted_by: raw.drafted_by ? String(raw.drafted_by) : undefined,
   };
   return { meta, body: text.slice(m[0].length).trim() };
 }
