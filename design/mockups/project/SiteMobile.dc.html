@@ -178,39 +178,81 @@ body{margin:0}
           </div>
         </div>
       </sc-for>
-      <p style="margin: 0; font-size: 11px; color: var(--text-3);">Measured editing a YouTube description on Sonnet 5.5. Median of 5 runs, against Claude in Chrome.</p>
+      <p style="margin: 0; font-size: 11px; color: var(--text-3);">Measured editing a YouTube description with Claude Sonnet 5.5, against Claude in Chrome. Median of 5 runs. More tasks below.</p>
+    </div>
+  </section>
+
+  <section class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 32px;">
+    <div style="max-width: 760px; display: flex; flex-direction: column; gap: 16px;">
+      <h2 class="h2">Your agent starts from zero every time.</h2>
+      <p class="lede">Browser agents read the page, think, act, and read the page again, for every single step. Run the same chore tomorrow and you pay for all of it again.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px;">
+      <sc-for list="{{pain}}" as="x" hint-placeholder-count="4">
+        <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 20px; border-top: 2px solid var(--border-strong);">
+          <span class="mono" style="font-size: 30px; line-height: 1.1; font-weight: 500; letter-spacing: -0.03em;">{{x.n}}</span>
+          <span style="font-size: 14px; line-height: 21px; color: var(--text-2);">{{x.t}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin: 0; max-width: 760px; font-size: 14px; line-height: 22px; color: var(--text-2);">That is one small edit to a YouTube description, done by hand through Claude in Chrome. On a longer console task it took 44 tool calls, 910k tokens and 1:33, and one run in five said it was done without starting the rollout.</p>
+  </section>
+
+  <section class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 32px;">
+    <div style="max-width: 760px; display: flex; flex-direction: column; gap: 16px;">
+      <h2 class="h2">Measured, not estimated.</h2>
+      <p class="lede">Up to 83% cheaper and 3.5 times faster than the same agent doing the task by hand. Each arrow goes from by hand to replay.</p>
+    </div>
+    <div role="table" aria-label="Same page as recorded" style="display: flex; flex-direction: column;">
+      <span style="font-size: 12px; color: var(--text-3); padding-bottom: 12px;">Same page as recorded</span>
+      <sc-for list="{{results}}" as="r" hint-placeholder-count="3">
+        <div role="row" style="display: flex; flex-direction: column; gap: 14px; padding: 20px 0; border-top: 1px solid var(--border);">
+          <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 15px; font-weight: 500;">{{r.task}}</span><span style="font-size: 13px; line-height: 20px; color: var(--text-3);">{{r.note}}</span></div>
+          <div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; font-size: 13px;">
+            <span style="color: var(--text-3);">Tokens</span><span class="mono"><span style="color: var(--text-3);">{{r.tokens.a}} → </span><span style="color: var(--accent-ink);">{{r.tokens.b}}</span></span><span class="chip">{{r.tokens.d}}</span>
+            <span style="color: var(--text-3);">Time</span><span class="mono"><span style="color: var(--text-3);">{{r.time.a}} → </span><span style="color: var(--accent-ink);">{{r.time.b}}</span></span><span class="chip">{{r.time.d}}</span>
+            <span style="color: var(--text-3);">Cost</span><span class="mono"><span style="color: var(--text-3);">{{r.cost.a}} → </span><span style="color: var(--accent-ink);">{{r.cost.b}}</span></span><span class="chip">{{r.cost.d}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div role="table" aria-label="After the site changed" style="display: flex; flex-direction: column;">
+      <span style="font-size: 12px; color: var(--text-3); padding-bottom: 12px;">After the site changed</span>
+      <sc-for list="{{changed}}" as="r" hint-placeholder-count="3">
+        <div role="row" style="display: flex; flex-direction: column; gap: 14px; padding: 20px 0; border-top: 1px solid var(--border);">
+          <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 15px; font-weight: 500;">{{r.task}}</span><span style="font-size: 13px; line-height: 20px; color: var(--text-3);">{{r.note}}</span></div>
+          <div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; font-size: 13px;">
+            <span style="color: var(--text-3);">Tokens</span><span class="mono"><span style="color: var(--text-3);">{{r.tokens.a}} → </span><span style="color: var(--accent-ink);">{{r.tokens.b}}</span></span><span class="chip">{{r.tokens.d}}</span>
+            <span style="color: var(--text-3);">Time</span><span class="mono"><span style="color: var(--text-3);">{{r.time.a}} → </span><span style="color: var(--accent-ink);">{{r.time.b}}</span></span><span class="chip">{{r.time.d}}</span>
+            <span style="color: var(--text-3);">Cost</span><span class="mono"><span style="color: var(--text-3);">{{r.cost.a}} → </span><span style="color: var(--accent-ink);">{{r.cost.b}}</span></span><span class="chip">{{r.cost.d}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="max-width: 760px; display: flex; flex-direction: column; gap: 12px;">
+      <p style="margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2);">A button was renamed since the recording. That added 12 to 15 seconds and 1 to 2 cents: your agent fixed that one step and the fix was saved.</p>
+      <p style="margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2);">Best for chores you repeat. The first run still goes through your agent, and a task you do once is just as quick to ask for.</p>
+      <p style="margin: 0; font-size: 11px; line-height: 18px; color: var(--text-3);">Claude Sonnet 5.5 through Claude in Chrome, against the saved routine, on one machine. Median of 5 runs each, a small sample. Costs are what Claude Code reported at list prices. The YouTube task ran on real YouTube; the other two on a replica of a store console. Token totals include context read back from cache.</p>
     </div>
   </section>
 
   <section class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 24px;">
     <h2 class="h2">It checks the page before every step.</h2>
-    <div style="display: flex; flex-direction: column;">
-      <span style="padding-bottom: 4px; font-size: 12px; color: var(--accent-ink);">Every step · no model, no tokens</span>
-      <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 20px; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border); align-items: start;">
-        <span class="mono" style="font-size: 12px; line-height: 24px; color: var(--accent-ink);">1</span>
-        <div style="display: flex; flex-direction: column; gap: 4px;"><h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Page structure</h3><p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">Same layout as when it was recorded?</p></div>
-        <span style="padding-top: 5px;"><span class="ck ck1" style="color: var(--accent-ink); display: flex;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span></span>
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--accent);">
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 20px;"><span class="mono" style="font-size: 12px; color: var(--text-3);">Same page</span><span class="ck ck1" style="color: var(--accent-ink); display: flex;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span></div>
+        <h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">It runs straight through.</h3>
+        <p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">No model, no tokens.</p>
       </div>
-      <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 20px; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border); align-items: start;">
-        <span class="mono" style="font-size: 12px; line-height: 24px; color: var(--accent-ink);">2</span>
-        <div style="display: flex; flex-direction: column; gap: 4px;"><h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Element</h3><p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">Same button, field or link?</p></div>
-        <span style="padding-top: 5px;"><span class="ck ck2" style="color: var(--accent-ink); display: flex;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span></span>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--border-strong);">
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 20px;"><span class="mono" style="font-size: 12px; color: var(--text-3);">A step moved</span></div>
+        <h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Only that step goes to your agent.</h3>
+        <p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">It fixes it, and the fix is saved for next time.</p>
       </div>
-      <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 20px; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border); align-items: start;">
-        <span class="mono" style="font-size: 12px; line-height: 24px; color: var(--accent-ink);">3</span>
-        <div style="display: flex; flex-direction: column; gap: 4px;"><h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Screenshot crop</h3><p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">Does the area around it still look the same?</p></div>
-        <span style="padding-top: 5px;"><span class="ck ck3" style="color: var(--accent-ink); display: flex;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span></span>
-      </div>
-      <span style="padding: 20px 0 4px; font-size: 12px; color: var(--text-3);">Only when needed</span>
-      <div class="skip" style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 20px; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border); align-items: start;">
-        <span class="mono" style="font-size: 12px; line-height: 24px; color: var(--text-3);">4</span>
-        <div style="display: flex; flex-direction: column; gap: 4px;"><h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Model</h3><p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">Called only for a step that changed.</p></div>
-        <span style="padding-top: 5px;"><span></span></span>
-      </div>
-      <div class="skip" style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 20px; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border); align-items: start;">
-        <span class="mono" style="font-size: 12px; line-height: 24px; color: var(--text-3);">5</span>
-        <div style="display: flex; flex-direction: column; gap: 4px;"><h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Your agent</h3><p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">Takes over only if the replay breaks.</p></div>
-        <span style="padding-top: 5px;"><span></span></span>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--border-strong);">
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 20px;"><span class="mono" style="font-size: 12px; color: var(--text-3);">It breaks</span></div>
+        <h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500;">Your agent takes over.</h3>
+        <p style="margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2);">From that step, with everything done so far.</p>
       </div>
     </div>
   </section>
@@ -249,20 +291,20 @@ body{margin:0}
 
   <section class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 24px;">
     <div style="display: flex; flex-direction: column; gap: 10px;">
-      <h2 class="h2">Routines other people keep working.</h2>
-      <p class="lede" style="font-size: 15px; line-height: 24px;">Published by people who run them. When a site changes, fixes go back to the owner.</p>
+      <h2 class="h2">Routines other people keep working. Soon.</h2>
+      <p class="lede" style="font-size: 15px; line-height: 24px;">Coming next: publish a routine, or install one someone else maintains. When a site changes, the fix goes back to the owner. These are examples.</p>
     </div>
     <div style="border-top: 1px solid var(--border);">
         <div style="padding: 14px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; justify-content: space-between; align-items: baseline;"><span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">arunprakashg/</span>play-release</span><span style="font-size: 12px; color: var(--text-3);">2.3k use it</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline;"><span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">arunprakashg/</span>play-release</span><span style="font-size: 12px; color: var(--text-3);">Example</span></div>
           <span style="font-size: 13px; color: var(--text-2);">play.google.com · 20 steps · pauses before rollout</span>
         </div>
         <div style="padding: 14px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; justify-content: space-between; align-items: baseline;"><span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">meeraiyer/</span>gstr2b-download</span><span style="font-size: 12px; color: var(--text-3);">8.1k use it</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline;"><span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">meeraiyer/</span>gstr2b-download</span><span style="font-size: 12px; color: var(--text-3);">Example</span></div>
           <span style="font-size: 13px; color: var(--text-2);">gst.gov.in · 11 steps</span>
         </div>
         <div style="padding: 14px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; justify-content: space-between; align-items: baseline;"><span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">tomaszk/</span>cf-dns-record</span><span style="font-size: 12px; color: var(--text-3);">1.4k use it</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline;"><span class="mono" style="font-size: 14px; font-weight: 500;"><span style="color: var(--text-3); font-weight: 400;">tomaszk/</span>cf-dns-record</span><span style="font-size: 12px; color: var(--text-3);">Example</span></div>
           <span style="font-size: 13px; color: var(--text-2);">dash.cloudflare.com · 9 steps · pauses before save</span>
         </div>
     </div>
@@ -291,11 +333,26 @@ body{margin:0}
   </footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":375,"height":3950}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":375,"height":6300}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
       p: { bundle: '{{bundle}}', version: '{{version_name}}', notes: '{{release_notes}}', secret: '{{secret:password}}', email: '{{email}}' },
+      pain: [
+        { n: '539k', t: 'tokens to change one YouTube description' },
+        { n: '17', t: 'tool calls, and 6 screenshots sent to the model' },
+        { n: '0:56', t: 'start to finish, every time it runs' },
+        { n: '+19k', t: 'tokens of page snapshots left in your agent’s context afterwards' }
+      ],
+      results: [
+        { task: 'Edit a YouTube description', note: 'Real YouTube, signed in', tokens: { a: '539k', b: '97k', d: '−82%' }, time: { a: '0:56', b: '0:19', d: '−66%' }, cost: { a: '$0.21', b: '$0.04', d: '−81%' } },
+        { task: 'Release a build to testers', note: 'Replica of a store console, one form', tokens: { a: '430k', b: '131k', d: '−70%' }, time: { a: '0:46', b: '0:15', d: '−67%' }, cost: { a: '$0.17', b: '$0.04', d: '−73%' } },
+        { task: 'Release with every setting', note: 'The same console, a long form', tokens: { a: '910k', b: '199k', d: '−78%' }, time: { a: '1:33', b: '0:27', d: '−71%' }, cost: { a: '$0.32', b: '$0.06', d: '−83%' } }
+      ],
+      changed: [
+        { task: 'Release a build to testers', note: 'One button renamed since the recording', tokens: { a: '430k', b: '198k', d: '−54%' }, time: { a: '0:46', b: '0:28', d: '−40%' }, cost: { a: '$0.17', b: '$0.06', d: '−66%' } },
+        { task: 'Release with every setting', note: 'One button renamed since the recording', tokens: { a: '910k', b: '305k', d: '−66%' }, time: { a: '1:33', b: '0:41', d: '−55%' }, cost: { a: '$0.32', b: '$0.08', d: '−76%' } }
+      ],
       metrics: [
         { label: 'Tokens used', first: '539k', replay: '97k', rep: '18%' },
         { label: 'Time', first: '0:56', replay: '0:19', rep: '34%' },
