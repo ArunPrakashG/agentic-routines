@@ -26,6 +26,33 @@ export async function ask<T = unknown>(tabId: number, msg: ContentMsg): Promise<
   return res.ok as T;
 }
 
+// Tabs a routine or an agent is driving: their pages glow, and the glow comes back after a navigation.
+const controlled = new Map<number, { mode: 'run' | 'paused'; until: number }>();
+
+/** Show that this tab is being driven. The page ends the glow by itself after ttl, so a stalled run leaves nothing behind. */
+export async function glow(tabId: number, mode: 'run' | 'paused' | 'off', ttl = 8000) {
+  if (mode === 'off') controlled.delete(tabId);
+  else controlled.set(tabId, { mode, until: Date.now() + ttl });
+  try {
+    await ask(tabId, { t: 'glow', mode, ttl });
+  } catch {
+    // A restricted page cannot show it.
+  }
+}
+
+/** Run something that takes a picture of the tab, with the glow, cursor and outline out of the picture. */
+export async function bare<T>(tabId: number, fn: () => Promise<T>): Promise<T> {
+  if (!controlled.has(tabId)) return fn();
+  await ask(tabId, { t: 'veil', on: true }).catch(() => {});
+  // The next frame is one without it.
+  await rendering(tabId);
+  try {
+    return await fn();
+  } finally {
+    await ask(tabId, { t: 'veil', on: false }).catch(() => {});
+  }
+}
+
 // A window on a hidden workspace stops drawing, and a page waiting for a frame stops with it.
 export const rendering = (tabId: number) => ask<boolean>(tabId, { t: 'rendering' }).catch(() => true);
 
@@ -46,6 +73,9 @@ export async function waitLoaded(tabId: number, timeoutMs = 30_000) {
     if (t.status === 'complete') {
       try {
         await ensureContent(tabId);
+        // A new document starts without the glow.
+        const c = controlled.get(tabId);
+        if (c && c.until > Date.now()) void glow(tabId, c.mode, c.until - Date.now());
         return;
       } catch {
         // Restricted page or still swapping documents.

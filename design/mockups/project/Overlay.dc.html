@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tab control</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+.t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
+@supports not selector(::-webkit-scrollbar){.t-light *,.t-dark *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}}
+.t-light ::-webkit-scrollbar,.t-dark ::-webkit-scrollbar{width:10px;height:10px}
+.t-light ::-webkit-scrollbar-track,.t-dark ::-webkit-scrollbar-track,.t-light ::-webkit-scrollbar-corner,.t-dark ::-webkit-scrollbar-corner{background:transparent}
+.t-light ::-webkit-scrollbar-thumb,.t-dark ::-webkit-scrollbar-thumb{background:var(--border-strong);border:3px solid transparent;background-clip:content-box;border-radius:8px}
+.t-light ::-webkit-scrollbar-thumb:hover,.t-dark ::-webkit-scrollbar-thumb:hover{background:var(--text-3);background-clip:content-box}
+.tm,.tm *{box-sizing:border-box}
+.pg{position:relative;overflow:hidden;background:#fff;color:#1b1c24;font-family:var(--font-sans);border:1px solid var(--border);border-radius:10px}
+.edge{position:absolute;inset:0;pointer-events:none;opacity:0;animation:edge 12s var(--ease-out) infinite both}
+.edge i{position:absolute;display:block}
+.edge .t{left:0;right:0;top:0;height:56px;background:linear-gradient(var(--glow),transparent)}
+.edge .b{left:0;right:0;bottom:0;height:56px;background:linear-gradient(0deg,var(--glow),transparent)}
+.edge .l{top:0;bottom:0;left:0;width:56px;background:linear-gradient(90deg,var(--glow),transparent)}
+.edge .r{top:0;bottom:0;right:0;width:56px;background:linear-gradient(270deg,var(--glow),transparent)}
+.edge.amber{--glow:rgba(240,176,74,.5)}
+@keyframes edge{0%{opacity:0}4%{opacity:.6}12%{opacity:1}20%{opacity:.6}28%{opacity:1}36%{opacity:.6}44%{opacity:1}52%{opacity:.6}60%{opacity:1}68%{opacity:.6}76%{opacity:1}92%{opacity:.7}100%{opacity:0}}
+.ring{position:absolute;border-radius:6px;border:2px solid var(--accent);background:rgba(53,48,224,.1);box-shadow:0 0 0 4px rgba(53,48,224,.12);opacity:0;pointer-events:none}
+.r1{animation:r1 12s var(--ease-out) infinite both}.r3{animation:r3 12s var(--ease-out) infinite both}
+@keyframes r1{0%,12%{opacity:0;transform:scale(1.05)}16%,50%{opacity:1;transform:none}54%,100%{opacity:0}}
+@keyframes r3{0%,52%{opacity:0;transform:scale(1.05)}56%,82%{opacity:1;transform:none}86%,100%{opacity:0}}
+.cur{position:absolute;left:0;top:0;pointer-events:none;opacity:0;animation:cur 12s var(--ease-in-out) infinite both}
+@keyframes cur{0%,6%{opacity:0;transform:translate(640px,70px)}10%{opacity:1;transform:translate(640px,70px)}20%,50%{opacity:1;transform:translate(300px,230px)}58%,82%{opacity:1;transform:translate(120px,290px)}92%{opacity:1;transform:translate(120px,290px)}98%,100%{opacity:0;transform:translate(120px,290px)}}
+.pulse{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;border:2px solid var(--accent);opacity:0;pointer-events:none}
+.p1{left:300px;top:230px;animation:p1 12s var(--ease-out) infinite both}.p2{left:120px;top:290px;animation:p2 12s var(--ease-out) infinite both}
+@keyframes p1{0%,20%{opacity:0;transform:scale(.3)}22%{opacity:.9;transform:scale(.5)}30%,100%{opacity:0;transform:scale(1.5)}}
+@keyframes p2{0%,58%{opacity:0;transform:scale(.3)}60%{opacity:.9;transform:scale(.5)}68%,100%{opacity:0;transform:scale(1.5)}}
+.chip{position:absolute;left:18px;top:14px;white-space:nowrap;padding:3px 8px;border-radius:6px;background:var(--accent);color:#fff;font:500 11px/16px var(--font-sans)}
+.typed{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;width:0;animation:typed 12s steps(18) infinite both}
+@keyframes typed{0%,24%{width:0}46%,92%{width:152px}100%{width:152px}}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:breathe 2s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.tm *{animation:none !important}.tm .edge{opacity:1}.tm .r1{opacity:1}.tm .cur{opacity:1;transform:translate(300px,230px)}.tm .typed{width:152px}}
+</style>
+</helmet>
+<div class="tm t-dark" style="width: 1200px; height: 900px; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); font-size: 13px; line-height: 20px; border: 1px solid var(--border); padding: 32px 40px; display: flex; flex-direction: column; gap: 22px;">
+  <header style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h1 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 600;">Tab control</h1>
+    <span style="color: var(--text-3);">What the page shows while a routine or an agent drives it</span>
+  </header>
+
+  <div style="display: grid; grid-template-columns: 760px 1fr; gap: 32px; flex: 1; min-height: 0;">
+    <div class="pg" style="width: 760px; height: 560px; --glow: rgba(53,48,224,.42);">
+      <div style="height: 40px; border-bottom: 1px solid #E4E5EC; display: flex; align-items: center; padding: 0 20px; gap: 14px; font-size: 13px; color: #5E6072;"><b style="color: #1b1c24;">Acme Console</b><span>Apps</span><span>Releases</span><span>Settings</span></div>
+      <div style="padding: 28px 40px;">
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 18px;">New release · Internal testing</div>
+        <div style="font-size: 12px; color: #5E6072; margin-bottom: 4px;">Release name</div>
+        <div style="width: 320px; height: 34px; border: 1px solid #C6C9D4; border-radius: 6px; padding: 6px 10px; margin-bottom: 18px;">2.15.0 (215)</div>
+        <div style="font-size: 12px; color: #5E6072; margin-bottom: 4px;">Release notes</div>
+        <div style="width: 440px; height: 34px; border: 1px solid #C6C9D4; border-radius: 6px; padding: 6px 10px; margin-bottom: 26px;"><span class="typed">Dark mode for the reader.</span></div>
+        <div style="display: inline-block; padding: 8px 16px; border-radius: 6px; background: #3530E0; color: #fff; font-weight: 500;">Start rollout</div>
+      </div>
+
+      <div class="edge"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+      <div class="ring r1" style="left:36px;top:202px;width:448px;height:42px;"></div>
+            <div class="ring r3" style="left:36px;top:262px;width:115px;height:44px;"></div>
+      <div class="pulse p1"></div><div class="pulse p2"></div>
+      <div class="cur">
+        <svg width="22" height="22" viewBox="0 0 22 22" style="display:block;filter:drop-shadow(0 2px 4px rgba(20,19,31,.35))"><path d="M3 2l15 7.2-6.4 1.6L9 17.5z" fill="#3530E0" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span class="chip">Type · Release notes</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      <section>
+        <h2 style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-1);">Edge glow</h2>
+        <p style="margin: 0; color: var(--text-2);">Accent light, 56px deep, along all four edges of the page. Fades in over 400ms when a step starts, breathes slowly while steps run, fades out when it ends. Turns amber at a pause. Never takes pointer events.</p>
+      </section>
+      <section>
+        <h2 style="margin: 0 0 8px; font-size: 13px; font-weight: 600;">Cursor</h2>
+        <p style="margin: 0; color: var(--text-2);">An accent arrow with a small label naming the action (Click, Type, Select). It glides to the element in 250 to 600ms depending on distance, and clicks with a ring that expands and fades.</p>
+      </section>
+      <section>
+        <h2 style="margin: 0 0 8px; font-size: 13px; font-weight: 600;">Target</h2>
+        <p style="margin: 0; color: var(--text-2);">The element gets a 2px accent outline and a faint fill just before the cursor lands, so the eye is already there. It fades 300ms after the action.</p>
+      </section>
+      <section>
+        <h2 style="margin: 0 0 8px; font-size: 13px; font-weight: 600;">States</h2>
+        <div style="display: grid; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;"><span class="dot"></span><span style="color: var(--text-2);">Running · accent glow, cursor follows each step</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--warn);"></span><span style="color: var(--text-2);">Paused before a final step · amber glow, no cursor</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--danger);"></span><span style="color: var(--text-2);">Changed step · the target outline turns red until resolved</span></div>
+        </div>
+      </section>
+      <section>
+        <h2 style="margin: 0 0 8px; font-size: 13px; font-weight: 600;">Rules</h2>
+        <ul style="margin: 0; padding-left: 18px; color: var(--text-2);">
+          <li>Hidden for every screenshot, so a replay check never sees it.</li>
+          <li>Reduced motion: glow and outline stay, the cursor jumps with no travel.</li>
+          <li>Lives in a shadow root on the page, above everything, ignores the mouse.</li>
+          <li>Off when the run ends, the tab closes or the agent disconnects.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
