@@ -1,6 +1,6 @@
 // Functional check of the API: the real Go binary with a throwaway Postgres and Redis, and a
 // stand-in for Google's token endpoint and keys. It uses throwaway secrets and never touches .keys.
-//   node dev/e2e-api.mjs
+//   node dev/e2e/e2e-api.mjs
 import { spawnSync } from 'node:child_process';
 import { createHash, createSign, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const API_DIR = join(ROOT, 'apps/api');
 const PORT = 8799;
 const GOOGLE_PORT = 8798;
@@ -349,7 +349,7 @@ one = await (await call(adm, 'GET', `/admin/submissions/${pub.id}`)).json();
 check(one.status === 'approved' && one.live?.version === 2, 'a decided one shows the live copy to compare with');
 check((await call(adm, 'GET', '/admin/submissions/not-an-id')).status === 404 && (await call(adm, 'GET', '/admin/submissions?status=nope')).status === 400, 'bad ids and filters are refused');
 
-check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G9', note: 'x' }))) === 'bad_guideline', 'a rejection must name a real guideline');
+check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G10', note: 'x' }))) === 'bad_guideline', 'a rejection must name a real guideline');
 check((await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G3' })).status === 400, 'and say why');
 check((await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G3', note: 'Step 3 types a key. Take it out and use a secret.' })).ok, 'a reviewer can reject it');
 check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/approve`))) === 'not_pending', 'which cannot then be approved');
@@ -416,7 +416,7 @@ for (let i = 0; i < 22; i++) slow.push((await call(p3, 'PUT', '/routines/queued-
 check(slow.includes(429), 'and cannot flood the queue in a day');
 check((await call(p3, 'GET', '/me/submissions')).ok && (await (await call(p3, 'GET', '/me/submissions')).json()).submissions.length <= 50, "a publisher's list is capped");
 
-// What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e.mjs, AR_CAPTURE=1).
+// What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e/e2e.mjs, AR_CAPTURE=1).
 // Its host is the local test site, so it is moved to a real-looking one.
 const sent = JSON.parse(readFileSync(join(ROOT, 'dev/fixtures/published-routine.json'), 'utf8').replaceAll('127.0.0.1:8767', 'console.acme.example'));
 const sentLive = await publishLive(p1, sent.meta.name, sent);
@@ -443,7 +443,7 @@ const tool = async (name, args = {}) => {
 let t = await tool('routines_search', { site: 'https://play.google.com/console/x' });
 check(!t.error && t.text.includes('pone/play-release v2') && t.text.includes('Use when'), 'an agent finds a routine by the site it is on');
 t = await tool('routines_search', { query: 'nothing like this' });
-check(!t.error && /nothing in the directory/i.test(t.text), 'and is told when there is none');
+check(!t.error && /nothing installed, in the directory/i.test(t.text), 'and is told when there is none');
 t = await tool('routine_install', { id: 'pone/play-release' });
 check(!t.error && t.text.includes('Installed pone/play-release v2') && t.text.includes('asks for version_name') && t.text.includes('pauses before step 3'), 'an agent installs it and is told what it asks and where it pauses');
 const onDisk = (f) => sh(`cat '${mcpHome}/routines/pone/play-release/${f}'`).stdout;
