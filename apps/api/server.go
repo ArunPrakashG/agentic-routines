@@ -61,6 +61,10 @@ func (a *app) wrap(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		// Nothing here is for a shared cache: it is all per person. The proxy adds the security headers.
 		w.Header().Set("Cache-Control", "no-store")
+		// The directory and the block list are public, and the website reads them from the browser.
+		if r.Method == http.MethodGet && publicRead(r.URL.Path) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		defer func() {
 			if p := recover(); p != nil {
 				slog.Error("panic", "path", r.URL.Path, "panic", p)
@@ -74,6 +78,10 @@ func (a *app) wrap(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(sw, r)
 	})
+}
+
+func publicRead(path string) bool {
+	return path == "/api/v1/blocklist" || path == "/api/v1/routines" || strings.HasPrefix(path, "/api/v1/routines/")
 }
 
 // The proxy in front sets X-Client-IP from the connection it saw; the app is not reachable any other way.

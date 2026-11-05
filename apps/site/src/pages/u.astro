@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/directory.css';
+---
+<Base title="Publisher" description="Routines published by one person in the Browser Routines directory." path="/u" noindex>
+  <div class="wrap page" id="root">
+    <p class="crumb"><a href="/directory">Directory</a></p>
+    <div class="state">Loading…</div>
+  </div>
+</Base>
+
+<script>
+  import { API, type Summary } from '../lib/api';
+  import { el, card } from '../lib/dom';
+
+  const root = document.getElementById('root')!;
+  const h = new URLSearchParams(location.search).get('h') ?? '';
+  const crumb = el('p', { class: 'crumb' }, el('a', { href: '/directory' }, 'Directory'));
+
+  async function run() {
+    if (!/^[a-z0-9_-]{1,40}$/i.test(h)) { root.replaceChildren(crumb, el('div', { class: 'state' }, el('b', {}, 'No such publisher.'), 'Check the address.')); return; }
+    document.title = `${h} · Browser Routines`;
+    try {
+      // The search has no owner filter, so fetch pages and keep this publisher's routines.
+      const mine: Summary[] = [];
+      for (let offset = 0; offset < 200; offset += 50) {
+        const res = await fetch(`${API}/routines?limit=50&offset=${offset}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const { routines } = (await res.json()) as { routines: Summary[] };
+        mine.push(...routines.filter((r) => r.owner.toLowerCase() === h.toLowerCase()));
+        if (routines.length < 50) break;
+      }
+      const total = mine.reduce((n, r) => n + r.installs, 0);
+      root.replaceChildren(
+        crumb,
+        el('header', { class: 'rhead' }, el('h1', {}, h), el('div', { class: 'facts mono' }, el('span', {}, `${mine.length} routines`), el('span', {}, `${total} installs`))),
+        mine.length ? el('div', { class: 'list' }, ...mine.map(card)) : el('div', { class: 'state' }, el('b', {}, 'Nothing listed.'), 'This publisher has no routines in the directory.'),
+      );
+    } catch {
+      root.replaceChildren(crumb, el('div', { class: 'state' }, el('b', {}, 'The directory is not reachable.'), 'Try again in a minute.'));
+    }
+  }
+  run();
+</script>
