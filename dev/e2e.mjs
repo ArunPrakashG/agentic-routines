@@ -436,6 +436,50 @@ if (panel) {
   await call('routine_test', { draft_id: id8, params: { release_name: '6.0.0 (600)', whats_new: 'Checked.' } });
   t = await call('routine_save', { draft_id: id8 });
   check(/Saved acme-track v2/.test(t), 'after the test it is the next version');
+
+  // ---------- discovery: pages, hints, search ranking, stats, surface ----------
+  const fsp = await import('node:fs/promises');
+  const hostPort = SITE.replace('http://', '');
+  t = await call('routine_describe', { name: 'acme-release' });
+  check(/Applies to: .*/.test(t) && t.includes(`${hostPort}/release.html`), 'the routine records the page it applies to, worked out from the recording');
+  check(/Agent runs on this machine: \d+ runs?, \d+% finished, .*model call.*median \d+s, last (just now|.* ago)/.test(t), 'describe shows how the agent’s runs have gone, kept locally');
+  t = await call('navigate', { url: `${SITE}/release.html` });
+  check(/^Routine rt_acme_release handles this page: .+\. Prefer it\.$/m.test(t) && !/rt_acme_track handles/.test(t), 'navigate says which routine handles the page, and only that one');
+  t = await call('navigate', { url: `${SITE}/hooks.html` });
+  check(!/handles this page/.test(t), 'a page no routine lists gets no hint');
+  await evalIn((u) => u.startsWith(SITE), `location.href = ${JSON.stringify(`${SITE}/track.html?t=internal`)}`);
+  await sleep(800);
+  t = await call('read_page');
+  check(/Routine rt_acme_track handles this page/.test(t), 'read_page says it too, when the tab has moved to a page a routine handles');
+  check(!/handles this page/.test(await call('read_page')), 'and says it once, not on every read');
+  t = await call('routines_search', { url: `${SITE}/track.html?t=internal` });
+  check(/^Installed: rt_acme_track .*handles this page/m.test(t) && t.indexOf('rt_acme_track') < t.indexOf('rt_acme_release'), 'search ranks the routine for this page above one that only matches the site');
+  t = await call('routines_search', { url: `${SITE}/release.html` });
+  check(t.indexOf('rt_acme_release') >= 0 && t.indexOf('rt_acme_release') < t.indexOf('rt_acme_track'), 'and the other way round for the other page');
+  check(/\d+ runs?, \d+% finished/.test(t), 'search shows the stats');
+  t = await call('routines_list');
+  check(/\d+ runs?, \d+% finished/.test(t), 'the list does too');
+
+  // A desktop routine is understood but not run; urls written by the author are kept.
+  const dirOf = (n) => join(STORE, 'routines/local', n);
+  const copy = async (from, to, edit) => {
+    await fsp.mkdir(dirOf(to), { recursive: true });
+    await fsp.copyFile(join(dirOf(from), 'steps.json'), join(dirOf(to), 'steps.json'));
+    const md = await fsp.readFile(join(dirOf(from), 'ROUTINE.md'), 'utf8');
+    await fsp.writeFile(join(dirOf(to), 'ROUTINE.md'), edit(md.replace(new RegExp(`^name: ${from}$`, 'm'), `name: ${to}`)));
+  };
+  await copy('acme-release', 'acme-desktop', (md) => md.replace(/^site:/m, 'surface: desktop\nsite:'));
+  await copy('acme-release', 'acme-pinned', (md) => md.replace(/^urls:\n(  - .*\n)+/m, '').replace(/^site:/m, `urls:\n  - ${hostPort}/hooks.html\nsite:`));
+  await sleep(1200);
+  t = await call('routines_list');
+  check(/acme-desktop .*desktop, not supported yet/.test(t), 'a routine for another surface is listed as not supported yet');
+  check(!(await client.listTools()).tools.some((x) => x.name === 'rt_acme_desktop'), 'and gets no tool');
+  r = await tryCall('routine_run', { name: 'acme-desktop', params: {} });
+  check(r.error && /acts on the desktop, which this version cannot control/.test(r.text), 'running it says so');
+  t = await call('navigate', { url: `${SITE}/hooks.html` });
+  check(/rt_acme_pinned handles this page/.test(t) && !/rt_acme_release handles/.test(t), 'urls the author wrote override what is worked out');
+  await fsp.rm(dirOf('acme-desktop'), { recursive: true });
+  await fsp.rm(dirOf('acme-pinned'), { recursive: true });
 }
 
 // ---------- 9. publishing to the directory ----------

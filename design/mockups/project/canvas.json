@@ -36,6 +36,13 @@
       "x": 0,
       "y": 0
     },
+    "Hooks.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Review hooks",
+      "w": 400,
+      "x": 8175,
+      "y": 2040
+    },
     "InstallGit.dc.html": {
       "h": 844,
       "title": "Side panel \u00b7 Install from Git",
@@ -163,7 +170,8 @@
     "Sources.dc.html",
     "InstallGit.dc.html",
     "Submit.dc.html",
-    "Submissions.dc.html"
+    "Submissions.dc.html",
+    "Hooks.dc.html"
   ],
   "pages": [],
   "title": "Agentic Routines",

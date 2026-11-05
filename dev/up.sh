@@ -4,6 +4,8 @@
 #   dev/up.sh [--headless] [--no-claude] [--no-build]
 # AR_DEV_DIR moves the state folder, AR_CHROME picks the browser, AR_MODEL the agent's model.
 # AR_TMUX_PREFIX renames the tmux sessions (default br), so two checkouts can run side by side.
+# AR_TLS_HOST and AR_TLS_PORT make https://$AR_TLS_HOST/ in that browser reach 127.0.0.1:$AR_TLS_PORT, with the
+# certificate errors ignored, for checks that need an https site (routines from Git only install for https).
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 DEV=${AR_DEV_DIR:-$ROOT/.dev}
@@ -32,6 +34,8 @@ if curl -s --max-time 1 -o /dev/null "127.0.0.1:$SITE_PORT/"; then
 fi
 
 # Branded Chrome ignores --load-extension, so this needs Chromium.
+TLS=
+if [ -n "$AR_TLS_HOST" ]; then TLS="--ignore-certificate-errors '--host-resolver-rules=MAP $AR_TLS_HOST 127.0.0.1:${AR_TLS_PORT:?}'"; fi
 CHROME=${AR_CHROME:-$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}
 [ -x "$CHROME" ] || { echo "No Chromium found. Run: npx playwright install chromium" >&2; exit 1; }
 NODE=$(command -v node)
@@ -57,7 +61,7 @@ env HOME="$BHOME" AGENTIC_ROUTINES_HOME="$STORE" PATH="$(dirname "$NODE"):/usr/b
 
 touch "$DEV/.started"
 tmux new-session -d -s "$P-site" "python3 -m http.server $SITE_PORT --bind 127.0.0.1 --directory '$ROOT/dev/site'"
-tmux new-session -d -s "$P-chrome" "env HOME='$BHOME' AGENTIC_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
+tmux new-session -d -s "$P-chrome" "env HOME='$BHOME' AGENTIC_ROUTINES_HOME='$STORE' DISPLAY='$DISPLAY' WAYLAND_DISPLAY='$WAYLAND_DISPLAY' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' PATH='$(dirname "$NODE"):/usr/bin:/bin' '$CHROME' $HEADLESS $TLS --user-data-dir='$PROFILE' --load-extension='$EXT' --disable-extensions-except='$EXT' --remote-debugging-port=$CDP_PORT --password-store=basic --no-first-run --no-default-browser-check --window-size=1280,900 http://127.0.0.1:$SITE_PORT/ > '$DEV/chrome.log' 2>&1"
 
 i=0; until curl -s 127.0.0.1:$CDP_PORT/json/version >/dev/null || [ $i -gt 100 ]; do i=$((i+1)); sleep 0.2; done
 # Only a host from this browser counts: a crash leaves the old one's file behind.

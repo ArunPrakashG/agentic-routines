@@ -1,9 +1,10 @@
-import { compileRun, type CompileOptions, type Routine } from '@agentic-routines/core';
+import { compileRun, hookHash, type CompileOptions, type Routine } from '@agentic-routines/core';
 import * as agent from '../lib/agent';
 import * as auth from '../lib/auth';
 import * as directory from '../lib/directory';
 import * as draft from '../lib/draft';
 import * as git from '../lib/git';
+import * as hooks from '../lib/hooks';
 import * as native from '../lib/native';
 import { platform } from '../lib/platform';
 import * as replay from '../lib/replay';
@@ -41,7 +42,8 @@ export default defineBackground(() => {
   const panels = new Set<Browser.runtime.Port>();
   // Connected agents by session.
   const agents = new Map<string, string>();
-  let routines: PanelState['routines'] = [];
+  // As the host lists them: hooks carry the hash approval is pinned to, which becomes a state for the panel.
+  let routines: (Omit<PanelState['routines'][number], 'hooks'> & { hooks?: { count: number; hash: string } })[] = [];
   let recording: { runId: string; tabId: number } | undefined;
 
   // A routine waiting for the person to say yes to making it public. An agent can ask; only the panel can approve.
@@ -51,6 +53,8 @@ export default defineBackground(() => {
   // The same for a routine from a Git source or a folder.
   type Waiter = { ok: (v: unknown) => void; no: (e: Error) => void };
   let installing: { card: git.GitCard; waiter?: Waiter } | undefined;
+  // Hook code the person is reading from the library, to allow it or keep it off.
+  let reviewing: NonNullable<PanelState['hooksReview']> & { hash: string } | undefined;
 
   function badge() {
     browser.action.setBadgeText({ text: recording ? 'REC' : (publishing && !publishing.card.done) || installing ? '1' : '' });
@@ -68,7 +72,7 @@ export default defineBackground(() => {
     return new Promise((ok, no) => beginInstall(source, path, by, { ok, no }).catch(no));
   }
 
-  async function decideInstall(approve: boolean) {
+  async function decideInstall(approve: boolean, allowHooks = false) {
     const i = installing;
     if (!i || i.card.busy) return;
     if (!approve) {
@@ -83,7 +87,13 @@ export default defineBackground(() => {
     push();
     try {
       const saved = await git.install(i.card);
-      i.waiter?.ok({ name: saved.meta.name, owner: (saved.meta as { owner?: string }).owner ?? '', version: saved.meta.version, steps: saved.steps.length, site: saved.meta.site });
+      const owner = (saved.meta as { owner?: string }).owner ?? '';
+      // Approval is for the code the person read. If what got installed is not that (the source moved
+      // between the preview and the click), the hooks stay off and the person is asked again from the library.
+      const mine = saved.meta.hooks && Object.keys(saved.meta.hooks).length ? await hookHash(saved.meta.hooks) : undefined;
+      const allowed = !!mine && allowHooks && mine === i.card.hookHash;
+      if (allowed) await hooks.approve(`${owner}/${saved.meta.name}`, mine);
+      i.waiter?.ok({ name: saved.meta.name, owner, version: saved.meta.version, steps: saved.steps.length, site: saved.meta.site, hooks: mine ? { count: Object.keys(saved.meta.hooks!).length, approved: allowed } : undefined });
       installing = undefined;
       await refreshRoutines();
     } catch (e) {
@@ -166,14 +176,18 @@ export default defineBackground(() => {
       account: await auth.account(),
       connected: native.connected(),
       agents: [...new Set(agents.values())],
-      routines: routines.map((x) => {
-        const last = lastRuns[`${x.owner}/${x.name}`];
-        return { ...x, lastRun: last?.at, changed: last?.changed, draftedBy: x.draftedBy ? agent.agentName(x.draftedBy) : undefined, published: published[`${x.owner}/${x.name}`] };
-      }),
+      routines: await Promise.all(
+        routines.map(async (x) => {
+          const last = lastRuns[`${x.owner}/${x.name}`];
+          const h = x.hooks && { count: x.hooks.count, ...(await hooks.stateFor(`${x.owner}/${x.name}`, x.hooks.hash)) };
+          return { ...x, hooks: h && { count: h.count, state: h.state, reason: h.reason }, lastRun: last?.at, changed: last?.changed, draftedBy: x.draftedBy ? agent.agentName(x.draftedBy) : undefined, published: published[`${x.owner}/${x.name}`] };
+        }),
+      ),
       runs: all.filter((x) => !x.saved && x.events.length).map((x) => ({ id: x.id, source: x.source, startedAt: x.startedAt, updatedAt: x.updatedAt, events: x.events })),
       recording: recording?.runId,
       publish: publishing?.card,
       install: installing?.card,
+      hooksReview: reviewing && { id: reviewing.id, name: reviewing.name, hooks: reviewing.hooks, state: reviewing.state, busy: reviewing.busy, error: reviewing.error },
       replay: r && {
         id: r.id,
         name: r.routine.meta.name,
@@ -271,7 +285,23 @@ export default defineBackground(() => {
       case 'gitPreview':
         return beginInstall(c.source, c.path);
       case 'gitDecide':
-        return decideInstall(c.approve);
+        return decideInstall(c.approve, c.hooks);
+      case 'hooksReview': {
+        const r = await native.call<Routine & { owner?: string }>('store.read', { id: c.id });
+        if (!r.meta.hooks || !Object.keys(r.meta.hooks).length) throw new Error('This routine has no hooks.');
+        const st = await hooks.stateOf(c.id, r.meta.hooks);
+        reviewing = { id: c.id, name: r.meta.name, hooks: r.meta.hooks, state: st.state, hash: st.hash! };
+        return;
+      }
+      case 'hooksDecide': {
+        const r = reviewing;
+        reviewing = undefined;
+        if (!r) return;
+        // Only this click approves, and only the code that was on screen.
+        if (c.approve) await hooks.approve(r.id, r.hash);
+        else await hooks.revoke(r.id);
+        return;
+      }
       case 'enable':
         await native.call('store.setEnabled', { id: c.id, enabled: c.enabled });
         return refreshRoutines();
