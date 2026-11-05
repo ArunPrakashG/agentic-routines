@@ -77,6 +77,8 @@ async function openPanel(scheme = 'light') {
 async function shot(name) {
   await sleep(700);
   if (!shots || !panel) return;
+  // A replay fronts the site's window, and a page behind it may never answer a capture.
+  await panel.send('Page.bringToFront');
   const { data } = await panel.send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(join(SHOTS, `${name}.png`), Buffer.from(data, 'base64'));
   log('shot', name);
@@ -190,6 +192,13 @@ if (panel) {
 t = await run3;
 log(t);
 check(/routine updated to v2/.test(t), 'fix saved as v2');
+if (panel) {
+  await panelClick('Back to routines');
+  await sleep(300);
+  t = await panelText();
+  check(/ran just now/.test(t) && /Step \d+ changed on the last run/.test(t), 'the library shows the last run and the step that changed');
+  await shot('07b-library-changed');
+}
 t = await call('routines_list');
 log(t.split('\n').slice(0, 3).join(' | '));
 
@@ -203,7 +212,11 @@ t = await run4;
 log(t);
 check(/^Done.*0 model calls/.test(t), 'v2 replays with no model calls');
 await evalIn((u) => u.startsWith(SITE), 'delete localStorage.variant');
-if (panel) await panelClick('Back to routines');
+if (panel) {
+  await panelClick('Back to routines');
+  await sleep(300);
+  check(!/changed on the last run/.test(await panelText()), 'a clean run clears the changed note');
+}
 await shot('08-library-v2');
 if (panel) {
   await panelClick('Run acme-release');

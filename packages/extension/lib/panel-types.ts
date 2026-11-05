@@ -3,7 +3,7 @@ import type { RecordedEvent } from '@browser-routines/core';
 export interface PanelState {
   connected: boolean;
   agents: string[];
-  routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean }[];
+  routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; lastRun?: number; changed?: number[] }[];
   runs: { id: string; source: string; startedAt: number; updatedAt: number; events: RecordedEvent[] }[];
   recording?: string;
   replay?: {

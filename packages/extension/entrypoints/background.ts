@@ -6,6 +6,9 @@ import * as runs from '../lib/runs';
 import { ask } from '../lib/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel-types';
 
+// When each routine last ran and which steps changed then, by owner/name.
+type LastRuns = Record<string, { id: string; at: number; changed: number[] }>;
+
 export default defineBackground(() => {
   // ---------- requests from the MCP server, through the host ----------
   native.onRequest(async (method, p) => {
@@ -42,10 +45,14 @@ export default defineBackground(() => {
   async function state(): Promise<PanelState> {
     const all = await runs.list();
     const r = replay.current();
+    const { lastRuns = {} } = (await browser.storage.local.get('lastRuns')) as { lastRuns?: LastRuns };
     return {
       connected: native.connected(),
       agents: [...new Set(agents.values())],
-      routines,
+      routines: routines.map((x) => {
+        const last = lastRuns[`${x.owner}/${x.name}`];
+        return { ...x, lastRun: last?.at, changed: last?.changed };
+      }),
       runs: all.filter((x) => !x.saved && x.events.length).map((x) => ({ id: x.id, source: x.source, startedAt: x.startedAt, updatedAt: x.updatedAt, events: x.events })),
       recording: recording?.runId,
       replay: r && {
@@ -63,6 +70,15 @@ export default defineBackground(() => {
         error: r.error,
       },
     };
+  }
+
+  async function noteRun(s: replay.ReplayState) {
+    if (s.status !== 'done' && s.status !== 'failed') return;
+    const key = `${s.routine.meta.owner ?? 'local'}/${s.routine.meta.name}`;
+    const { lastRuns = {} } = (await browser.storage.local.get('lastRuns')) as { lastRuns?: LastRuns };
+    if (lastRuns[key]?.id === s.id) return;
+    lastRuns[key] = { id: s.id, at: Date.now(), changed: Object.keys(s.fixes).map(Number) };
+    await browser.storage.local.set({ lastRuns });
   }
 
   async function push() {
@@ -86,7 +102,7 @@ export default defineBackground(() => {
     if (e === 'routines.changed') refreshRoutines();
   });
   runs.onRunsChanged(push);
-  replay.onReplay(push);
+  replay.onReplay((s) => noteRun(s).then(push));
 
   async function setRecording(on: boolean) {
     if (on) {

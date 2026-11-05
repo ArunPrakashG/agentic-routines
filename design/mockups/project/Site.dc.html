@@ -216,7 +216,7 @@ body{margin:0}
         <div style="display: flex; flex-direction: column; gap: 12px;">
           <span style="font-size: 13px; color: var(--text-2);">{{m.label}}</span>
           <div style="display: grid; grid-template-columns: 88px minmax(0, 1fr) 72px; align-items: center; gap: 12px; font-size: 12px;">
-            <span style="color: var(--text-3);">First run</span>
+            <span style="color: var(--text-3);">Step by step</span>
             <span style="position: relative; height: 6px; border-radius: 3px; background: var(--surface-2);"><span class="fill gFirst an" style="width: 100%; background: var(--text-3);"></span></span>
             <span class="vFirst an" style="font-family: var(--font-mono); text-align: right;">{{m.first}}</span>
             <span style="color: var(--text-3);">Replay</span>
@@ -227,7 +227,7 @@ body{margin:0}
       </sc-for>
     </div>
 
-    <p style="margin: 40px 0 0; font-size: 11px; color: var(--text-3);">Estimates for one 25-step task, not measured.</p>
+    <p style="margin: 40px 0 0; font-size: 11px; color: var(--text-3);">Measured editing a YouTube description on Sonnet 5.5. Median of 5 runs, against Claude in Chrome.</p>
   </div>
   <nav style="position: absolute; right: 64px; top: 37px; display: flex; align-items: center; gap: 4px;">
     <a class="nav" href="#">Directory</a><a class="nav" href="#">GitHub</a><a class="btn btn-primary" href="#install" style="margin-left: 8px;">Install</a>
@@ -359,9 +359,9 @@ class Component extends DCLogic {
     return {
       p: { bundle: '{{bundle}}', version: '{{version_name}}', notes: '{{release_notes}}', secret: '{{secret:password}}', email: '{{email}}' },
       metrics: [
-        { label: 'Tokens in context', first: '128k', replay: '2.1k', rep: '1.6%' },
-        { label: 'Time', first: '2:34', replay: '0:31', rep: '20%' },
-        { label: 'Cost', first: '$1.40', replay: '$0.02', rep: '1.4%' }
+        { label: 'Tokens used', first: '539k', replay: '97k', rep: '18%' },
+        { label: 'Time', first: '0:56', replay: '0:19', rep: '34%' },
+        { label: 'Cost', first: '$0.21', replay: '$0.04', rep: '19%' }
       ]
     };
   }
