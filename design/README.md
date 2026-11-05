@@ -1,4 +1,4 @@
-# Browser Routines design
+# Agentic Routines design
 
 Canvas (private): https://claude.ai/artifact/R7X8cVw5L1E7mCBjJYTtZP
 
@@ -45,7 +45,7 @@ Transform and opacity only. Reduced motion shows the final frame.
 | Replay | Step 9 changed, paused before Start rollout (7 s loop) |
 | Agent | Terminal view of one `routine_run` call (12 s loop) |
 | States | Empty, and broken handed back to the agent |
-| Onboarding | Google sign-in, then `npx browser-routines setup` connecting each agent |
+| Onboarding | Google sign-in, then `npx agentic-routines setup` connecting each agent |
 | Site | Marketing page, desktop: hero loop, checks, safety, directory, install |
 | SiteMobile | Same page at 375 px |
 | Directory | Published routines by owner, with a detail pane showing When to use and `routine_install` |
@@ -54,7 +54,7 @@ Transform and opacity only. Reduced motion shows the final frame.
 ## Surfaces
 
 - Extension for Chrome (also Brave, Arc, Opera), Edge and Firefox. Same side panel everywhere. Google sign-in syncs routines across browsers.
-- One MCP server for Claude Code, Codex, GitHub Copilot and OpenCode. `npx browser-routines setup` writes each agent's config and links the browsers.
+- One MCP server for Claude Code, Codex, GitHub Copilot and OpenCode. `npx agentic-routines setup` writes each agent's config and links the browsers.
 - Marketing site with a routine directory. Every routine has an owner (`owner/name`). Fixes from other people's runs go to the owner as proposals. Publishing is a checkbox on Save, or `routine_publish`.
 - Each routine has a When to use text, drafted by the agent on Save. Agents see it as the routine's tool description. See [docs/architecture.md](../docs/architecture.md).
 

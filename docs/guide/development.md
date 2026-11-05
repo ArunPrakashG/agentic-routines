@@ -1,13 +1,13 @@
 # Development
 
-Browser Routines is a pnpm monorepo. The code is on [GitHub](https://github.com/ArunPrakashG/browser-routines).
+Agentic Routines is a pnpm monorepo. The code is on [GitHub](https://github.com/ArunPrakashG/agentic-routines).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `packages/extension` | The browser extension (WXT, Preact). One codebase for Chrome, Edge and Firefox. |
-| `packages/cli` | The `browser-routines` npm package: `setup`, `doctor`, `mcp` and the native `host`. |
+| `packages/cli` | The `agentic-routines` npm package: `setup`, `doctor`, `mcp` and the native `host`. |
 | `packages/core` | Routine format, compiler and locator matching, shared by both. |
 | `packages/browsers` | Every supported browser in one table: where it keeps native host manifests and which extension ids it accepts. |
 | `apps/api` | Accounts and the directory. A Go service on Postgres and Redis. |
@@ -22,15 +22,15 @@ Browser Routines is a pnpm monorepo. The code is on [GitHub](https://github.com/
  Claude Code / Codex / Copilot / OpenCode
         │ stdio (MCP)
         ▼
- browser-routines mcp  ◄── unix socket / named pipe ──►  browser-routines host
+ agentic-routines mcp  ◄── unix socket / named pipe ──►  agentic-routines host
  tools, routine index                                    native messaging, one per browser
         │ reads and writes                                      │
         ▼                                                       ▼
- ~/.browser-routines/routines/                          Extension (Chrome, Edge, Firefox)
+ ~/.agentic-routines/routines/                          Extension (Chrome, Edge, Firefox)
                                                         recorder, replayer, checks, side panel
 ```
 
-The MCP server and the native host are the same package in two modes. They talk over a socket in `~/.browser-routines`. The extension holds the Google session, so the tool server has no sign-in of its own. When the extension is signed out, local routines still work.
+The MCP server and the native host are the same package in two modes. They talk over a socket in `~/.agentic-routines`. The extension holds the Google session, so the tool server has no sign-in of its own. When the extension is signed out, local routines still work.
 
 ## Run it
 
@@ -53,5 +53,5 @@ Add an entry to `packages/browsers/src/index.ts`. If the browser is not Chromium
 
 ## More
 
-- [Architecture notes](https://github.com/ArunPrakashG/browser-routines/blob/main/docs/architecture.md): the design behind the routine format, replay checks, accounts and the directory.
+- [Architecture notes](https://github.com/ArunPrakashG/agentic-routines/blob/main/docs/architecture.md): the design behind the routine format, replay checks, accounts and the directory.
 - [Directory guidelines](/guidelines) and [privacy](/privacy).

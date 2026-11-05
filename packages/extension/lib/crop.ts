@@ -1,4 +1,4 @@
-import { dHash } from '@browser-routines/core';
+import { dHash } from '@agentic-routines/core';
 import { platform } from './platform';
 import { rendering } from './tabs';
 

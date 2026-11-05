@@ -1,4 +1,4 @@
-import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@browser-routines/core';
+import { CROP_DRIFT, fill, hashDistance, pageSimilarity, SAME_PAGE, type Candidate, type Locator, type PageFingerprint, type Routine, type RunResult, type Step } from '@agentic-routines/core';
 import { uploadFile } from './agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import { agentTabId, ask, settle, sleep, waitLoaded, wake } from './tabs';

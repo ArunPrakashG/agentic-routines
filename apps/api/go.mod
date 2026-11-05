@@ -1,4 +1,4 @@
-module github.com/ArunPrakashG/browser-routines/apps/api
+module github.com/ArunPrakashG/agentic-routines/apps/api
 
 go 1.27.3
 

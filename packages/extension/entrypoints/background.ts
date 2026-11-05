@@ -1,4 +1,4 @@
-import { compileRun, type CompileOptions, type Routine } from '@browser-routines/core';
+import { compileRun, type CompileOptions, type Routine } from '@agentic-routines/core';
 import * as agent from '../lib/agent';
 import * as auth from '../lib/auth';
 import * as directory from '../lib/directory';
@@ -94,7 +94,7 @@ export default defineBackground(() => {
   async function beginPublish(id: string, by?: string, waiter?: NonNullable<typeof publishing>['waiter']) {
     if (publishing && !publishing.card.done) throw new Error('Another routine is waiting for the user to approve publishing it. Try again after that.');
     const account = await auth.account();
-    if (!account) throw new Error('The user is not signed in. Ask them to sign in from the Browser Routines side panel.');
+    if (!account) throw new Error('The user is not signed in. Ask them to sign in from the Agentic Routines side panel.');
     const r = await native.call<Routine & { owner: string }>('store.read', { id });
     if (r.owner !== 'local' && r.owner !== account.handle) throw new Error(`${r.meta.name} is by ${r.owner}, so it cannot be published from here.`);
     const issues = directory.problems(r);

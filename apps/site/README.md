@@ -8,6 +8,6 @@ The marketing site and the public directory. Astro, built to static files, no se
 - `PUBLIC_API_URL` points them at another API (default: the production one). `SITE_URL` sets the canonical address and the sitemap.
 
 ```bash
-pnpm --filter @browser-routines/site dev     # http://127.0.0.1:4321
-pnpm --filter @browser-routines/site build   # apps/site/dist
+pnpm --filter @agentic-routines/site dev     # http://127.0.0.1:4321
+pnpm --filter @agentic-routines/site build   # apps/site/dist
 ```

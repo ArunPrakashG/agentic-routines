@@ -1,6 +1,6 @@
-# Browser Routines architecture
+# Agentic Routines architecture
 
-Status: draft for review, 2026-11-05. Builds on [browser-routines.md](../browser-routines.md) and the mockups in [design/](../design/README.md).
+Status: draft for review, 2026-11-05. Builds on [agentic-routines.md](../agentic-routines.md) and the mockups in [design/](../design/README.md).
 
 ## The idea in one line
 
@@ -13,12 +13,12 @@ A routine is a skill for the browser. It is a folder with a `ROUTINE.md` that te
         │ stdio (MCP)
         ▼
  ┌─────────────────────────┐   unix socket / named pipe   ┌──────────────────────┐
- │ browser-routines mcp    │◄────────────────────────────►│ browser-routines host │
- │ tools, routine index    │        (~/.browser-routines)  │ native messaging      │
+ │ agentic-routines mcp    │◄────────────────────────────►│ agentic-routines host │
+ │ tools, routine index    │        (~/.agentic-routines)  │ native messaging      │
  └───────────┬─────────────┘                               └──────────┬───────────┘
              │ reads/writes                                           │ one per browser
              ▼                                                        ▼
-   ~/.browser-routines/routines/                        Extension (Chrome, Edge, Firefox)
+   ~/.agentic-routines/routines/                        Extension (Chrome, Edge, Firefox)
    <owner>/<name>/ROUTINE.md, steps.json                 recorder · replayer · checks · side panel
              ▲                                                        │
              └──────────── sync (signed-in user) ─────── Directory API ◄── site + directory pages
@@ -27,7 +27,7 @@ A routine is a skill for the browser. It is a folder with a `ROUTINE.md` that te
 | Part | Job | Stack |
 |---|---|---|
 | Extension | Drives the browser for agents, records every run, replays routines, runs the page checks, side panel UI, Google sign-in | TypeScript, WXT (one codebase, builds MV3 for Chrome/Edge and Firefox), Preact |
-| `browser-routines` npm package | `mcp` mode for agents, `host` mode for native messaging, `setup` to write agent configs and register the host with each browser | TypeScript, Node 20, `@modelcontextprotocol/sdk` |
+| `agentic-routines` npm package | `mcp` mode for agents, `host` mode for native messaging, `setup` to write agent configs and register the host with each browser | TypeScript, Node 20, `@modelcontextprotocol/sdk` |
 | `core` package | Routine format, compiler (drop navigation, find params, mark pauses), locator matching, shared by extension and package | TypeScript |
 | Directory API | Accounts, sync, publish, versions, search, install counts, reports | Go service on Postgres and Redis, behind Caddy and Cloudflare |
 | Site and docs | Marketing page, documentation, routine directory, user profiles, privacy page | Astro, static, served from its own container on the same host as the API, reading the same API |
@@ -177,7 +177,7 @@ Trust and abuse:
 
 ## Sync
 
-The local folder `~/.browser-routines/routines/<owner>/<name>/` is the source of truth on each machine. The npm package reads and writes it, and the extension keeps a cache in IndexedDB. When signed in, the folder syncs to the API per user:
+The local folder `~/.agentic-routines/routines/<owner>/<name>/` is the source of truth on each machine. The npm package reads and writes it, and the extension keeps a cache in IndexedDB. When signed in, the folder syncs to the API per user:
 
 - A routine's version number only goes up.
 - When two machines edit the same version, the later save becomes the next version. No merge.

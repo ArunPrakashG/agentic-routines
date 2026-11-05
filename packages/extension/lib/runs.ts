@@ -1,4 +1,4 @@
-import type { RecordedEvent, Run } from '@browser-routines/core';
+import type { RecordedEvent, Run } from '@agentic-routines/core';
 
 // Every agent run is recorded. A new run starts after 10 idle minutes,
 // after a save, when the agent changes, or when a new agent session starts.

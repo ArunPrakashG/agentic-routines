@@ -7,8 +7,8 @@
 set -euo pipefail
 
 HOST=${HOST:-ovh-arun}
-DIR=infra/apps/browserroutines
-NAME=browserroutines-api
+DIR=infra/apps/agenticroutines
+NAME=agenticroutines-api
 cd "$(dirname "$0")/.."
 
 TAG=$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)
@@ -32,4 +32,4 @@ ssh "$HOST" "cd $DIR && \
   docker images $NAME --format '{{.Tag}}' | sort -r | tail -n +4 | sed 's/^/$NAME:/' | xargs -r docker rmi -f >/dev/null"
 # (keeps the three newest images on the server for a quick rollback: set TAG in .env and `docker compose up -d`)
 
-curl -fsS "https://browserroutines.arunprakashg.com/healthz" && echo " live: $NAME:$TAG"
+curl -fsS "https://agenticroutines.arunprakashg.com/healthz" && echo " live: $NAME:$TAG"

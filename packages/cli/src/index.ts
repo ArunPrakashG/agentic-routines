@@ -27,7 +27,7 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
 } else if (cmd === 'doctor') {
   runDoctor();
 } else {
-  console.log(`browser-routines
+  console.log(`agentic-routines
 
   setup [--dry-run]   Connect your browsers and agents (Claude Code, Codex, Copilot, OpenCode)
   doctor              Check what is connected and what is not

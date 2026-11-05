@@ -12,7 +12,7 @@ import (
 const (
 	accessTTL  = 15 * time.Minute
 	refreshTTL = 60 * 24 * time.Hour
-	issuer     = "browser-routines"
+	issuer     = "agentic-routines"
 )
 
 type tokens struct {

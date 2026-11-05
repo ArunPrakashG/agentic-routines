@@ -57,10 +57,10 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
-      '@browser-routines/browsers':
+      '@agentic-routines/browsers':
         specifier: workspace:*
         version: link:../browsers
-      '@browser-routines/core':
+      '@agentic-routines/core':
         specifier: workspace:*
         version: link:../core
       tsup:
@@ -88,7 +88,7 @@ importers:
         specifier: ^10.27.2
         version: 10.29.8
     devDependencies:
-      '@browser-routines/core':
+      '@agentic-routines/core':
         specifier: workspace:*
         version: link:../core
       '@preact/preset-vite':

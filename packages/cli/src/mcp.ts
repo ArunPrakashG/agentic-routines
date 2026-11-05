@@ -4,7 +4,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { compileRun, eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@browser-routines/core';
+import { compileRun, eventLabel, lintForPublish, missingParams, onSite, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { Bridge, NotConnected } from './bridge.ts';
 import { paths } from './paths.ts';
 import * as sources from './sources.ts';
@@ -12,7 +12,7 @@ import * as store from './store.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
 const VERSION = '0.1.0';
-const API = process.env.BROWSER_ROUTINES_API ?? 'https://browserroutines.arunprakashg.com';
+const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
 
 interface Listing {
   owner: string;
@@ -53,7 +53,7 @@ function clock(ms: number) {
 function secretsFor(r: Routine): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of r.meta.secrets) {
-    const v = process.env[`BROWSER_ROUTINES_SECRET_${s.toUpperCase()}`];
+    const v = process.env[`AGENTIC_ROUTINES_SECRET_${s.toUpperCase()}`];
     if (v) out[s] = v;
   }
   return out;
@@ -93,7 +93,7 @@ export function describeResult(r: RunResult): string {
 }
 
 export async function runMcp(): Promise<void> {
-  const server = new McpServer({ name: 'browser-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } } });
+  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } } });
   const routineTools = new Map<string, RegisteredTool>();
   let refreshTimer: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {
@@ -157,7 +157,7 @@ export async function runMcp(): Promise<void> {
       }
       const shape: Record<string, z.ZodTypeAny> = {};
       for (const [k, p] of Object.entries(r.meta.params)) shape[k] = z.string().describe(p.description ?? (p.type === 'file' ? 'Path to a file' : k));
-      const elsewhere = l.origin && l.origin.kind !== 'directory' ? `Written by someone else (${l.origin.source}) and not reviewed by Browser Routines. ` : '';
+      const elsewhere = l.origin && l.origin.kind !== 'directory' ? `Written by someone else (${l.origin.source}) and not reviewed by Agentic Routines. ` : '';
       const description = `${elsewhere}${r.meta.description}\n\nReplays ${r.steps.length} recorded steps on ${r.meta.site} without the model.${r.meta.pauses.length ? ` Pauses before step ${r.meta.pauses.join(', ')} for approval.` : ''}`;
       routineTools.get(name)?.remove();
       routineTools.set(
@@ -252,7 +252,7 @@ export async function runMcp(): Promise<void> {
           r.meta.description,
           params.length ? `Asks each run:\n${params.join('\n')}` : 'Asks for nothing.',
           r.meta.pauses.length ? `Pauses before: ${r.meta.pauses.map((n) => `step ${n} “${r.steps[n - 1]?.label}”`).join(', ')}` : '',
-          r.meta.secrets.length ? `Secrets (set BROWSER_ROUTINES_SECRET_<NAME> or the user types them at a pause): ${r.meta.secrets.join(', ')}` : '',
+          r.meta.secrets.length ? `Secrets (set AGENTIC_ROUTINES_SECRET_<NAME> or the user types them at a pause): ${r.meta.secrets.join(', ')}` : '',
           r.body,
         ]
           .filter(Boolean)
@@ -404,7 +404,7 @@ export async function runMcp(): Promise<void> {
     'routine_install_from_git',
     {
       description:
-        'Ask the user to install a routine from one of their Git sources (see routines_search). Nothing is installed until the user has read the steps and clicked Install in the browser side panel, so this waits for them; do not say it is installed until it returns. It was written by someone else and is not reviewed by Browser Routines. Needs a browser with the extension open.',
+        'Ask the user to install a routine from one of their Git sources (see routines_search). Nothing is installed until the user has read the steps and clicked Install in the browser side panel, so this waits for them; do not say it is installed until it returns. It was written by someone else and is not reviewed by Agentic Routines. Needs a browser with the extension open.',
       inputSchema: {
         source: z.string().max(300).describe('The source address, as routines_search showed it'),
         path: z.string().regex(/^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/).describe('The file, e.g. routines/deploy-staging.md'),
@@ -419,7 +419,7 @@ export async function runMcp(): Promise<void> {
         return fail(`Not installed. ${(e as Error).message}`);
       }
       scheduleRefresh();
-      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Browser Routines. Run it with ${toolName(r.name)}.`);
+      return text(`Installed ${r.owner}/${r.name} v${r.version} · ${r.steps} steps on ${r.site}. It was written by someone else, not the user, and is not reviewed by Agentic Routines. Run it with ${toolName(r.name)}.`);
     },
   );
 

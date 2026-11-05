@@ -408,7 +408,7 @@ function App() {
   }, [me]);
 
   if (me === undefined) return null;
-  if (!me) return <Gate title="Sign in first" text="Sign in from the Browser Routines side panel, then reload this page." />;
+  if (!me) return <Gate title="Sign in first" text="Sign in from the Agentic Routines side panel, then reload this page." />;
   if (!me.admin) return <Gate title="Reviewers only" text="This page is for the people who review submissions to the directory." />;
   return (
     <div class="ad">
@@ -416,7 +416,7 @@ function App() {
         <div class="ad-left">
           <div class="ad-brand">
             <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke:var(--accent-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-            Browser Routines<span class="tag">Admin</span>
+            Agentic Routines<span class="tag">Admin</span>
           </div>
           <nav class="ad-nav" aria-label="Admin">
             {([['review', 'Review', waiting], ['live', 'Live', live.length], ['blocked', 'Blocked', blocks.length], ['activity', 'Activity', undefined]] as const).map(([k, label, n]) => (

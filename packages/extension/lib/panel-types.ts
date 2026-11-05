@@ -1,4 +1,4 @@
-import type { RecordedEvent } from '@browser-routines/core';
+import type { RecordedEvent } from '@agentic-routines/core';
 import type { Account } from './auth';
 import type { PublishCard } from './directory';
 import type { GitCard } from './git';

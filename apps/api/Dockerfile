@@ -1,4 +1,4 @@
-# Browser Routines API: one small static binary on a base with nothing else in it.
+# Agentic Routines API: one small static binary on a base with nothing else in it.
 FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./

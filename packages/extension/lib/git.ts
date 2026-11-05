@@ -1,4 +1,4 @@
-import type { Routine, SourceEntry } from '@browser-routines/core';
+import type { Routine, SourceEntry } from '@agentic-routines/core';
 import * as native from './native';
 
 // Installing from a Git source or a folder. The host does the fetching and every check; this side

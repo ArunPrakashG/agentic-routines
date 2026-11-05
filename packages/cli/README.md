@@ -1,15 +1,15 @@
-# Browser Routines
+# Agentic Routines
 
 Record a browser task once from your agent. Replay it later without the model.
 
 ```
-npx browser-routines setup
+npx agentic-routines setup
 ```
 
 That one command connects every browser and agent it finds (Claude Code, Codex, GitHub Copilot, OpenCode; Chrome, Edge, Brave, Vivaldi, Firefox). Then install the extension and open its panel.
 
 ```
-npx browser-routines doctor
+npx agentic-routines doctor
 ```
 
 Says what is connected and what is not.
@@ -25,12 +25,12 @@ Your agent can look for a routine someone else already published, and send yours
 
 ## Other sources
 
-Routines can also come from a GitHub repository or a folder on your computer. A routine is one `.md` file in a `routines` folder; `browser-routines export <routine>` prints one.
+Routines can also come from a GitHub repository or a folder on your computer. A routine is one `.md` file in a `routines` folder; `agentic-routines export <routine>` prints one.
 
 ```
-browser-routines sources                                  # list
-browser-routines sources add github.com/owner/repository
-browser-routines sources off github.com/owner/repository  # also: on, remove
+agentic-routines sources                                  # list
+agentic-routines sources add github.com/owner/repository
+agentic-routines sources off github.com/owner/repository  # also: on, remove
 ```
 
 - `routines_search` also looks in the sources you added, and marks those results as not reviewed.
@@ -38,4 +38,4 @@ browser-routines sources off github.com/owner/repository  # also: on, remove
 - The routine is checked again on this machine (every step on its own site, known actions, no secrets) and refused if it fails. A later commit is never applied by itself.
 - The block list from the directory is read at least daily. Routines already installed from a blocked repository or publisher turn themselves off, with a note, and stay off.
 
-https://github.com/ArunPrakashG/browser-routines
+https://github.com/ArunPrakashG/agentic-routines

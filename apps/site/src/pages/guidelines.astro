@@ -5,6 +5,6 @@ import Base from '../layouts/Base.astro';
 const md = readFileSync(new URL('../../../../docs/directory-guidelines.md', import.meta.url), 'utf8').replace(/^# .*\n/, '');
 const html = await marked.parse(md);
 ---
-<Base title="Directory guidelines" description="The rules every routine is reviewed against before it is listed in the Browser Routines directory.">
+<Base title="Directory guidelines" description="The rules every routine is reviewed against before it is listed in the Agentic Routines directory.">
   <div class="wrap"><article class="prose"><h1>Directory guidelines</h1><Fragment set:html={html} /></article></div>
 </Base>

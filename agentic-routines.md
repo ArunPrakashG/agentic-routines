@@ -1,4 +1,4 @@
-# Browser Routines: Record Once, Replay Without the LLM
+# Agentic Routines: Record Once, Replay Without the LLM
 
 **Status:** idea (logged 2026-11-05)
 **Type:** Open-source client + paid shared routine library

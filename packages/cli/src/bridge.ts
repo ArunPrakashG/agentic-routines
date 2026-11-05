@@ -10,7 +10,7 @@ import { isEvent, isResponse, lineReader, type Event, type Response } from './pr
 
 export class NotConnected extends Error {
   constructor() {
-    super('The browser extension is not connected. Open Chrome, Edge or Firefox with Browser Routines installed, then try again.');
+    super('The browser extension is not connected. Open Chrome, Edge or Firefox with Agentic Routines installed, then try again.');
   }
 }
 

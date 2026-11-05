@@ -1,4 +1,4 @@
-import { lintForPublish, type Routine } from '@browser-routines/core';
+import { lintForPublish, type Routine } from '@agentic-routines/core';
 import * as auth from './auth';
 
 // Publishing to the directory. The extension holds the session, so every publish goes through here.

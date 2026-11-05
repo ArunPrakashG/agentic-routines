@@ -5,11 +5,11 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 DIR=$ROOT/.dev/e2e-$(date +%s)
-BR_DEV_DIR=$DIR "$ROOT/dev/up.sh" --headless --no-claude >/dev/null
-DEV_DIR=$DIR BROWSER_ROUTINES_HOME=$DIR/store node "$ROOT/dev/e2e.mjs" "$@" || code=$?
+AR_DEV_DIR=$DIR "$ROOT/dev/up.sh" --headless --no-claude >/dev/null
+DEV_DIR=$DIR AGENTIC_ROUTINES_HOME=$DIR/store node "$ROOT/dev/e2e.mjs" "$@" || code=$?
 "$ROOT/dev/down.sh"
 # What a person does gets its own fresh browser, as the panel opens differently here.
-BR_DEV_DIR=$DIR/panel "$ROOT/dev/up.sh" --headless --no-claude --no-build >/dev/null
+AR_DEV_DIR=$DIR/panel "$ROOT/dev/up.sh" --headless --no-claude --no-build >/dev/null
 node "$ROOT/dev/e2e-panel.mjs" || code=$?
 "$ROOT/dev/down.sh"
 exit ${code:-0}

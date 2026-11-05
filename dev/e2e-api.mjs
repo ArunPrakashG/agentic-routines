@@ -416,7 +416,7 @@ for (let i = 0; i < 22; i++) slow.push((await call(p3, 'PUT', '/routines/queued-
 check(slow.includes(429), 'and cannot flood the queue in a day');
 check((await call(p3, 'GET', '/me/submissions')).ok && (await (await call(p3, 'GET', '/me/submissions')).json()).submissions.length <= 50, "a publisher's list is capped");
 
-// What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e.mjs, BR_CAPTURE=1).
+// What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e.mjs, AR_CAPTURE=1).
 // Its host is the local test site, so it is moved to a real-looking one.
 const sent = JSON.parse(readFileSync(join(ROOT, 'dev/fixtures/published-routine.json'), 'utf8').replaceAll('127.0.0.1:8767', 'console.acme.example'));
 const sentLive = await publishLive(p1, sent.meta.name, sent);
@@ -427,14 +427,14 @@ await call(p1, 'DELETE', `/routines/${sent.meta.name}`);
 
 // ---------- an agent uses the directory ----------
 const CLI = join(ROOT, 'packages/cli');
-const builtCli = sh('pnpm -s --filter browser-routines build', { cwd: ROOT });
+const builtCli = sh('pnpm -s --filter agentic-routines build', { cwd: ROOT });
 check(builtCli.status === 0, 'the CLI builds');
 const SDK = `${CLI}/node_modules/@modelcontextprotocol/sdk/dist/esm`;
 const { Client } = await import(`${SDK}/client/index.js`);
 const { StdioClientTransport } = await import(`${SDK}/client/stdio.js`);
 const mcpHome = mkdtempSync(join(tmpdir(), 'br-mcp-'));
 const agent = new Client({ name: 'claude-code', version: '2.0.0' });
-await agent.connect(new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME: mcpHome, PATH: process.env.PATH, BROWSER_ROUTINES_HOME: mcpHome, BROWSER_ROUTINES_API: `http://127.0.0.1:${PORT}` }, stderr: 'inherit' }));
+await agent.connect(new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME: mcpHome, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: mcpHome, AGENTIC_ROUTINES_API: `http://127.0.0.1:${PORT}` }, stderr: 'inherit' }));
 const tool = async (name, args = {}) => {
   const r = await agent.callTool({ name, arguments: args }, undefined, { timeout: 30_000 });
   return { text: r.content.map((c) => c.text ?? '').join('\n'), error: !!r.isError };

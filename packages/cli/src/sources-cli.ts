@@ -1,24 +1,24 @@
-import { checkFetched, stringifyRoutineFile } from '@browser-routines/core';
+import { checkFetched, stringifyRoutineFile } from '@agentic-routines/core';
 import * as sources from './sources.ts';
 import * as store from './store.ts';
 
-// browser-routines sources [add <address> | remove <address> | on <address> | off <address>]
-// browser-routines export <routine>
+// agentic-routines sources [add <address> | remove <address> | on <address> | off <address>]
+// agentic-routines export <routine>
 // Installing from a source is not here: it needs the person's click in the browser.
 
 export async function runSources(args: string[]): Promise<void> {
   const [cmd, address] = args;
   if (!cmd || cmd === 'list') {
     const { directory, sources: all } = await sources.list();
-    console.log(`Directory · reviewed by Browser Routines · ${directory ? 'on' : 'off'}`);
+    console.log(`Directory · reviewed by Agentic Routines · ${directory ? 'on' : 'off'}`);
     for (const s of all) {
       const state = !s.enabled ? 'off' : s.error ? `could not be read: ${s.error}` : `${s.routines ?? 0} routines`;
       console.log(`${s.id} · ${s.kind === 'folder' ? 'local folder' : 'GitHub'} · not reviewed · ${state}`);
     }
-    console.log('\nAdd one with: browser-routines sources add github.com/owner/repository');
+    console.log('\nAdd one with: agentic-routines sources add github.com/owner/repository');
     return;
   }
-  if (!address) throw new Error(`Usage: browser-routines sources ${cmd} <address>`);
+  if (!address) throw new Error(`Usage: agentic-routines sources ${cmd} <address>`);
   if (cmd === 'add') {
     const s = await sources.add(address);
     console.log(`Added ${s.id}. Nothing from it is installed until you click Install in the side panel.`);
@@ -34,7 +34,7 @@ export async function runSources(args: string[]): Promise<void> {
 
 /** Prints a routine as the one file a Git source holds, ready to commit under routines/. */
 export async function runExport(args: string[]): Promise<void> {
-  if (!args[0]) throw new Error('Usage: browser-routines export <routine>');
+  if (!args[0]) throw new Error('Usage: agentic-routines export <routine>');
   const r = await store.read(args[0]);
   // The same checks the person who installs it will run, so a problem is found here first.
   const problems = checkFetched(r);

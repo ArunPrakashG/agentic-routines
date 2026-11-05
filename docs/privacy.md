@@ -1,10 +1,10 @@
 # Privacy
 
-Browser Routines keeps your routines and recordings on your computer. Nothing is sent anywhere unless you sign in and choose to publish, and signing in is optional.
+Agentic Routines keeps your routines and recordings on your computer. Nothing is sent anywhere unless you sign in and choose to publish, and signing in is optional.
 
 ## On your computer
 
-- Routines, recorded runs, settings and the list of recent runs are stored in the browser and in a folder in your home directory (`~/.browser-routines`).
+- Routines, recorded runs, settings and the list of recent runs are stored in the browser and in a folder in your home directory (`~/.agentic-routines`).
 - A recorded run can contain what was on the page: element names, addresses and the values you or your agent typed. Values that were marked as secrets are never stored.
 - The extension talks only to the companion program on your computer, which your coding agent starts. It does not send page content over the network.
 
@@ -40,4 +40,4 @@ Browser Routines keeps your routines and recordings on your computer. Nothing is
 
 This page changes when what we collect changes, and the extension says what is shared before it shares anything.
 
-Questions: open an issue at https://github.com/ArunPrakashG/browser-routines/issues.
+Questions: open an issue at https://github.com/ArunPrakashG/agentic-routines/issues.

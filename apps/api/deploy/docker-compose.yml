@@ -1,19 +1,19 @@
-# The Browser Routines API on ovh-arun, as ~/infra/apps/browserroutines/docker-compose.yml.
+# The Agentic Routines API on ovh-arun, as ~/infra/apps/agenticroutines/docker-compose.yml.
 # Kept in the repo (apps/api/deploy/) and copied there by deploy.sh; edit it here, not on the server.
 #
-# The main Caddy (~/infra/proxy) serves browserroutines.arunprakashg.com: /api/* and /healthz go to the API
-# container, everything else to browserroutines-site (the static website, shipped by apps/site/deploy/deploy.sh).
+# The main Caddy (~/infra/proxy) serves agenticroutines.arunprakashg.com: /api/* and /healthz go to the API
+# container, everything else to agenticroutines-site (the static website, shipped by apps/site/deploy/deploy.sh).
 # Both are reached over the "proxy" network. Postgres and Redis are the shared ones, reached over
-# "shared_services": database and role "browserroutines", Redis database 1.
+# "shared_services": database and role "browserroutines" (the name from before the rename), Redis database 1.
 # .env next to this file (mode 600, never in the repo) holds DATABASE_URL, REDIS_URL, TAG (the
 # image to run), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET and ADMIN_EMAILS (who may review submissions).
 
-name: browserroutines
+name: agenticroutines
 
 services:
-  browserroutines-api:
-    image: browserroutines-api:${TAG:?set TAG in .env}
-    container_name: browserroutines-api
+  agenticroutines-api:
+    image: agenticroutines-api:${TAG:?set TAG in .env}
+    container_name: agenticroutines-api
     restart: unless-stopped
     env_file: .env
     environment:
@@ -30,9 +30,9 @@ services:
     networks: [proxy, shared_services]
 
   # The static site from apps/site, shipped into ./site (conf/Caddyfile and www/current).
-  browserroutines-site:
+  agenticroutines-site:
     image: caddy:2.11.4-alpine
-    container_name: browserroutines-site
+    container_name: agenticroutines-site
     restart: unless-stopped
     volumes:
       - ./site/conf:/etc/caddy:ro

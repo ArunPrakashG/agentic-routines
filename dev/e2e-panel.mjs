@@ -4,10 +4,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const CDP = `http://127.0.0.1:${process.env.BR_CDP_PORT ?? 9333}`;
+const CDP = `http://127.0.0.1:${process.env.AR_CDP_PORT ?? 9333}`;
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const EXT_ID = 'fafmcnlaedchfncjiimcndjlfphdfkdo';
-const SITE = `http://127.0.0.1:${process.env.BR_SITE_PORT ?? 8765}`;
+const SITE = `http://127.0.0.1:${process.env.AR_SITE_PORT ?? 8765}`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('·', ...a);

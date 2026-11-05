@@ -1,4 +1,4 @@
-// Every browser Browser Routines can connect to, in one place. `setup` reads it to register the
+// Every browser Agentic Routines can connect to, in one place. `setup` reads it to register the
 // native host, and the release scripts read it to know what to build. Adding a browser is one entry.
 
 export type Engine = 'chromium' | 'gecko';
@@ -76,14 +76,14 @@ export const BROWSERS: Browser[] = [
 /** Extension ids the native host accepts. The first is the unpacked build, whose id the manifest key pins. Store ids are added when each listing exists. */
 export const EXTENSION_IDS: Record<Engine, string[]> = {
   chromium: ['fafmcnlaedchfncjiimcndjlfphdfkdo'],
-  gecko: ['browser-routines@browser-routines.dev'],
+  gecko: ['agentic-routines@agentic-routines.dev'],
 };
 
 /** The native messaging manifest for a browser. */
 export function hostManifest(b: Browser, name: string, path: string) {
   return {
     name,
-    description: 'Browser Routines',
+    description: 'Agentic Routines',
     path,
     type: 'stdio' as const,
     ...(b.engine === 'gecko'

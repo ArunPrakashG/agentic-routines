@@ -1,9 +1,9 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@browser-routines/core';
+import { parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
 import { paths } from './paths.ts';
 
-// Routines live at ~/.browser-routines/routines/<owner>/<name>/{ROUTINE.md,steps.json}.
+// Routines live at ~/.agentic-routines/routines/<owner>/<name>/{ROUTINE.md,steps.json}.
 // "local" is the owner until the user signs in and picks a handle.
 
 export const LOCAL = 'local';

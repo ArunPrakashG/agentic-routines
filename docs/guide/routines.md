@@ -3,7 +3,7 @@
 A routine is a skill for the browser: a folder with notes that tell an agent when to use it, and compiled steps that the extension replays without a model.
 
 ```text
-~/.browser-routines/routines/<owner>/<name>/
+~/.agentic-routines/routines/<owner>/<name>/
   ROUTINE.md     what it is and when to use it
   steps.json     compiled steps, read only by the replayer
 ```
@@ -60,7 +60,7 @@ Steps are declarative: navigate, click, type, select, upload, wait and read. A r
 A routine can live in a GitHub repository as one file under `routines/`: the notes first, then the steps in a fenced `steps` block. Export one from your machine:
 
 ```bash
-npx browser-routines export play-release > routines/play-release.md
+npx agentic-routines export play-release > routines/play-release.md
 ```
 
 The same checks that people run on install run here first, so a problem is found before you commit. See [Sharing](/docs/sharing).

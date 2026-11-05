@@ -1,11 +1,11 @@
 {
-  "name": "browser-routines",
+  "name": "agentic-routines",
   "version": "0.1.0",
   "description": "Record a browser task once from your agent, replay it without the model.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "browser-routines": "dist/index.js"
+    "agentic-routines": "dist/index.js"
   },
   "files": [
     "dist"
@@ -25,8 +25,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@browser-routines/core": "workspace:*",
+    "@agentic-routines/core": "workspace:*",
     "tsup": "^8.5.0",
-    "@browser-routines/browsers": "workspace:*"
+    "@agentic-routines/browsers": "workspace:*"
   }
 }

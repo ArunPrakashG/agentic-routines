@@ -2,7 +2,7 @@
 // An open port also keeps the service worker alive.
 import { platform } from './platform';
 
-const HOST = 'com.browser_routines.host';
+const HOST = 'com.agentic_routines.host';
 
 type Handler = (method: string, params: any) => Promise<unknown>;
 
@@ -78,7 +78,7 @@ export function connect() {
 }
 
 export function call<T = unknown>(method: string, params?: unknown): Promise<T> {
-  if (!port) return Promise.reject(new Error('Run `npx browser-routines setup` to connect this browser.'));
+  if (!port) return Promise.reject(new Error('Run `npx agentic-routines setup` to connect this browser.'));
   const id = nextId++;
   return new Promise<T>((resolve, reject) => {
     waiting.set(id, { resolve: resolve as (v: unknown) => void, reject });

@@ -1,6 +1,6 @@
 # Agent tools
 
-The `browser-routines mcp` command is a Model Context Protocol server that your agent starts over stdio. `setup` writes the config for each agent so you never run it yourself.
+The `agentic-routines mcp` command is a Model Context Protocol server that your agent starts over stdio. `setup` writes the config for each agent so you never run it yourself.
 
 ## Browser tools
 

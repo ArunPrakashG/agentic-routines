@@ -1,7 +1,7 @@
 # Command line
 
 ```bash
-npx browser-routines <command>
+npx agentic-routines <command>
 ```
 
 | Command | What it does |

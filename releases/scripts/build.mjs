@@ -1,10 +1,10 @@
 // Builds everything a release ships and writes it to releases/v<version>/.
 // Usage: node releases/scripts/build.mjs [--allow-dirty]
 //
-//   browser-routines-<v>-chrome.zip     Chrome Web Store, and Edge Add-ons (same package)
-//   browser-routines-<v>-firefox.zip    Firefox Add-ons
-//   browser-routines-<v>-sources.zip    The source Firefox Add-ons asks for
-//   browser-routines-<v>.tgz            The npm package
+//   agentic-routines-<v>-chrome.zip     Chrome Web Store, and Edge Add-ons (same package)
+//   agentic-routines-<v>-firefox.zip    Firefox Add-ons
+//   agentic-routines-<v>-sources.zip    The source Firefox Add-ons asks for
+//   agentic-routines-<v>.tgz            The npm package
 //   SHA256SUMS, RELEASE.json            What was built, from which commit
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,7 +31,7 @@ run('pnpm', ['-r', 'typecheck']);
 run('pnpm', ['-C', 'packages/cli', 'build']);
 
 // The extension, built for the stores: no dev key, written away from the unpacked build.
-const env = { ...process.env, BR_STORE: '1', BR_OUT: stage };
+const env = { ...process.env, AR_STORE: '1', AR_OUT: stage };
 run('pnpm', ['-C', 'packages/extension', 'exec', 'wxt', 'zip'], { env });
 run('pnpm', ['-C', 'packages/extension', 'exec', 'wxt', 'zip', '-b', 'firefox', '--mv3'], { env });
 run('node', ['releases/scripts/check-store.mjs', stage]);
@@ -45,9 +45,9 @@ if (!chrome || !firefox || !sources) {
   console.error(`Expected chrome, firefox and sources zips, found: ${names.join(', ')}`);
   process.exit(1);
 }
-copyFileSync(join(stage, chrome), join(dest, `browser-routines-${v}-chrome.zip`));
-copyFileSync(join(stage, firefox), join(dest, `browser-routines-${v}-firefox.zip`));
-copyFileSync(join(stage, sources), join(dest, `browser-routines-${v}-sources.zip`));
+copyFileSync(join(stage, chrome), join(dest, `agentic-routines-${v}-chrome.zip`));
+copyFileSync(join(stage, firefox), join(dest, `agentic-routines-${v}-firefox.zip`));
+copyFileSync(join(stage, sources), join(dest, `agentic-routines-${v}-sources.zip`));
 
 run('npm', ['pack', '--pack-destination', dest], { cwd: join(root, 'packages', 'cli'), stdio: 'inherit' });
 

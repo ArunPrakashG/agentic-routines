@@ -3,12 +3,12 @@ import Base from '../layouts/Base.astro';
 import DocsNav from '../components/DocsNav.astro';
 import { pages } from '../lib/docs';
 ---
-<Base title="Documentation" description="How to set up Browser Routines, record and replay routines, write them by hand, and work on the code.">
+<Base title="Documentation" description="How to set up Agentic Routines, record and replay routines, write them by hand, and work on the code.">
   <div class="wrap docs">
     <DocsNav />
     <article class="prose">
       <h1>Documentation</h1>
-      <p>Browser Routines records what your agent does in the browser and replays it later without the model. These pages cover setup, how a replay works, the routine format, the tools your agent gets, and the code.</p>
+      <p>Agentic Routines records what your agent does in the browser and replays it later without the model. These pages cover setup, how a replay works, the routine format, the tools your agent gets, and the code.</p>
       <ul class="docs-list">
         {pages.map((p) => <li><a href={`/docs/${p.slug}`}>{p.title}</a><span>{p.summary}</span></li>)}
       </ul>

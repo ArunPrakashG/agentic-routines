@@ -1,10 +1,10 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
-import { BROWSERS, type OS } from '@browser-routines/browsers';
+import { BROWSERS, type OS } from '@agentic-routines/browsers';
 import { HOST_NAME, paths } from './paths.ts';
 
-// `npx browser-routines doctor`: says what is connected and what to do about what is not.
+// `npx agentic-routines doctor`: says what is connected and what to do about what is not.
 
 function alive(pid: number) {
   try {
@@ -23,14 +23,14 @@ export function runDoctor() {
 
   const host = join(paths.bin(), platform() === 'win32' ? 'host.bat' : 'host');
   if (existsSync(host)) ok('Host', 'installed');
-  else no('Host', 'not installed. Run: npx browser-routines setup');
+  else no('Host', 'not installed. Run: npx agentic-routines setup');
 
   if (platform() !== 'win32') {
     for (const b of BROWSERS) {
       const dir = b.hosts[platform() as 'darwin' | 'linux'];
       if (!dir || !existsSync(join(H, b.profile[platform() as OS] ?? '/nonexistent'))) continue;
       if (existsSync(join(H, dir, `${HOST_NAME}.json`))) ok(b.name, 'connected to the host');
-      else no(b.name, 'found, but not connected. Run: npx browser-routines setup');
+      else no(b.name, 'found, but not connected. Run: npx agentic-routines setup');
     }
   }
 

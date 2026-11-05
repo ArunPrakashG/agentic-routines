@@ -6,7 +6,7 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/roboto/latin-500.css';
 import './tokens.css';
 import './panel.css';
-import { compileRun, siteOf, type ParamSpec } from '@browser-routines/core';
+import { compileRun, siteOf, type ParamSpec } from '@agentic-routines/core';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Account as AccountInfo } from '../../lib/auth';
@@ -168,7 +168,7 @@ function SignIn() {
       <main class="center signin">
         <Mark size={48} cls="drift" />
         <div class="stack" style={{ gap: '8px', alignItems: 'center' }}>
-          <h1>Browser Routines</h1>
+          <h1>Agentic Routines</h1>
           <p>Sign in once. Your routines follow you to every browser you use.</p>
         </div>
         <button class="gbtn" type="button" disabled={busy} onClick={go}>
@@ -367,7 +367,7 @@ function InstallGit({ card }: { card: GitCard }) {
           <span class="meta mono">{card.path}{card.ref ? ` · ${card.ref.slice(0, 7)}` : ''}</span>
         </div>
         <div class="warnbox" role="note">
-          <span class="wt">Not reviewed by Browser Routines</span>
+          <span class="wt">Not reviewed by Agentic Routines</span>
           <span class="meta">{card.by ? `${card.by} asked for this. ` : ''}Anyone can put a routine in a repository. Read the steps before you install.</span>
         </div>
         <div class="stack" style={{ gap: '6px' }}>
@@ -430,7 +430,7 @@ function InstallGit({ card }: { card: GitCard }) {
 
 function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
-  const cmd = 'npx browser-routines setup';
+  const cmd = 'npx agentic-routines setup';
   return (
     <div class="panel">
       <header class="bar">
