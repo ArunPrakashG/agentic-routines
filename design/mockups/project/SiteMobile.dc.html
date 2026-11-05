@@ -12,6 +12,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
 <style>
 body{margin:0}
+.hl{stroke-dasharray:1;stroke-dashoffset:1;animation:hl 9s var(--ease-out) infinite both}
+.hl2{animation-delay:.25s}
+@keyframes hl{0%,5%{stroke-dashoffset:1}48%,94%{stroke-dashoffset:0}98%,100%{stroke-dashoffset:1}}
+.hfade{animation:hfade 9s ease-out infinite both}
+@keyframes hfade{0%,46%{opacity:0;transform:translateY(4px)}54%,94%{opacity:1;transform:none}98%,100%{opacity:0}}
+.hstat{font-family:var(--font-mono);font-weight:500;letter-spacing:-0.03em;color:var(--accent-ink)}
+@media (prefers-reduced-motion: reduce){.hl{stroke-dashoffset:0 !important}.hfade{opacity:1 !important}}
+
 .t-light{--bg:#F4F4F7;--surface-1:#FFFFFF;--surface-2:#EEEFF4;--surface-3:#E1E3EB;--border:#DFE1E8;--border-strong:#C6C9D4;--text-1:#14131F;--text-2:#4A4B5C;--text-3:#5E6072;--accent:#3530E0;--accent-ink:#3530E0;--on-accent:#FFFFFF;--accent-soft:rgba(53,48,224,.09);--warn:#8A5300;--warn-soft:rgba(190,120,0,.12);--warn-a:rgba(138,83,0,.35);--danger:#B4232A;--danger-soft:rgba(180,35,42,.09);--shadow-1:0 1px 2px rgba(20,19,31,.05);--shadow-2:0 16px 40px rgba(20,19,31,.12);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
 .t-dark{--bg:#0E0D16;--surface-1:#15141F;--surface-2:#1C1B28;--surface-3:#272636;--border:#262535;--border-strong:#383749;--text-1:#ECEBF5;--text-2:#A9A8BD;--text-3:#86859C;--accent:#9D99FF;--accent-ink:#A5A1FF;--on-accent:#0E0D16;--accent-soft:rgba(157,153,255,.14);--warn:#F0B04A;--warn-soft:rgba(240,176,74,.12);--warn-a:rgba(240,176,74,.4);--danger:#FF7D74;--danger-soft:rgba(255,125,116,.12);--shadow-1:0 1px 0 rgba(255,255,255,.04) inset;--shadow-2:0 16px 40px rgba(0,0,0,.5);--font-sans:'Schibsted Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-settle:cubic-bezier(.34,1.32,.64,1);--loop:14s}
 .st,.st *{box-sizing:border-box}
@@ -120,13 +128,55 @@ body{margin:0}
 </style>
 </helmet>
 <div class="st m t-light" style="width: 375px; background: var(--bg); color: var(--text-1); font-family: var(--font-sans);">
+<div class="t-dark" style="background: var(--bg); color: var(--text-1);">
   <header style="height: 64px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between;">
     <div style="display: flex; align-items: center; gap: 10px;"><svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 5.5h12L5 11h12L7 16.5h13" fill="none" style="stroke: var(--accent-ink);" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font-size: 15px; font-weight: 500;">Browser Routines</span></div>
     <a class="btn btn-primary" href="#install" style="height: 40px; padding: 0 14px;">Install</a>
   </header>
+  <section style="padding: 32px 16px 48px; display: flex; flex-direction: column; gap: 22px;">
+    <span class="mono" style="font-size: 12px; color: var(--accent-ink);">A memory for your agent’s browser work</span>
+    <h1 style="margin: 0; font-size: 38px; line-height: 40px; font-weight: 600; letter-spacing: -0.035em; text-wrap: balance;">Stop paying your agent to figure out the same website twice.</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--text-2);">Browser Routines remembers how your agent did a task, then replays it next time without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less.</p>
+    <div style="display: flex; flex-direction: column; gap: 10px;"><a class="btn btn-primary" href="#install" style="height: 48px; font-size: 15px;">Install, it’s free</a><a class="btn btn-secondary" href="#numbers" style="height: 48px; font-size: 15px;">See the numbers</a></div>
+    <div style="margin-top: 10px; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--surface-1); padding: 18px 16px; display: flex; flex-direction: column; gap: 16px;">
+      <span style="font-size: 14px; font-weight: 500;">The same chore, run 30 times</span>
+      <span style="display: flex; gap: 14px; font-size: 12px; color: var(--text-2);"><span style="display: inline-flex; align-items: center; gap: 6px;"><i style="width: 14px; height: 3px; border-radius: 2px; background: var(--text-3);"></i>By hand</span><span style="display: inline-flex; align-items: center; gap: 6px;"><i style="width: 14px; height: 3px; border-radius: 2px; background: var(--accent);"></i>With Browser Routines</span></span>
+      <svg viewBox="0 0 720 300" width="100%" role="img" aria-label="Cost of running the same chore 30 times: $6.18 by hand, $1.34 with Browser Routines, 78 percent less" style="display:block;">
+      <g stroke="var(--border)" stroke-width="1"><line x1="40" y1="270" x2="560" y2="270"/><line x1="40" y1="192.3" x2="560" y2="192.3"/><line x1="40" y1="114.6" x2="560" y2="114.6"/><line x1="40" y1="37" x2="560" y2="37"/></g>
+      <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-3)"><text x="0" y="274">$0</text><text x="0" y="196">$2</text><text x="0" y="118">$4</text><text x="0" y="41">$6</text><text x="40" y="292">run 1</text><text x="195" y="292">10</text><text x="368" y="292">20</text><text x="540" y="292" text-anchor="middle">30</text></g>
+      <line class="hl" pathLength="1" x1="40" y1="262" x2="540" y2="30" stroke="var(--text-3)" stroke-width="2.5" stroke-linecap="round"/>
+      <line class="hl hl2" pathLength="1" x1="40" y1="262" x2="540" y2="218.1" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round"/>
+      <g class="hfade"><circle cx="540" cy="30" r="4.5" fill="var(--text-3)"/><circle cx="540" cy="218.1" r="5" fill="var(--accent)"/>
+      <text x="552" y="35" font-family="IBM Plex Mono, monospace" font-size="15" fill="var(--text-2)">$6.18</text>
+      <text x="552" y="223" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="500" fill="var(--accent-ink)">$1.34</text>
+      <path d="M624 42 V206" stroke="var(--accent)" stroke-width="1.5" fill="none"/><path d="M618 42 H624 M618 206 H624" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="636" y="130" font-family="IBM Plex Mono, monospace" font-size="26" font-weight="500" fill="var(--accent-ink)" letter-spacing="-0.5">−78%</text></g>
+    </svg>
+      <div style="height: 1px; background: var(--border);"></div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;"><div style="display:flex;flex-direction:column;gap:2px;"><span class="hstat" style="font-size:28px;line-height:1.05;">−82%</span><span style="font-size:13px;color:var(--text-2);">tokens</span></div><div style="display:flex;flex-direction:column;gap:2px;"><span class="hstat" style="font-size:28px;line-height:1.05;">−66%</span><span style="font-size:13px;color:var(--text-2);">time</span></div><div style="display:flex;flex-direction:column;gap:2px;"><span class="hstat" style="font-size:28px;line-height:1.05;">−81%</span><span style="font-size:13px;color:var(--text-2);">cost</span></div></div>
+      <p style="margin: 0; font-size: 11px; line-height: 17px; color: var(--text-3);">Cost of one YouTube description edit, 21 cents by hand and 4 cents replayed, times 30. Run 1 is your agent at full price. One-run figures are medians of 5 runs with Claude Sonnet 5.5.</p>
+    </div>
+  </section>
+</div>
+
+  <section class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 28px;">
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 class="h2">Made for the chores your agent repeats.</h2>
+      <p class="lede" style="font-size: 15px; line-height: 24px;">The first run is your agent, as usual. Every run after that replays what it learned: no reading the page again, no thinking, no waiting.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--border-strong);"><span class="mono" style="font-size: 12px; color: var(--text-3);">Once</span><h3 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 500;">A task you do one time.</h3><p style="margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2);">Just ask your agent. There is nothing to save, and nothing lost.</p></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--accent);"><span class="mono" style="font-size: 12px; color: var(--accent-ink);">Again and again</span><h3 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 500;">A chore you repeat.</h3><p style="margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2);">Shipping a release, exporting a report, adding a record in a console. It saves on every run after the first.</p></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--border-strong);"><span class="mono" style="font-size: 12px; color: var(--text-3);">Everyone</span><h3 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 500;">A chore your whole team does.</h3><p style="margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2);">Record it once and share it, so nobody pays to teach it again.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" style="padding: 56px 16px 0; display: flex; flex-direction: column; gap: 12px;">
+    <h2 class="h2">Watch it once. Replay it every time.</h2>
+    <p class="lede" style="font-size: 15px; line-height: 24px;">Your agent does the task. Browser Routines tidies the steps up and keeps them, then checks the page at every step on the way back.</p>
+  </section>
 
   <section style="padding: 24px 16px 56px; display: flex; flex-direction: column; gap: 28px;">
-    <h1 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 600; letter-spacing: -0.025em;"><span style="display: block;">Record a browser task once.</span><span style="display: block; color: var(--text-2);">Replay it without the model.</span></h1>
     <div style="position: relative; display: flex; font-size: 14px; font-weight: 500; height: 30px;">
       <span style="width: 96px;">Record</span><span style="width: 96px;">Compile</span><span style="width: 96px;">Replay</span>
       <span class="phase an" style="position: absolute; left: 0; bottom: 0; width: 28px; height: 2px; border-radius: 1px; background: var(--accent);"></span>
@@ -198,7 +248,7 @@ body{margin:0}
     <p style="margin: 0; max-width: 760px; font-size: 14px; line-height: 22px; color: var(--text-2);">That is one small edit to a YouTube description, done by hand through Claude in Chrome. On a longer console task it took 44 tool calls, 910k tokens and 1:33, and one run in five said it was done without starting the rollout.</p>
   </section>
 
-  <section class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 32px;">
+  <section id="numbers" class="sec" style="padding: 56px 16px 64px; display: flex; flex-direction: column; gap: 32px;">
     <div style="max-width: 760px; display: flex; flex-direction: column; gap: 16px;">
       <h2 class="h2">Measured, not estimated.</h2>
       <p class="lede">Up to 83% cheaper and 3.5 times faster than the same agent doing the task by hand. Each arrow goes from by hand to replay.</p>
@@ -333,7 +383,7 @@ body{margin:0}
   </footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":375,"height":6300}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":375,"height":7330}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
