@@ -1,6 +1,6 @@
 # API
 
-Accounts for Browser Routines. A small Go service: Google sign-in, short-lived access tokens, rotating refresh tokens. Sync and the directory will be added here later.
+Accounts and the directory for Browser Routines. A small Go service: Google sign-in, short-lived access tokens, rotating refresh tokens, and the public directory of published routines.
 
 It runs on Postgres and Redis, in one 16 MB image, and idles around 4 MiB.
 
@@ -14,9 +14,19 @@ All under `/api/v1`, all JSON, all `Cache-Control: no-store`.
 | POST | `/auth/refresh` | Swaps a refresh token for a new pair. A reused token ends the session. |
 | POST | `/auth/signout` | Ends the session. |
 | GET | `/me` | The signed-in account. Needs `Authorization: Bearer` and `x-install-id`. |
+| DELETE | `/me` | Deletes the account, its sessions and everything it published. |
+| PUT | `/me/handle` | Claims the handle that owns published routines. Once per account. |
+| GET | `/me/routines` | What the account has published. |
+| PUT | `/routines/{name}` | Publishes a routine, or the next version of it. Needs a handle. |
+| DELETE | `/routines/{name}` | Takes one of the account's routines down. |
+| GET | `/routines?q=&site=` | Public. Search by words, or by the site a person is on. |
+| GET | `/routines/{owner}/{name}` | Public. The routine in full. |
+| POST | `/routines/{owner}/{name}/installs` | Public. Counts an install, reported by the installer. |
 | GET | `/healthz` | Database check, outside `/api/v1`. |
 
-Access tokens last 15 minutes and are bound to the install id. Refresh tokens last 60 days, are stored hashed and rotate on every use. The `/auth/*` routes allow 30 requests a minute per visitor, counted in Redis. If Redis is down the limit is skipped, not the sign-in.
+Publishing checks the shape and rebuilds it field by field, so nothing unexpected is stored: the description needs a "Use when" clause, every step and recorded page must be on the routine's site, and there are caps on steps, size and routines per account. Example values never leave the machine. Readers should still run the same checks on what they fetch.
+
+Access tokens last 15 minutes and are bound to the install id. Refresh tokens last 60 days, are stored hashed and rotate on every use. The `/auth/*` routes allow 30 requests a minute per visitor, counted in Redis; reads, writes and install counts have limits of their own. If Redis is down the limit is skipped, not the sign-in.
 
 ## Config
 

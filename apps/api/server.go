@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -27,6 +26,14 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/refresh", a.limited(a.refresh))
 	mux.HandleFunc("POST /api/v1/auth/signout", a.limited(a.signOut))
 	mux.HandleFunc("GET /api/v1/me", a.me)
+	mux.HandleFunc("DELETE /api/v1/me", a.limitedTo("write", 10, a.deleteMe))
+	mux.HandleFunc("PUT /api/v1/me/handle", a.limitedTo("write", 10, a.setHandle))
+	mux.HandleFunc("GET /api/v1/me/routines", a.limitedTo("read", 120, a.myRoutines))
+	mux.HandleFunc("PUT /api/v1/routines/{name}", a.limitedTo("write", 20, a.publish))
+	mux.HandleFunc("DELETE /api/v1/routines/{name}", a.limitedTo("write", 20, a.unpublish))
+	mux.HandleFunc("GET /api/v1/routines", a.limitedTo("read", 120, a.search))
+	mux.HandleFunc("GET /api/v1/routines/{owner}/{name}", a.limitedTo("read", 120, a.getRoutine))
+	mux.HandleFunc("POST /api/v1/routines/{owner}/{name}/installs", a.limitedTo("install", 20, a.countInstall))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "not_found") })
 	return a.wrap(mux)
 }
@@ -79,6 +86,18 @@ func clientIP(r *http.Request) string {
 func (a *app) limited(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !a.limiter.allow(r.Context(), "auth", clientIP(r)) {
+			w.Header().Set("Retry-After", "60")
+			fail(w, http.StatusTooManyRequests, "rate_limited")
+			return
+		}
+		next(w, r)
+	}
+}
+
+// limitedTo counts calls per visitor in a group of its own, up to limit a minute.
+func (a *app) limitedTo(group string, limit int64, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.limiter.within(r.Context(), group, clientIP(r), limit) {
 			w.Header().Set("Retry-After", "60")
 			fail(w, http.StatusTooManyRequests, "rate_limited")
 			return
@@ -224,23 +243,7 @@ func (a *app) signOut(w http.ResponseWriter, r *http.Request) {
 var bearer = regexp.MustCompile(`^Bearer (\S+)$`)
 
 func (a *app) me(w http.ResponseWriter, r *http.Request) {
-	m := bearer.FindStringSubmatch(r.Header.Get("Authorization"))
-	var c *sessionClaims
-	if m != nil {
-		c = a.signer.check(m[1])
+	if u, ok := a.user(w, r); ok {
+		reply(w, http.StatusOK, u)
 	}
-	if c == nil || c.Install != r.Header.Get("X-Install-Id") || strings.TrimSpace(c.Install) == "" {
-		fail(w, http.StatusUnauthorized, "signed_out")
-		return
-	}
-	u, err := a.db.me(r.Context(), c.Subject, c.Session)
-	if errors.Is(err, errSignedOut) {
-		fail(w, http.StatusUnauthorized, "signed_out")
-		return
-	}
-	if err != nil {
-		serverError(w, r, err)
-		return
-	}
-	reply(w, http.StatusOK, u)
 }
