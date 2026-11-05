@@ -13,6 +13,8 @@ type config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	SessionSecret      []byte
+	// Who may review submissions. There is no way to become one from inside the service.
+	AdminEmails map[string]bool
 
 	// Where Google is reached. Only the functional test changes these.
 	GoogleTokenURL string
@@ -31,6 +33,12 @@ func loadConfig() (config, error) {
 		GoogleTokenURL:     env("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),
 		GoogleJWKSURL:      env("GOOGLE_JWKS_URL", "https://www.googleapis.com/oauth2/v3/certs"),
 		GoogleIssuers:      []string{"https://accounts.google.com", "accounts.google.com"},
+	}
+	c.AdminEmails = map[string]bool{}
+	for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			c.AdminEmails[e] = true
+		}
 	}
 	if v := os.Getenv("GOOGLE_ISSUER"); v != "" {
 		c.GoogleIssuers = strings.Split(v, ",")

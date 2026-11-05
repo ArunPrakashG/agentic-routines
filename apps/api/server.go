@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,10 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/me/routines", a.limitedTo("read", 120, a.myRoutines))
 	mux.HandleFunc("PUT /api/v1/routines/{name}", a.limitedTo("write", 20, a.publish))
 	mux.HandleFunc("DELETE /api/v1/routines/{name}", a.limitedTo("write", 20, a.unpublish))
+	mux.HandleFunc("GET /api/v1/me/submissions", a.limitedTo("read", 120, a.mySubmissions))
+	mux.HandleFunc("DELETE /api/v1/me/submissions/{id}", a.limitedTo("write", 20, a.withdraw))
+	mux.HandleFunc("GET /api/v1/blocklist", a.limitedTo("read", 120, a.blocklist))
+	a.adminRoutes(mux)
 	mux.HandleFunc("GET /api/v1/routines", a.limitedTo("read", 120, a.search))
 	mux.HandleFunc("GET /api/v1/routines/{owner}/{name}", a.limitedTo("read", 120, a.getRoutine))
 	mux.HandleFunc("POST /api/v1/routines/{owner}/{name}/installs", a.limitedTo("install", 20, a.countInstall))
@@ -193,6 +198,7 @@ func (a *app) signIn(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	u.Admin = a.cfg.AdminEmails[strings.ToLower(u.Email)]
 	access, err := a.signer.access(u.ID, sid, b["install_id"], now)
 	if err != nil {
 		serverError(w, r, err)

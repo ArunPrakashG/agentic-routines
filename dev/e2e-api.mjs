@@ -98,6 +98,7 @@ const vars = {
   PORT, DATABASE_URL: `postgres://postgres:test@127.0.0.1:${PG_PORT}/postgres`, REDIS_URL: `redis://127.0.0.1:${REDIS_PORT}/0`,
   GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: 'test-client-secret', SESSION_SECRET: 'test-session-secret-0123456789abcdef',
   GOOGLE_TOKEN_URL: `http://127.0.0.1:${GOOGLE_PORT}/token`, GOOGLE_JWKS_URL: `http://127.0.0.1:${GOOGLE_PORT}/certs`, GOOGLE_ISSUER: ISSUER,
+  ADMIN_EMAILS: 'Admin@example.com, other-admin@example.com',
 };
 const envs = Object.entries(vars).map(([k, v]) => `${k}='${v}'`).join(' ');
 const start = () => spawnSync('tmux', ['new-session', '-d', '-s', TMUX, '-c', STATE, `env ${envs} ${STATE}/api >> ${log} 2>&1`]);
@@ -203,7 +204,7 @@ spawnSync('tmux', ['kill-session', '-t', `=${TMUX}`]);
 await sleep(500);
 start();
 check(await alive(), 'the API starts again on a migrated database');
-check(psql('SELECT count(*) FROM schema_migrations') === '2', 'each migration ran once');
+check(psql('SELECT count(*) FROM schema_migrations') === '3', 'each migration ran once');
 check((await me(keep.access_token, keepInstall)).ok, 'a session survives a restart');
 const kept = await post('/auth/refresh', { refresh_token: keep.refresh_token, install_id: keepInstall });
 check(kept.ok, 'and so does its refresh token');
@@ -239,6 +240,14 @@ const routine = (over = {}) => ({
 
 const p1 = await person({ sub: 'dir-1', email: 'p1@example.com', name: 'P One' });
 const p2 = await person({ sub: 'dir-2', email: 'p2@example.com', name: 'P Two' });
+const adm = await person({ sub: 'dir-adm', email: 'admin@example.com', name: 'The Admin' });
+// A publish waits for a person; this is that person saying yes.
+const approve = async (sub) => (await call(adm, 'POST', `/admin/submissions/${sub.id}/approve`)).ok;
+const publishLive = async (who, name, body) => {
+  const res = await call(who, 'PUT', `/routines/${name}`, body);
+  const sub = await res.json();
+  return { res, sub, live: res.ok && (await approve(sub)) };
+};
 
 check((await call(null, 'PUT', '/routines/play-release', routine())).status === 401, 'publishing needs a signed-in account');
 check((await errorOf(await call(p1, 'PUT', '/routines/play-release', routine()))) === 'needs_handle', 'and a handle');
@@ -269,9 +278,16 @@ smuggled.steps[1].target.attrs = { id: 'go' };
 smuggled.meta.owner = 'someone-else';
 res = await call(p1, 'PUT', '/routines/play-release', smuggled);
 let pub = await res.json();
-check(res.ok && pub.owner === 'pone' && pub.version === 1, 'a routine can be published');
+check(res.status === 202 && pub.owner === 'pone' && pub.version === 1 && pub.status === 'pending' && !!pub.id, 'publishing queues a submission for review');
+check((await call(null, 'GET', '/routines/pone/play-release')).status === 404 && (await (await call(null, 'GET', '/routines')).json()).routines.length === 0, 'and nothing is public until a person approves it');
+check(psql('SELECT count(*) FROM routines') === '0', 'nor is it in the live table');
+check(await approve(pub), 'a reviewer can approve it');
+check((await call(null, 'GET', '/routines/pone/play-release')).ok, 'then it is live');
 res = await call(p1, 'PUT', '/routines/play-release', routine());
-check((await res.json()).version === 2, 'publishing it again makes the next version');
+pub = await res.json();
+check(res.status === 202 && pub.version === 2, 'publishing it again makes the next version, again waiting');
+check((await (await call(null, 'GET', '/routines/pone/play-release')).json()).version === 1, 'while the approved one stays live');
+check(await approve(pub), 'approving the update replaces it');
 
 // Anyone can read the directory, signed in or not.
 res = await call(null, 'GET', '/routines/pone/play-release');
@@ -280,8 +296,8 @@ check(res.ok && got.owner === 'pone' && got.version === 2 && got.steps.length ==
 check(!JSON.stringify(got).includes('private') && !JSON.stringify(got).includes('p1@example.com'), 'the example value and the email are not in it');
 check(!('evil' in got.steps[1]) && !('owner' in got.meta), 'fields nobody asked for are not kept');
 check((await errorOf(await call(null, 'GET', '/routines/pone/nope'))) === 'not_found', 'an unknown routine is a 404');
-await call(p2, 'PUT', '/routines/play-release', routine({ meta: { ...routine().meta, description: 'Another take on the release. Use when asked to ship to testing.' } }));
-await call(p2, 'PUT', '/routines/gmail-label', routine({ meta: { ...routine().meta, name: 'gmail-label', site: 'mail.google.com', pauses: [], description: 'Label a thread. Use when the user asks to file mail.' }, steps: [step(1, { action: 'navigate', url: 'https://mail.google.com/mail/', page: { url: 'https://mail.google.com/mail/', landmarks: [] } })] }));
+await publishLive(p2, 'play-release', routine({ meta: { ...routine().meta, description: 'Another take on the release. Use when asked to ship to testing.' } }));
+await publishLive(p2, 'gmail-label', routine({ meta: { ...routine().meta, name: 'gmail-label', site: 'mail.google.com', pauses: [], description: 'Label a thread. Use when the user asks to file mail.' }, steps: [step(1, { action: 'navigate', url: 'https://mail.google.com/mail/', page: { url: 'https://mail.google.com/mail/', landmarks: [] } })] }));
 
 res = await call(null, 'GET', '/routines?q=rollout');
 let found = (await res.json()).routines;
@@ -308,11 +324,101 @@ check((await call(p2, 'DELETE', '/routines/play-release')).status === 204 && (aw
 check((await call(p2, 'DELETE', '/routines/play-release')).status === 404, 'only once');
 check((await call(null, 'GET', '/routines/pone/play-release')).ok, "and taking down yours leaves nobody else's");
 
+// ---------- review ----------
+const waiting = async () => (await (await call(adm, 'GET', '/admin/submissions')).json());
+check((await call(null, 'GET', '/admin/submissions')).status === 401, 'the review queue needs a sign-in');
+check((await call(p1, 'GET', '/admin/submissions')).status === 404 && (await call(p1, 'POST', `/admin/submissions/${pub.id}/approve`)).status === 404, 'and a publisher cannot see it or approve their own work');
+check((await (await call(adm, 'GET', '/me')).json()).admin === true && (await (await call(p1, 'GET', '/me')).json()).admin === false, 'only the allow-listed email is an admin, whatever its case');
+
+res = await call(p1, 'PUT', '/routines/review-me', routine({ meta: { ...routine().meta, name: 'review-me' }, steps: [
+  step(1, { action: 'navigate', url: 'https://play.google.com/console/', target: undefined }),
+  step(2, { action: 'type', label: 'Email', value: 'someone@example.com' }),
+  step(3, { action: 'type', label: 'Key', value: 'sk-abcdefghijklmnopqrstuvwxyz012345' }),
+  step(4, { action: 'click', label: 'Delete the app' })], meta: { ...routine().meta, name: 'review-me', pauses: [] } }));
+const queued = await res.json();
+let list = await waiting();
+check(list.waiting === 1 && list.submissions[0].id === queued.id && list.submissions[0].owner === 'pone' && list.submissions[0].steps === 4, 'a reviewer sees what is waiting');
+let one = await (await call(adm, 'GET', `/admin/submissions/${queued.id}`)).json();
+const level = (id) => one.checks.find((c) => c.id === id)?.level;
+check(level('shape') === 'pass' && level('site') === 'pass', 'the checks pass what is fine');
+check(level('typed') === 'warn' && level('secrets') === 'fail' && level('pauses') === 'warn', 'and flag a typed public value, a key and a final step without a pause');
+check(one.live === null && one.publisher.handle === 'pone' && one.publisher.live >= 1 && one.publisher.blocked === false, 'with who sent it and what they have live');
+one = await (await call(adm, 'GET', `/admin/submissions/${pub.id}`)).json();
+check(one.status === 'approved' && one.live?.version === 2, 'a decided one shows the live copy to compare with');
+check((await call(adm, 'GET', '/admin/submissions/not-an-id')).status === 404 && (await call(adm, 'GET', '/admin/submissions?status=nope')).status === 400, 'bad ids and filters are refused');
+
+check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G9', note: 'x' }))) === 'bad_guideline', 'a rejection must name a real guideline');
+check((await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G3' })).status === 400, 'and say why');
+check((await call(adm, 'POST', `/admin/submissions/${queued.id}/reject`, { guideline: 'G3', note: 'Step 3 types a key. Take it out and use a secret.' })).ok, 'a reviewer can reject it');
+check((await errorOf(await call(adm, 'POST', `/admin/submissions/${queued.id}/approve`))) === 'not_pending', 'which cannot then be approved');
+const mine = (await (await call(p1, 'GET', '/me/submissions')).json()).submissions;
+const mineRejected = mine.find((x) => x.id === queued.id);
+check(mineRejected.status === 'rejected' && mineRejected.guideline === 'G3' && mineRejected.note.includes('key') && !('steps' in mineRejected), 'the publisher sees the guideline and the note');
+check((await call(null, 'GET', '/routines/pone/review-me')).status === 404, 'a rejected routine never went live');
+
+res = await call(p1, 'PUT', '/routines/review-me', routine({ meta: { ...routine().meta, name: 'review-me' } }));
+const first = await res.json();
+res = await call(p1, 'PUT', '/routines/review-me', routine({ meta: { ...routine().meta, name: 'review-me' } }));
+const second = await res.json();
+check(second.version === first.version + 1 && psql("SELECT count(*) FROM submissions WHERE name = 'review-me' AND status = 'pending'") === '1', 'a newer submission replaces the one waiting');
+check((await call(p1, 'DELETE', `/me/submissions/${second.id}`)).status === 204 && (await call(p1, 'DELETE', `/me/submissions/${second.id}`)).status === 404, 'a publisher can withdraw what is waiting, once');
+check((await call(p2, 'DELETE', `/me/submissions/${first.id}`)).status === 404, 'and only their own');
+check((await call(adm, 'GET', '/admin/submissions?status=withdrawn')).ok && (await (await call(adm, 'GET', '/admin/submissions?status=all')).json()).submissions.length >= 5, 'a reviewer can look through the history');
+
+// Switching a live routine off.
+let off = await call(adm, 'POST', '/admin/routines/ptwo/gmail-label/disable', { reason: 'Site changed its layout.' });
+check(off.ok && (await call(null, 'GET', '/routines/ptwo/gmail-label')).status === 404, 'a live routine can be switched off');
+check((await (await call(null, 'GET', '/routines?q=label')).json()).routines.length === 0 && (await call(null, 'POST', '/routines/ptwo/gmail-label/installs')).status === 404, 'it leaves search and stops counting');
+let bl = await (await call(null, 'GET', '/blocklist')).json();
+check(bl.routines.includes('ptwo/gmail-label'), 'the block list tells installed copies to stop');
+check((await (await call(p2, 'GET', '/me/routines')).json()).routines.find((x) => x.name === 'gmail-label').disabled === true, 'the owner sees that it is off');
+check((await call(adm, 'POST', '/admin/routines/ptwo/gmail-label/enable')).ok && (await call(null, 'GET', '/routines/ptwo/gmail-label')).ok, 'and back on');
+check((await call(null, 'GET', '/blocklist')).headers.get('cache-control') === 'public, max-age=300', 'the block list can be cached');
+check((await call(adm, 'POST', '/admin/routines/ptwo/nope/disable', { reason: 'x' })).status === 404, 'an unknown routine is a 404');
+await call(adm, 'POST', '/admin/routines/ptwo/gmail-label/disable', { reason: 'Again.' });
+const approvedAgain = await publishLive(p2, 'gmail-label', routine({ meta: { ...routine().meta, name: 'gmail-label', site: 'mail.google.com', pauses: [], description: 'Label a thread. Use when the user asks to file mail.' }, steps: [step(1, { action: 'navigate', url: 'https://mail.google.com/mail/', page: { url: 'https://mail.google.com/mail/', landmarks: [] } })] }));
+check(approvedAgain.live && (await call(null, 'GET', '/routines/ptwo/gmail-label')).status === 404, 'an update to a switched-off routine does not switch it back on');
+await call(adm, 'POST', '/admin/routines/ptwo/gmail-label/enable');
+check((await (await call(adm, 'GET', '/admin/routines?status=disabled')).json()).routines.length === 0, 'the live list can be filtered');
+
+// Blocking.
+res = await call(adm, 'PUT', '/admin/blocks', { kind: 'user', value: 'pone', reason: 'Spam.' });
+check(res.ok, 'a reviewer can block a publisher');
+check((await call(p1, 'PUT', '/routines/after-block', routine({ meta: { ...routine().meta, name: 'after-block' } }))).status === 403, 'who then cannot submit');
+check((await call(null, 'GET', '/routines/pone/play-release')).status === 404 && (await (await call(null, 'GET', '/routines')).json()).routines.every((x) => x.owner !== 'pone'), "and whose routines leave the directory");
+bl = await (await call(null, 'GET', '/blocklist')).json();
+check(bl.users.includes('pone'), 'the block list names them');
+check((await call(adm, 'PUT', '/admin/blocks', { kind: 'repo', value: 'https://GitHub.com/Bad/Repo.git/', reason: 'Not safe.' })).ok, 'a Git repository can be blocked');
+bl = await (await call(null, 'GET', '/blocklist')).json();
+check(bl.repos.includes('https://github.com/bad/repo'), 'in one normal form');
+check((await call(adm, 'PUT', '/admin/blocks', { kind: 'repo', value: 'http://github.com/x/y', reason: 'x' })).status === 400 && (await call(adm, 'PUT', '/admin/blocks', { kind: 'thing', value: 'x', reason: 'x' })).status === 400, 'and nothing else is a block');
+check((await call(adm, 'PUT', '/admin/blocks', { kind: 'routine', value: 'ptwo/play-release', reason: 'Broken.' })).ok && (await call(p2, 'PUT', '/routines/play-release', routine())).status === 403, 'a single routine can be blocked by name');
+check((await (await call(adm, 'GET', '/admin/blocks')).json()).blocks.length === 3, 'a reviewer lists the blocks');
+check((await call(adm, 'DELETE', '/admin/blocks?kind=user&value=pone')).status === 204 && (await call(adm, 'DELETE', '/admin/blocks?kind=user&value=pone')).status === 404, 'a block can be lifted');
+check((await call(null, 'GET', '/routines/pone/play-release')).ok, 'which brings their approved routines back');
+await call(adm, 'DELETE', '/admin/blocks?kind=repo&value=https://github.com/bad/repo');
+await call(adm, 'DELETE', '/admin/blocks?kind=routine&value=ptwo/play-release');
+
+// Deleting, the trail, and the limits.
+await publishLive(p2, 'throwaway', routine({ meta: { ...routine().meta, name: 'throwaway' } }));
+check((await call(adm, 'DELETE', '/admin/routines/ptwo/throwaway')).status === 204 && (await call(adm, 'DELETE', '/admin/routines/ptwo/throwaway')).status === 404, 'a reviewer can delete a live routine');
+const trail = (await (await call(adm, 'GET', '/admin/audit')).json()).audit;
+check(['approve', 'reject', 'disable', 'enable', 'block', 'unblock', 'delete'].every((a) => trail.some((e) => e.action === a && e.admin === 'admin@example.com')), 'every decision is in the audit trail, with who made it');
+const p3 = await person({ sub: 'dir-3', email: 'p3@example.com', name: 'P Three' });
+await call(p3, 'PUT', '/me/handle', { handle: 'pthree' });
+let caps = [];
+for (let i = 0; i < 11; i++) caps.push((await call(p3, 'PUT', `/routines/queued-${i}`, routine({ meta: { ...routine().meta, name: `queued-${i}` } }))).status);
+check(caps.slice(0, 10).every((c) => c === 202) && caps[10] === 409, 'a publisher can have ten waiting at a time');
+let slow = [];
+for (let i = 0; i < 22; i++) slow.push((await call(p3, 'PUT', '/routines/queued-0', routine({ meta: { ...routine().meta, name: 'queued-0' } }))).status);
+check(slow.includes(429), 'and cannot flood the queue in a day');
+check((await call(p3, 'GET', '/me/submissions')).ok && (await (await call(p3, 'GET', '/me/submissions')).json()).submissions.length <= 50, "a publisher's list is capped");
+
 // What the extension really sends: captured from a routine recorded and compiled in a browser (dev/e2e.mjs, BR_CAPTURE=1).
 // Its host is the local test site, so it is moved to a real-looking one.
 const sent = JSON.parse(readFileSync(join(ROOT, 'dev/fixtures/published-routine.json'), 'utf8').replaceAll('127.0.0.1:8767', 'console.acme.example'));
-res = await call(p1, 'PUT', `/routines/${sent.meta.name}`, sent);
-check(res.ok, 'a routine as the extension compiles and sends it is accepted');
+const sentLive = await publishLive(p1, sent.meta.name, sent);
+check(sentLive.res.ok && sentLive.live, 'a routine as the extension compiles and sends it is accepted');
 const back = await (await call(null, 'GET', `/routines/pone/${sent.meta.name}`)).json();
 check(isDeepStrictEqual(back.steps, sent.steps) && isDeepStrictEqual(back.meta.params, sent.meta.params), 'and comes back whole');
 await call(p1, 'DELETE', `/routines/${sent.meta.name}`);
@@ -350,14 +456,14 @@ t = await tool('routine_publish', { name: 'play-release' });
 check(t.error && /not connected/i.test(t.text), 'publishing without a browser says so, and does not publish');
 
 // A bad row in the directory must not get into the browser: what runs there is decided on this side too.
-await call(p1, 'PUT', '/routines/tamper-me', routine({ meta: { ...routine().meta, name: 'tamper-me' } }));
+await publishLive(p1, 'tamper-me', routine({ meta: { ...routine().meta, name: 'tamper-me' } }));
 psql(`UPDATE routines SET steps = jsonb_set(steps, '{0,url}', '\\"https://evil.example/\\"') WHERE name = 'tamper-me'`);
 t = await tool('routine_install', { id: 'pone/tamper-me' });
 check(t.error && /leaves play\.google\.com/.test(t.text) && sh(`test -d '${mcpHome}/routines/pone/tamper-me'`).status !== 0, 'a routine whose step leaves its site is not installed, whatever the directory says');
 await agent.close();
 
 let writes = [];
-for (let i = 0; i < 25; i++) writes.push((await call(p1, 'PUT', '/routines/play-release', routine(), '10.8.8.8')).status);
+for (let i = 0; i < 25; i++) writes.push((await call(p1, 'PUT', '/routines/play-release', { meta: 1 }, '10.8.8.8')).status);
 check(writes.includes(429), 'publishing is rate limited');
 
 // Deleting an account removes what it published.
