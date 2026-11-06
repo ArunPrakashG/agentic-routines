@@ -1,7 +1,7 @@
 {
   "name": "agentic-routines",
   "version": "0.2.0",
-  "description": "Record a browser task once from your agent, replay it without the model.",
+  "description": "A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.",
   "license": "MIT",
   "type": "module",
   "bin": {

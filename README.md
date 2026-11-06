@@ -5,7 +5,7 @@
 <h1 align="center">Agentic Routines</h1>
 
 <p align="center">
-  Record a browser task once from your agent. Replay it as one tool call, without the model.
+  A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
   </picture>
 </p>
 
-Agentic Routines is a browser extension and a command line tool for coding agents such as Claude Code, Codex, GitHub Copilot and OpenCode. It works in Chrome, Edge and Firefox. It is free and open source, and so is the directory of shared routines.
+Coding agents such as Claude Code drive the browser one step at a time: read the page, think, act, repeat. Every step costs tokens and seconds, and the next run pays all of it again. Agentic Routines is the cache for that work. It is a browser extension and a tool server that sit behind your agent's browser tools, for Claude Code, Codex, GitHub Copilot and OpenCode. It is made for agents, not people: you do not record or manage anything, your agent does. It works in Chrome, Edge and Firefox. It is free and open source, and so is the directory of shared routines.
 
 ## What it does
 

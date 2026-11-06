@@ -1,6 +1,6 @@
 # Agentic Routines
 
-Record a browser task once from your agent. Replay it later without the model.
+A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.
 
 ```
 npx agentic-routines setup
