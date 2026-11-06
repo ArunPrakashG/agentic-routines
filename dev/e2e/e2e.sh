@@ -18,6 +18,7 @@ DEV_DIR=$DIR/hooks AGENTIC_ROUTINES_HOME=$DIR/hooks/store node "$ROOT/dev/e2e/e2
 "$ROOT/dev/env/down.sh"
 # Two browser profiles at once, sharing one routine store.
 "$ROOT/dev/e2e/e2e-profiles.sh" --no-build || code=$?
+"$ROOT/dev/e2e/e2e-background.sh" --no-build || code=$?
 # Installing from Git sources and config.routine: the built CLI against a stand-in for GitHub, no browser.
 node "$ROOT/dev/e2e/e2e-sources.mjs" || code=$?
 # What setup tells each agent, exclusive mode and taking it back out: the built CLI against a throwaway home, no browser.

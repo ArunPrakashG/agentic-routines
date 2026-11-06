@@ -157,6 +157,12 @@ export async function aim(el: Element, action: string) {
   const dist = Math.hypot(x - from.x, y - from.y);
   const ms = reduced() ? 0 : Math.min(600, Math.max(250, 220 + dist * 0.35));
   p.cur.classList.add('on');
+  // Nobody sees a page that is behind another tab, and its timers run slowly: place the cursor and go.
+  if (document.hidden) {
+    at = { x, y };
+    p.cur.style.transform = `translate(${x}px, ${y}px)`;
+    return;
+  }
   const move = p.cur.animate([{ transform: `translate(${from.x}px, ${from.y}px)` }, { transform: `translate(${x}px, ${y}px)` }], {
     duration: ms,
     easing: 'cubic-bezier(.65,0,.35,1)',
