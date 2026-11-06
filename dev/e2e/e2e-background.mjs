@@ -64,6 +64,9 @@ const vis = await visibility();
 console.log('· the agent tab is', vis);
 check(vis === 'hidden', 'the agent tab is behind another tab');
 
+r = await call('navigate', { url: `${SITE}/index.html?again=1`, tab_id: Number(tab) });
+check(!r.error && (await visibility()) === 'hidden', 'navigating it leaves the person on the tab they were looking at');
+page = (await call('read_page', { tab_id: Number(tab) })).text;
 r = await call('click', { ref: refFor(page, /“Apps”/), tab_id: Number(tab) });
 check(!r.error && r.ms < LIMIT, `click in the background tab goes through (${r.ms} ms)`);
 page = (await call('read_page', { tab_id: Number(tab) })).text;
@@ -76,6 +79,7 @@ check(!r.error && r.ms < LIMIT, `typing goes through (${r.ms} ms)`);
 r = await call('screenshot', { full: true, tab_id: Number(tab) });
 check(!r.error && r.ms < LIMIT, `a picture of the tab is taken (${r.ms} ms)`);
 
+check((await visibility()) === 'hidden', 'and after clicks, typing and a picture it is still behind');
 await client.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

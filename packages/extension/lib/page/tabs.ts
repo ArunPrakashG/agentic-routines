@@ -237,7 +237,7 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
   const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
   const alone = holds.size === 0;
   if (alone && active?.id !== undefined && /^https?:/.test(active.url ?? '')) return claim(session, active.id);
-  if (alone) return claim(session, (await browser.tabs.create({ url: 'about:blank', active: true })).id!);
+  if (alone) return claim(session, (await browser.tabs.create({ url: 'about:blank', active: false })).id!);
   // Someone else is working: not in the person's window or in the other agent's.
   const w = await browser.windows.create({ url: 'about:blank', focused: false });
   const id = w?.tabs?.[0]?.id ?? (w?.id !== undefined ? (await browser.tabs.query({ windowId: w.id }))[0]?.id : undefined);
@@ -250,7 +250,7 @@ export async function openTab(session: string = USER, url: string): Promise<numb
   await prune();
   const own = tabOf.get(session);
   const windowId = own !== undefined ? await browser.tabs.get(own).then((t) => t.windowId, () => undefined) : undefined;
-  const t = await browser.tabs.create({ url, active: true, ...(windowId !== undefined ? { windowId } : {}) });
+  const t = await browser.tabs.create({ url, active: false, ...(windowId !== undefined ? { windowId } : {}) });
   return claim(session, t.id!);
 }
 

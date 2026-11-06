@@ -102,7 +102,12 @@ export async function areaBase64(tabId: number, around?: Rect): Promise<{ data: 
 
 export async function pngBase64(tabId: number): Promise<string> {
   const tab = await browser.tabs.get(tabId);
-  if (!tab.active) await browser.tabs.update(tabId, { active: true });
+  if (!tab.active) {
+    // A picture of the window shows the tab in front, so a tab behind another is taken through the DevTools
+    // session, and the person is not switched away from what they are looking at. Browsers without one bring it forward.
+    if (platform.cdp) return bare(tabId, () => platform.cdp!(tabId, async (send) => (await send<{ data: string }>('Page.captureScreenshot', { format: 'png' })).data));
+    await browser.tabs.update(tabId, { active: true });
+  }
   return bare(tabId, () => grab(tabId, tab.windowId));
 }
 
