@@ -165,13 +165,16 @@ export async function handle(method: string, p: any): Promise<unknown> {
       await glow(tabId, 'run', WORKING_MS);
       const t = await browser.tabs.get(tabId);
       await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() }, p?.session);
-      return { url: t.url, title: unmark(t.title ?? ''), tab_id: tabId };
+      const account = await ask<string | undefined>(tabId, { t: 'account' }).catch(() => undefined);
+      return { url: t.url, title: unmark(t.title ?? ''), tab_id: tabId, account };
     }
     case 'browser.read': {
       const tabId = await working(p?.session, p.tab_id);
       // Text and what was left out of it, so the MCP server can say so. The address lets the CLI point at a routine for this page.
-      const out = await ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter });
-      return { ...out, url: (await browser.tabs.get(tabId)).url };
+      if (p.ref) return { text: await ask<string>(tabId, { t: 'text', ref: p.ref }), notes: { omitted: {}, longValues: 0 }, url: (await browser.tabs.get(tabId)).url };
+      const out = await ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter, wait: p.wait });
+      const account = await ask<string | undefined>(tabId, { t: 'account' }).catch(() => undefined);
+      return { ...out, url: (await browser.tabs.get(tabId)).url, account };
     }
     case 'browser.llm': {
       const tabId = await working(p?.session, p.tab_id);
