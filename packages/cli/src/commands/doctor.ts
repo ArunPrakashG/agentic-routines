@@ -3,6 +3,7 @@ import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { BROWSERS, type OS } from '@agentic-routines/browsers';
 import { agentStatus } from './agents.ts';
+import { debugOn } from '../debug.ts';
 import { HOST_NAME, paths } from '../paths.ts';
 
 // `npx agentic-routines doctor`: says what is connected and what to do about what is not.
@@ -40,6 +41,9 @@ export function runDoctor() {
   const running = existsSync(paths.hosts()) ? readdirSync(paths.hosts()).filter((f) => f.endsWith('.sock') && alive(Number(f.slice(0, -5)))) : [];
   if (running.length) ok('Extension', `${running.length} browser${running.length > 1 ? 's' : ''} talking to the host right now`);
   else no('Extension', 'no browser is talking to the host. Install the extension, then open its panel once');
+
+  // Not a problem either way, so it never fails the check.
+  lines.push(`✓ ${'Debug log'.padEnd(22)} ${debugOn() ? 'on: see "agentic-routines logs"' : 'off. Turn on with: agentic-routines debug on'}`);
 
   console.log(lines.join('\n'));
   process.exit(lines.some((l) => l.startsWith('✗')) ? 1 : 0);
