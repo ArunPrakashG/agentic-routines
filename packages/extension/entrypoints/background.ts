@@ -246,7 +246,14 @@ export default defineBackground(() => {
   });
   runs.onRunsChanged(push);
   browser.storage.onChanged.addListener((changes) => {
-    if (changes.session) push();
+    if (changes.session) {
+      push();
+      if (native.connected()) native.hello().catch(() => {});
+    }
+  });
+  // With several profiles open, an agent uses the one the person was last in unless told otherwise.
+  browser.windows.onFocusChanged.addListener((id) => {
+    if (id !== browser.windows.WINDOW_ID_NONE) native.emit('profile.focus');
   });
   replay.onReplay((s) => noteRun(s).then(push));
 

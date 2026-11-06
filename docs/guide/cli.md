@@ -10,6 +10,7 @@ npx agentic-routines <command>
 | `setup --exclusive` | The same, and turns off other browser tools in those agents. `--no-exclusive` turns them back on. |
 | `setup --remove` | Takes it all back out: tool server, guidance, plugin, hooks and the browser connection. Saved routines stay. |
 | `doctor` | Checks what is connected and what is not, including the guidance and exclusive mode. |
+| `profiles` | Lists the browser profiles with the extension that are open now, numbered. `profiles name <number> <name>` gives one a name an agent can use to pick it (`browser_profile`, or `AGENTIC_ROUTINES_PROFILE`). |
 | `debug on` / `debug off` | Turns the action log on or off. While it is on, every tool call an agent makes is written to `~/.agentic-routines/logs/actions.jsonl`: the agent, the tool, its arguments, how long it took, whether it worked and what came back (cut short). Text typed into a field and any argument that looks like a secret are never written, only their length. It takes effect on the next call, with no restart. `AGENTIC_ROUTINES_DEBUG=1` in an agent's environment does the same for that agent. |
 | `logs [-f]` | Reads the action log. `-f` follows it, `-n 100` shows more lines, `--errors` shows only failures and `--raw` prints the JSON. Each tool call is followed by the calls it made to the browser, so a failure can be traced to the step. |
 | `sources` | Lists the places routines can come from. |

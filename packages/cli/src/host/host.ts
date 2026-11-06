@@ -70,6 +70,12 @@ export function runHost(): void {
   const pending = new Map<number, { client: Socket; id: number }>();
   let nextId = 1;
   let browser = 'unknown';
+  // Which profile of that browser, as it says in hello. The file is rewritten when any of it changes.
+  let profile: string | undefined;
+  let email: string | undefined;
+  const startedAt = Date.now();
+  let focusedAt = startedAt;
+  const writeInfo = () => writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, profile, email, startedAt, focusedAt }), { mode: 0o600 });
   // Files an agent asked to upload. The extension can read only these.
   const allowed = new Map<string, number>();
 
@@ -175,8 +181,11 @@ export function runHost(): void {
       } else if (isRequest(m)) {
         const req = m as Request;
         if (req.method === 'host.hello') {
-          browser = String((req.params as any)?.browser ?? 'unknown');
-          writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, startedAt: Date.now() }), { mode: 0o600 });
+          const hello = (req.params ?? {}) as { browser?: string; profile?: string; email?: string };
+          browser = String(hello.browser ?? 'unknown');
+          profile = typeof hello.profile === 'string' ? hello.profile : undefined;
+          email = typeof hello.email === 'string' ? hello.email : undefined;
+          writeInfo();
           toBrowser({ id: req.id, result: { pid: process.pid, version: process.env.npm_package_version ?? '0.1.0' } });
           return;
         }
@@ -210,6 +219,12 @@ export function runHost(): void {
           toBrowser({ id: req.id, error: (e as Error).message });
         }
       } else if (isEvent(m)) {
+        // The person went to a window of this profile: an agent with no other instruction uses the profile they were last in.
+        if (m.event === 'profile.focus') {
+          focusedAt = Date.now();
+          writeInfo();
+          return;
+        }
         for (const c of clients) toClient(c, m);
       }
     }),
@@ -244,7 +259,7 @@ export function runHost(): void {
     // Only this user's programs may talk to the browser through it, whatever the umask was.
     if (process.platform !== 'win32') chmodSync(sock, 0o600);
     log('listening', sock);
-    writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, startedAt: Date.now() }), { mode: 0o600 });
+    writeInfo();
   });
   server.on('error', (e) => log('server error', e.message));
 }

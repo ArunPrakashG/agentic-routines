@@ -36,6 +36,12 @@ The tab's title says who has it: `🟣 Claude Code · Page title`. The mark stay
 
 Each agent session works in a tab of its own and holds it, so two agents never click in the same page. A lone agent works in the tab you are looking at. When a second one starts, it gets a window of its own rather than yours or the first agent's. A tab one agent holds is locked to the others: they get an error that names who has it, and `tabs` lists each tab's holder. A tab is let go when its agent disconnects, or after 15 minutes without a call. The same routine runs once at a time, so a second call waits for the first and gives up after two minutes, saying who has it. Pictures for the checks are taken one at a time, whichever session asks.
 
+### Several browser profiles
+
+Each browser profile with the extension (a work and a personal Chrome profile, say, which may be signed in to the same account or to different ones) runs on its own and shows up to the agent as a separate browser. Routines are shared by all of them, since they live in one folder on your computer. Tabs, locks and recorded runs belong to a profile.
+
+An agent works in the profile you used last, and the first answer it gets says so when more than one is open. It can list them and switch with `browser_profile`, or start in one with `AGENTIC_ROUTINES_PROFILE` (a name, an account email or an id). Switch before a task rather than in the middle of one: a run being recorded stays in the profile it started in. Two agents in different profiles can run the same routine only one after the other, because the routine often acts on the same account: the second waits, then says who has it. Give a profile a name you will recognise with `agentic-routines profiles name <number> <name>`; without one it is shown by the account it is signed in to.
+
 ## Pauses
 
 A replay always stops before a step you can't undo: publishing, paying, deleting. It waits for you, or for your agent to approve with `routine_resume`. A routine author can add pauses. A routine can never remove one that was detected.

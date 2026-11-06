@@ -3,7 +3,7 @@
 # touched: the browser, the routine store and the agent config all live there.
 #   dev/env/up.sh [--headless] [--no-claude] [--no-build]
 # AR_DEV_DIR moves the state folder, AR_CHROME picks the browser, AR_MODEL the agent's model.
-# AR_TMUX_PREFIX renames the tmux sessions (default br), so two checkouts can run side by side.
+# AR_SHARED_STORE points the routine store (and so the hosts) somewhere shared; AR_TMUX_PREFIX renames the tmux sessions (default br), so two checkouts can run side by side.
 # AR_TLS_HOST and AR_TLS_PORT make https://$AR_TLS_HOST/ in that browser reach 127.0.0.1:$AR_TLS_PORT, with the
 # certificate errors ignored, for checks that need an https site (routines from Git only install for https).
 set -e
@@ -49,7 +49,8 @@ fi
 
 "$(dirname "$0")/down.sh"
 
-STORE=$DEV/store
+# AR_SHARED_STORE shares one routine store between browsers, as two profiles of one person do.
+STORE=${AR_SHARED_STORE:-$DEV/store}
 # A reused profile keeps the old background script after a rebuild, so each build gets its own.
 BHOME=$DEV/home-$(sha256sum "$EXT/background.js" | cut -c1-8)
 PROFILE=$BHOME/.config/chromium

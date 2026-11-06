@@ -4,6 +4,7 @@ import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import { current, debugOn, record, redact } from '../debug.ts';
 import { paths } from '../paths.ts';
+import * as profileNames from '../store/profiles.ts';
 import { isEvent, isResponse, lineReader, type Event, type Response } from '../protocol.ts';
 
 // The MCP server's line to the browser: a socket to whichever native host
@@ -15,11 +16,26 @@ export class NotConnected extends Error {
   }
 }
 
-interface HostInfo {
+export interface HostInfo {
   pid: number;
   socket: string;
   browser: string;
+  /** Which profile of that browser: each profile with the extension has a host of its own. */
+  profile?: string;
+  /** The account the extension is signed in with in that profile, if any. */
+  email?: string;
   startedAt: number;
+  /** When the person last used a window of that profile. */
+  focusedAt?: number;
+}
+
+export interface BrowserProfile {
+  id: string;
+  label: string;
+  browser: string;
+  email?: string;
+  /** The one this session is working in. */
+  current: boolean;
 }
 
 function alive(pid: number): boolean {
@@ -31,7 +47,7 @@ function alive(pid: number): boolean {
   }
 }
 
-async function hosts(): Promise<HostInfo[]> {
+export async function hosts(): Promise<HostInfo[]> {
   let files: string[] = [];
   try {
     files = (await readdir(paths.hosts())).filter((f) => f.endsWith('.json'));
@@ -51,9 +67,20 @@ async function hosts(): Promise<HostInfo[]> {
   return out.sort((a, b) => b.startedAt - a.startedAt);
 }
 
+/** What a person would call a profile: the name they gave it, the account it is signed in with, else the browser and the start of its id. */
+export async function profileLabel(h: HostInfo): Promise<string> {
+  const given = h.profile ? (await profileNames.names())[h.profile] : undefined;
+  return given ?? h.email ?? `${h.browser}${h.profile ? ` ${h.profile.slice(0, 4)}` : ''}`;
+}
+
 export class Bridge {
   private sock?: Socket;
   private host?: HostInfo;
+  /** The profile an agent asked for, by name, id or account. Without one, the profile the person used last. */
+  private want? = process.env.AGENTIC_ROUTINES_PROFILE || undefined;
+  /** An agent that chose a profile is not told which one it got. */
+  private told = !!process.env.AGENTIC_ROUTINES_PROFILE;
+  private note?: string;
   private nextId = 1;
   /** MCP client name, e.g. "claude-code". */
   agent?: string;
@@ -66,10 +93,55 @@ export class Bridge {
     return this.host?.browser;
   }
 
+  /** Every browser profile with the extension that is open now. */
+  async profiles(): Promise<BrowserProfile[]> {
+    const all = await hosts();
+    // Before the first action nothing is connected yet: the one that would be used is the current one.
+    const live = this.sock && !this.sock.destroyed ? this.host : undefined;
+    const target = live ?? (all.length ? await this.pick(all).catch(() => undefined) : undefined);
+    return Promise.all(all.map(async (h) => ({ id: h.profile ?? String(h.pid), label: await profileLabel(h), browser: h.browser, email: h.email, current: target?.pid === h.pid })));
+  }
+
+  /** Work in another profile from now on. */
+  async use(name: string): Promise<BrowserProfile> {
+    this.want = name;
+    this.sock?.destroy();
+    this.sock = undefined;
+    this.host = undefined;
+    this.told = true;
+    await this.open();
+    return (await this.profiles()).find((p) => p.current)!;
+  }
+
+  /** Said once, with the first answer, when more than one profile is open and nobody chose. */
+  takeNote(): string | undefined {
+    const n = this.note;
+    this.note = undefined;
+    return n;
+  }
+
+  private async pick(all: HostInfo[]): Promise<HostInfo> {
+    if (!this.want) return [...all].sort((a, b) => (b.focusedAt ?? b.startedAt) - (a.focusedAt ?? a.startedAt))[0];
+    const w = this.want.toLowerCase();
+    const named = await Promise.all(all.map(async (h) => ({ h, label: (await profileLabel(h)).toLowerCase() })));
+    const found =
+      named.find((x) => x.h.profile === this.want || String(x.h.pid) === this.want) ??
+      named.find((x) => x.label === w || x.h.email?.toLowerCase() === w) ??
+      (named.filter((x) => x.h.profile?.startsWith(w) || x.label.includes(w)).length === 1 ? named.find((x) => x.h.profile?.startsWith(w) || x.label.includes(w)) : undefined);
+    if (!found) throw new Error(`No open browser profile matches “${this.want}”. Open now: ${named.map((x) => x.label).join(', ')}.`);
+    return found.h;
+  }
+
   private async open(): Promise<Socket> {
     if (this.sock && !this.sock.destroyed) return this.sock;
-    const [h] = await hosts();
-    if (!h) throw new NotConnected();
+    const all = await hosts();
+    if (!all.length) throw new NotConnected();
+    const h = await this.pick(all);
+    if (all.length > 1 && !this.told) {
+      this.told = true;
+      const labels = (await Promise.all(all.map(profileLabel))).join(', ');
+      this.note = `Working in ${await profileLabel(h)}. ${all.length} browser profiles are open (${labels}), and this is the one the person used last. To use another, call browser_profile with use; it stays for this session.`;
+    }
     const sock = connect(h.socket);
     await new Promise<void>((res, rej) => {
       sock.once('connect', res);

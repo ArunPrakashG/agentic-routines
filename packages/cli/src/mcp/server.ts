@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, urlScore, wrapAuthored, wrapUntrusted, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { logged } from '../debug.ts';
 import { Bridge, NotConnected } from './bridge.ts';
+import * as locks from '../store/locks.ts';
 import { checkUpload, splitPaths } from '../host/files.ts';
 import { paths } from '../paths.ts';
 import * as sources from '../store/sources.ts';
@@ -262,9 +263,18 @@ function watchRoutines(onChange: () => void) {
 
 export async function runMcp(): Promise<void> {
   const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: `${INSTRUCTIONS}\n\n${UNTRUSTED_NOTES}` });
+  // With several browser profiles open, the first answer says which one the work is in.
+  const withNote =
+    (cb: (a: never, extra: unknown) => Promise<unknown>) =>
+    async (a: never, extra: unknown) => {
+      const res = (await cb(a, extra)) as { content?: unknown[] } | undefined;
+      const note = bridge.takeNote();
+      if (note && res?.content) res.content = [...res.content, { type: 'text', text: note }];
+      return res;
+    };
   // Every tool call goes through the debug log when it is on (see debug.ts).
   const register = server.registerTool.bind(server) as (name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => RegisteredTool;
-  server.registerTool = ((name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => register(name, config, logged(name, () => bridge.agent, cb))) as unknown as typeof server.registerTool;
+  server.registerTool = ((name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => register(name, config, logged(name, () => bridge.agent, withNote(cb)))) as unknown as typeof server.registerTool;
   const routineTools = new Map<string, RegisteredTool>();
   let refreshTimer: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {
@@ -276,7 +286,7 @@ export async function runMcp(): Promise<void> {
   });
 
   // Fixes from a replay: chosen elements become the next version.
-  const pendingRuns = new Map<string, { id: string; routine: Routine }>();
+  const pendingRuns = new Map<string, { id: string; routine: Routine; release?: () => Promise<void> }>();
   // The hint last shown, so reading the same page again stays quiet.
   let lastHint = '';
 
@@ -284,6 +294,7 @@ export async function runMcp(): Promise<void> {
     const p = pendingRuns.get(result.run_id);
     if (result.status === 'paused' || result.status === 'needs_choice' || !p) return result;
     pendingRuns.delete(result.run_id);
+    await p.release?.();
     if (!result.test) await store.recordRun(p.id, { ok: result.status === 'done', calls: result.model_calls, ms: result.ms }).catch(() => {});
     const fixes = result.fixes ?? {};
     if (Object.keys(fixes).length) {
@@ -313,8 +324,17 @@ export async function runMcp(): Promise<void> {
     if (files.length) await bridge.call('host.allowFiles', { paths: files });
     // The store knows where a routine came from; the extension holds the line either way.
     const origin = (await store.list()).find((x) => x.owner === r.owner && x.name === r.meta.name)?.origin;
-    const result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r), fit, foreign: !!origin }, 15 * 60_000);
-    pendingRuns.set(result.run_id, { id, routine: r });
+    // One run of a routine at a time on this computer, whichever agent or browser profile asks.
+    const lock = await locks.acquire(`${r.owner ?? 'local'}__${r.meta.name}`, `${bridge.agent ?? 'an agent'}${bridge.browser ? ` in ${bridge.browser}` : ''}`, Number(process.env.AGENTIC_ROUTINES_LOCK_WAIT_MS ?? 2 * 60_000));
+    if ('heldBy' in lock) return fail(`${r.meta.name} is already running for ${lock.heldBy}. Only one run of a routine goes at a time. Try again when it has finished.`);
+    let result: RunResult;
+    try {
+      result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r), fit, foreign: !!origin }, 15 * 60_000);
+    } catch (e) {
+      await lock.release();
+      throw e;
+    }
+    pendingRuns.set(result.run_id, { id, routine: r, release: lock.release });
     const done = await finish(result);
     const notes = authorNotes(r, origin, done.status !== 'done' && done.at_step ? done.at_step : 'all');
     const hooks = hookSummary(done.hooks, origin);
@@ -363,6 +383,21 @@ export async function runMcp(): Promise<void> {
   // ---------- browser tools (each call is recorded by the extension) ----------
 
   const tab = { tab_id: z.number().int().optional().describe('Tab to act on. Defaults to the tab the agent is working in.') };
+
+  server.registerTool(
+    'browser_profile',
+    {
+      description:
+        'Browser profiles with Agentic Routines that are open now (each can be signed in to different accounts). With no arguments, lists them and marks the one this session works in. Pass use (a name, an account email or an id from the list) to work in another one from now on. Tabs and recorded runs belong to a profile, so switch before starting a task, not in the middle of one.',
+      inputSchema: { use: z.string().optional() },
+    },
+    async (a) =>
+      guarded(async () => {
+        if (a.use) await bridge.use(a.use);
+        const list = await bridge.profiles();
+        return text(list.map((p) => `${p.current ? '→' : ' '} ${p.label} (${p.browser}${p.email ? `, ${p.email}` : ''}) id=${p.id}`).join('\n'));
+      }),
+  );
 
   server.registerTool(
     'tabs',
