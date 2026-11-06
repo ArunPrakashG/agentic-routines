@@ -588,15 +588,34 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
   return result(s);
 }
 
+// The same routine runs once at a time: two agents sending the same release or the same form would do its side
+// effects twice. A second call waits its turn, and gives up with who has it if the first is still going.
+const QUEUE_MS = 120_000;
+const ACTIVE = new Set<string>(['running', 'paused', 'needs_choice']);
+const routineKey = (r: Routine) => `${(r as Routine & { owner?: string }).owner ?? r.meta.owner ?? 'local'}/${r.meta.name}`;
+
+async function waitForRoutine(r: Routine, session?: string): Promise<string | undefined> {
+  const key = routineKey(r);
+  const holder = () => [...live.values()].find((x) => ACTIVE.has(x.status) && routineKey(x.routine) === key);
+  const end = Date.now() + QUEUE_MS;
+  for (let h = holder(); h; h = holder()) {
+    if (Date.now() > end) return `${r.meta.name} is already running${h.by ? ` for ${h.by}` : ''}${h.status === 'running' ? '' : ' and waiting for an answer'}. Only one run of a routine goes at a time. Try again when it has finished.${h.session && h.session === session ? ' That run is yours: continue or stop it with routine_resume.' : ''}`;
+    await sleep(500);
+  }
+  return undefined;
+}
+
 export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
   if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
     return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
+  const busy = await waitForRoutine(p.routine, p.session);
+  if (busy) return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: busy, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const s: ReplayState = {
     id: 'rp-' + crypto.randomUUID().slice(0, 4),
     routine: p.routine,
     params: p.params,
     secrets: p.secrets,
-    tabId: await agentTabId(),
+    tabId: await agentTabId(p.session),
     i: 0,
     approved: new Set(),
     approvedInPanel: [],

@@ -30,6 +30,12 @@ If they agree, the step runs. If the element is missing or matches more than one
 
 While a replay or your agent drives a tab, its edges glow, a cursor glides to each element with a label for the action, and the element is outlined as it is used. The glow turns amber when the replay waits for you at a pause, and it ends when the run does. It never takes mouse input, and it is hidden for every screenshot, so it never changes what the checks above see. With reduced motion turned on, the cursor jumps instead of gliding.
 
+The tab's title says who has it: `🟣 Claude Code · Page title`. The mark stays while that agent holds the tab, and a page that changes its own title keeps it. A title belongs to the page, so a page that puts its own back every time wins after a few rounds, and the mark is dropped for that page. Where the browser has tab groups, the held tab is also put in a group named for its agent, which a page cannot change; a tab that is alone in its window or already in one of your groups is left out of that. Two sessions of one agent are told apart by a number.
+
+### Several agents at once
+
+Each agent session works in a tab of its own and holds it, so two agents never click in the same page. A lone agent works in the tab you are looking at. When a second one starts, it gets a window of its own rather than yours or the first agent's. A tab one agent holds is locked to the others: they get an error that names who has it, and `tabs` lists each tab's holder. A tab is let go when its agent disconnects, or after 15 minutes without a call. The same routine runs once at a time, so a second call waits for the first and gives up after two minutes, saying who has it. Pictures for the checks are taken one at a time, whichever session asks.
+
 ## Pauses
 
 A replay always stops before a step you can't undo: publishing, paying, deleting. It waits for you, or for your agent to approve with `routine_resume`. A routine author can add pauses. A routine can never remove one that was detected.

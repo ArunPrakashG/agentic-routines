@@ -1,4 +1,5 @@
 import { isIrreversible, stripInvisible, type Locator, type PageFingerprint, type Viewport } from '@agentic-routines/core';
+import { unmark } from './mark';
 import { ariaHidden, hiddenWhy } from './hidden';
 
 // Runs in the page. Turns elements into locators and outlines, and back.
@@ -175,7 +176,7 @@ export function fingerprint(): PageFingerprint {
     if (t && !landmarks.includes(t)) landmarks.push(t);
     if (landmarks.length >= 40) break;
   }
-  return { url: location.href, title: document.title, landmarks };
+  return { url: location.href, title: unmark(document.title), landmarks };
 }
 
 // ---------- refs: stable per page load ----------
@@ -221,7 +222,7 @@ const carry = (raw: string | null | undefined, cleaned: string) => {
 
 /** Outline for the agent: headings and interactive elements with refs. Text a person would not see is left out. */
 export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400): { text: string; notes: OutlineNotes } {
-  const lines = [clean(document.title, 200), location.href, ''];
+  const lines = [clean(unmark(document.title), 200), location.href, ''];
   const notes: OutlineNotes = { omitted: {}, longValues: 0 };
   const want = filter === 'all' ? `${INTERACTIVE},${HEADINGS},p,li,td,th,[role=alert],[role=status],dialog` : `${INTERACTIVE},${HEADINGS},[role=alert],dialog`;
   const seen = new Set<Element>();
@@ -481,7 +482,7 @@ export function snapshot(targetRef?: string) {
       // Gone since it was found; the hook gets the page without it.
     }
   }
-  return { title: document.title.slice(0, 200), html: markup(document.body, 30_000), outline, ...(target ? { target } : {}) };
+  return { title: unmark(document.title).slice(0, 200), html: markup(document.body, 30_000), outline, ...(target ? { target } : {}) };
 }
 
 /** Whether a hook may do this to this element. The reason when it may not. */

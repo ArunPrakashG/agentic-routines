@@ -36,7 +36,7 @@ for (const target of ['chrome-mv3', 'firefox-mv3']) {
   // Every permission asked for has a stated reason, and no reason is left over.
   const asked = [...(m.permissions ?? []), ...(m.host_permissions ?? [])];
   for (const p of asked) if (!allowed[p]) bad(target, `permission "${p}" has no justification in releases/store/permissions.json`);
-  const chromeOnly = new Set(['sidePanel', 'debugger']);
+  const chromeOnly = new Set(['sidePanel', 'debugger', 'offscreen', 'tabGroups']);
   for (const p of Object.keys(allowed)) if (!asked.includes(p) && !(target === 'firefox-mv3' && chromeOnly.has(p))) bad(target, `justification for "${p}" but it is not requested`);
   if (target === 'firefox-mv3') {
     const g = m.browser_specific_settings?.gecko;
