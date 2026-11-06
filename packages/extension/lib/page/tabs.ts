@@ -219,8 +219,8 @@ async function prune() {
 
 /**
  * The tab a session works in. `requested` picks one: it must not be held by another session.
- * With none, the session's own tab; else the tab the person is looking at when no other session has one
- * (so a lone agent works where the person is), else a window of its own.
+ * With none, the session's own tab; else a new tab, which never takes over one the person has open. It sits in the
+ * person's window when no other session has one, and in a window of its own when another agent is working.
  */
 export async function agentTabId(session: string = USER, requested?: number): Promise<number> {
   await prune();
@@ -234,9 +234,7 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
   }
   const own = tabOf.get(session);
   if (own !== undefined) return claim(session, own);
-  const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
   const alone = holds.size === 0;
-  if (alone && active?.id !== undefined && /^https?:/.test(active.url ?? '')) return claim(session, active.id);
   if (alone) return claim(session, (await browser.tabs.create({ url: 'about:blank', active: false })).id!);
   // Someone else is working: not in the person's window or in the other agent's.
   const w = await browser.windows.create({ url: 'about:blank', focused: false });
