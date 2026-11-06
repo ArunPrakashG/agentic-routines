@@ -158,7 +158,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
         tabId = await openTab(p?.session, p.url);
       } else {
         tabId = await working(p?.session, p.tab_id);
-        await browser.tabs.update(tabId, { url: p.url, active: true });
+        await browser.tabs.update(tabId, { url: p.url });
       }
       await new Promise((r) => setTimeout(r, 200));
       await waitLoaded(tabId);
