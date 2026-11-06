@@ -3,6 +3,7 @@ import { readdir, readFile, rm } from 'node:fs/promises';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import { current, debugOn, record, redact } from '../debug.ts';
+import { marksOn } from '../marks.ts';
 import { paths } from '../paths.ts';
 import * as profileNames from '../store/profiles.ts';
 import { isEvent, isResponse, lineReader, type Event, type Response } from '../protocol.ts';
@@ -201,6 +202,7 @@ export class Bridge {
       this.waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       // The extension records which agent did what.
       if (this.agent && !/^(store|host)\./.test(method)) params = { ...(params as object), agent: this.agent, session: this.session };
+      if (/^browser\./.test(method) && marksOn()) params = { ...(params as object), mark: true };
       sock.write(JSON.stringify({ id, method, params }) + '\n');
     });
   }

@@ -1,5 +1,6 @@
 import { runDebug, runLogs } from './commands/debug.ts';
 import { runDoctor } from './commands/doctor.ts';
+import { runMarks } from './commands/marks.ts';
 import { runProfiles } from './commands/profiles.ts';
 import { runHost } from './host/host.ts';
 import { runMcp } from './mcp/server.ts';
@@ -36,6 +37,8 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
     console.error(e.message);
     process.exit(1);
   });
+} else if (cmd === 'marks') {
+  runMarks(args);
 } else if (cmd === 'debug') {
   runDebug(args);
 } else if (cmd === 'logs') {
@@ -52,6 +55,7 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
         [--remove]    Take it all back out: tool server, guidance, plugin, hook and host
   doctor              Check what is connected and what is not, guidance and exclusivity included
   profiles            List the browser profiles that are open; "profiles name <number> <name>" names one
+  marks [on|off]      Annotate screenshots: a numbered box and label on what the agent clicked or typed into
   debug [on|off]      Record every tool call an agent makes, with arguments, time and result (typed text and secrets left out)
   logs [-f]           Read that record: -f follows it, -n 100 shows more lines, --errors only failures, --raw is JSON
   sources             List, add, remove, turn on or off the places routines can come from; "sources check <folder>" checks a repository
