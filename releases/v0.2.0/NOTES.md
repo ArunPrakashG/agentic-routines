@@ -2,6 +2,10 @@
 
 Edit this before publishing. Merged since v0.1.0:
 
+- Merge pull request #99 from ArunPrakashG/docs/store-privacy-answers
+- Merge pull request #98 from ArunPrakashG/chore/agent-store-shots
+- Merge pull request #97 from ArunPrakashG/docs/agent-first-everywhere
+- Merge pull request #96 from ArunPrakashG/docs/agent-first-positioning
 - Merge pull request #95 from ArunPrakashG/chore/store-assets
 - Merge pull request #94 from ArunPrakashG/release/0.2.0
 - Merge pull request #93 from ArunPrakashG/fix/agent-decides-saving
