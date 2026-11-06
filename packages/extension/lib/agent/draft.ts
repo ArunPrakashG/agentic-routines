@@ -42,6 +42,10 @@ const asAnswer = <T>(fn: () => T): T => {
   }
 };
 
+// The side panel's library lists what is in the store, so it hears when an agent saves.
+const savedListeners: Array<() => void> = [];
+export const onSaved = (fn: () => void) => void savedListeners.push(fn);
+
 export async function handle(method: string, p: any): Promise<unknown> {
   switch (method) {
     case 'draft.propose': {
@@ -104,6 +108,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       // A routine that is already saved is only replaced after the new steps ran well.
       if (d.base && !(d.tested?.ok && d.tested.rev === d.rev)) throw new Error(`Not saved. This replaces ${d.base.name} v${d.base.version}, so test the latest edit first with routine_test${d.tested && d.tested.rev === d.rev ? `. The last test did not pass: ${d.tested.summary}` : ''}.`);
       const saved = await native.call<Routine>('store.write', { routine });
+      savedListeners.forEach((fn) => fn());
       if (d.runId) await runs.markSaved(d.runId).catch(() => {});
       const all = await load();
       cache = all.filter((x) => x.id !== d.id);

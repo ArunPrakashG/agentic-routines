@@ -245,6 +245,7 @@ export default defineBackground(() => {
     if (e === 'routines.changed') refreshRoutines();
   });
   runs.onRunsChanged(push);
+  draft.onSaved(() => void refreshRoutines());
   browser.storage.onChanged.addListener((changes) => {
     if (changes.session) {
       push();

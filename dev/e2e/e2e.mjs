@@ -82,8 +82,7 @@ async function openPanel(scheme = 'light') {
 async function shot(name) {
   await sleep(700);
   if (!shots || !panel) return;
-  // A replay fronts the site's window, and a page behind it may never answer a capture.
-  await panel.send('Page.bringToFront');
+  // The panel is captured where it is: fronting it would leave the agent's page hidden for the steps that follow.
   const { data } = await panel.send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(join(SHOTS, `${name}.png`), Buffer.from(data, 'base64'));
   log('shot', name);
@@ -888,6 +887,11 @@ if (panel) {
   await call('click', { ref: refFor(page, /“Apps”/) });
   t = await saveDraft('acme-foreign-nav', 'Open the apps list on the test console. Use when the user asks to look at the apps.', {}, /navigate .*index\.html/);
   check(/Saved acme-foreign-nav/.test(t), 'a routine to turn into one from someone else is saved');
+  if (panel) {
+    if (/Back to routines/.test(await panelText())) await panelClick('Back to routines');
+    await sleep(800);
+    check(/acme-foreign-nav/.test(await panelText()), 'the side panel library shows a routine an agent just saved, with no refresh');
+  }
   await editSteps('acme-foreign-nav', (list) => list.push({ n: list.length + 1, action: 'navigate', label: 'Open the docs', url: `http://localhost:${new URL(SITE).port}/docs.html` }));
   await makeForeign('acme-foreign-nav');
   t = await call('routine_run', { name: 'acme-foreign-nav' });
