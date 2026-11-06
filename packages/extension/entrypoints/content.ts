@@ -1,12 +1,14 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport } from '../lib/page/dom';
+import { accessibleName, attach, busyWhy, signedInAs, watchChanges, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
-  | { t: 'read'; filter?: 'interactive' | 'all' }
+  | { t: 'read'; filter?: 'interactive' | 'all'; wait?: number }
   | { t: 'fingerprint' }
+  | { t: 'text'; ref: string }
+  | { t: 'account' }
   | { t: 'alternates' }
   | { t: 'viewport' }
   | { t: 'describe'; ref: string }
@@ -63,6 +65,7 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
   main() {
+    watchChanges();
     clearStale();
     document.addEventListener('click', onClick, true);
     document.addEventListener('change', onChange, true);
@@ -78,7 +81,15 @@ export default defineContentScript({
             setTimeout(() => send({ ok: false }), 150);
             break;
           case 'read':
-            send({ ok: outline(msg.filter) });
+            void (async () => {
+              // A page that is still drawing itself: wait for it to go quiet when asked, and say so when it has not.
+              const end = Date.now() + Math.min(msg.wait ?? 0, 10_000);
+              while (msg.wait && Date.now() < end && busyWhy()) await new Promise((r) => setTimeout(r, 200));
+              const out = outline(msg.filter);
+              const busy = busyWhy();
+              if (busy) out.notes.busy = busy;
+              send({ ok: out });
+            })();
             break;
           case 'viewport':
             send({ ok: viewport() });
@@ -86,6 +97,15 @@ export default defineContentScript({
           case 'alternates':
             // <link rel="alternate" type="text/markdown">, resolved against the page.
             send({ ok: Array.from(document.querySelectorAll('link[rel~="alternate"][type="text/markdown"][href]')).slice(0, 5).map((l) => (l as HTMLLinkElement).href) });
+            break;
+          case 'text': {
+            const el = byRef(msg.ref);
+            const value = (el as HTMLInputElement).value;
+            send({ ok: (typeof value === 'string' && value ? value : (el as HTMLElement).innerText || el.textContent || '').slice(0, 20_000) });
+            break;
+          }
+          case 'account':
+            send({ ok: signedInAs() });
             break;
           case 'fingerprint':
             send({ ok: fingerprint() });

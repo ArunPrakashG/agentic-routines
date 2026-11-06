@@ -210,6 +210,44 @@ export interface OutlineNotes {
   omitted: Record<string, number>;
   /** Attribute values longer than anyone writes for a label. */
   longValues: number;
+  /** Why the page is probably not finished drawing, if it is not. */
+  busy?: string;
+}
+
+// When the page last changed, so a read can say the page is still settling. The overlay and the title mark are ours.
+let changedAt = Date.now();
+export function watchChanges() {
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.target.parentElement?.tagName === 'TITLE' || (r.target as Element).tagName === 'TITLE') continue;
+      const ours = [...r.addedNodes, ...r.removedNodes].every((n) => (n as Element).id === 'agentic-routines-overlay');
+      if (r.type === 'childList' && r.addedNodes.length + r.removedNodes.length > 0 && ours) continue;
+      changedAt = Date.now();
+      return;
+    }
+  }).observe(document, { subtree: true, childList: true, characterData: true });
+}
+
+/** The account a page says it is signed in with: the label of an account button ("Google Account: Name (a@b.com)"), else the authuser in the address. */
+export function signedInAs(): string | undefined {
+  const label = Array.from(document.querySelectorAll('[aria-label],[title]'))
+    .map((el) => el.getAttribute('aria-label') ?? el.getAttribute('title') ?? '')
+    .find((t) => /account|profile|signed in/i.test(t) && /[\w.+-]+@[\w-]+\.[\w.-]+/.test(t));
+  const email = label?.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0];
+  const user = new URLSearchParams(location.search).get('authuser');
+  if (email) return user ? `${email} (authuser=${user})` : email;
+  return user ? `Google account number ${user} (authuser=${user})` : undefined;
+}
+
+/** Why the page is probably still loading: the document, a busy marker, a spinner, or changes in the last half second. */
+export function busyWhy(): string | undefined {
+  if (document.readyState !== 'complete') return 'the document is still loading';
+  if (document.querySelector('[aria-busy="true"]')) return 'part of the page is marked busy';
+  const spinner = Array.from(document.querySelectorAll('[role="progressbar"]')).find(visible);
+  if (spinner) return 'a progress indicator is showing';
+  const ago = Date.now() - changedAt;
+  if (ago < 500) return `the page changed ${ago} ms ago`;
+  return undefined;
 }
 
 const LONG_VALUE = 200;

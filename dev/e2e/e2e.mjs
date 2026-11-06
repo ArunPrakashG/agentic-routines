@@ -960,6 +960,23 @@ if (panel) {
   await sleep(300);
 }
 
+// ---------- a page that draws in stages ----------
+{
+  let t = await call('navigate', { url: `${SITE}/slow.html?authuser=2` });
+  check(/Signed in as arun@example\.com/.test(t), 'navigate says which account the page is signed in as');
+  t = await call('read_page');
+  check(/may not be finished/.test(t) && !/Remove/.test(t), 'a page that is still loading is called out, so an empty list is not read as empty');
+  t = await call('read_page', { wait: 6000 });
+  check(/Remove/.test(t) && !/may not be finished/.test(t), 'read_page with wait returns the finished page');
+  const full = await call('read_page', { filter: 'all' });
+  const rm = refFor(full, /“Remove”/);
+  t = await call('read_page', { ref: rm });
+  check(/Remove/.test(t) && !/Apps/.test(t), 'read_page with a ref returns the text of that one element');
+  await call('click', { ref: rm });
+  const r = await tryCall('click', { ref: rm });
+  check(r.error && /is gone from the page\. Call read_page again/.test(r.text) && !/possible injection/.test(r.text), 'a stale ref is reported in plain words, not flagged as an injection');
+}
+
 const wrapper = await (await import('node:fs/promises')).readFile(join(STORE, 'bin/host'), 'utf8');
 check(wrapper.includes(join(STORE, 'bin/host.cjs')) && !wrapper.includes('dist/'), 'the host runs from its own copy');
 

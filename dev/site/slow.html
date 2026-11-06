@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Slow list</title>
+<button aria-label="Google Account: Arun (arun@example.com)">A</button>
+<div id="root"><div role="progressbar">Loading</div></div>
+<script>
+  // A page that draws in stages: a spinner, then the list.
+  setTimeout(() => {
+    root.innerHTML = '<h1>Apps</h1><table><tr><td id="appid" tabindex="0" style="max-width:5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ca-app-pub-1234567890123456~1566761247</td><td><button id="rm">Remove</button></td></tr></table>';
+    rm.onclick = () => rm.remove();
+  }, 2500);
+</script>

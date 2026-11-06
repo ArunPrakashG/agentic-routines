@@ -196,7 +196,7 @@ export class Bridge {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiting.delete(id);
-        reject(new Error(`The browser did not answer ${method} within ${Math.round(timeoutMs / 1000)}s`));
+        reject(new Error(`The browser did not answer ${method} within ${Math.round(timeoutMs / 1000)}s${/^browser\.(click|type|select|upload|press)$/.test(method) ? '. The action may still have happened: read the page to see before you try it again' : ''}`));
       }, timeoutMs);
       this.waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       // The extension records which agent did what.
