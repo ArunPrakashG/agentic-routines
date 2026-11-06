@@ -9,7 +9,7 @@ import * as native from '../lib/agent/native';
 import { platform } from '../lib/platform';
 import * as replay from '../lib/replay/replay';
 import * as runs from '../lib/agent/runs';
-import { ask } from '../lib/page/tabs';
+import { ask, releaseSession } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
 // When each routine last ran and which steps changed then, by owner/name.
@@ -238,6 +238,7 @@ export default defineBackground(() => {
       const { session } = data as { session: string };
       agents.delete(session);
       replay.agentGone(session);
+      releaseSession(session);
       push();
       return;
     }

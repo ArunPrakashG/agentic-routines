@@ -19,12 +19,23 @@ const AREA_W = 640;
 const AREA_H = 360;
 let last = 0;
 
+// Pictures are taken one at a time, however many sessions ask: the browser allows two a second in all.
+let queue: Promise<unknown> = Promise.resolve();
+
 // A window on a hidden workspace never answers captureVisibleTab.
 function capture(windowId: number): Promise<string> {
-  return Promise.race([
-    browser.tabs.captureVisibleTab(windowId, { format: 'png' }),
-    new Promise<string>((_, no) => setTimeout(() => no(new Error('The browser window is not visible')), CAPTURE_MS)),
-  ]);
+  const take = async () => {
+    const wait = last + 520 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    last = Date.now();
+    return Promise.race([
+      browser.tabs.captureVisibleTab(windowId, { format: 'png' }),
+      new Promise<string>((_, no) => setTimeout(() => no(new Error('The browser window is not visible')), CAPTURE_MS)),
+    ]);
+  };
+  const next = queue.then(take, take);
+  queue = next.catch(() => {});
+  return next;
 }
 
 export async function screenshot(tabId: number): Promise<ImageBitmap | null> {
@@ -35,9 +46,6 @@ export async function screenshot(tabId: number): Promise<ImageBitmap | null> {
 
 async function shoot(tabId: number, windowId: number): Promise<ImageBitmap | null> {
   if (!(await rendering(tabId))) return null;
-  const wait = last + 520 - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  last = Date.now();
   try {
     const url = await capture(windowId);
     const blob = await (await fetch(url)).blob();

@@ -4,7 +4,8 @@ import * as llm from '../page/llm';
 import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
-import { agentTabId, ask, glow, settle, setAgentTab, waitLoaded } from '../page/tabs';
+import { unmark } from '../page/mark';
+import { agentTabId, ask, glow, heldBy, noteSession, openTab, settle, waitLoaded } from '../page/tabs';
 
 // The browser tools agents call. Each call is done and recorded.
 
@@ -19,8 +20,8 @@ interface Described {
 
 // The tab an agent is working in glows while it works, and for a few seconds after its last call.
 const WORKING_MS = 6000;
-async function working(requested?: number) {
-  const tabId = await agentTabId(requested);
+async function working(session: string | undefined, requested?: number) {
+  const tabId = await agentTabId(session, requested);
   await glow(tabId, 'run', WORKING_MS);
   return tabId;
 }
@@ -105,8 +106,8 @@ export async function uploadFile(tabId: number, ref: string, value: string): Pro
   return { names: infos.map((i) => i.name), warnings };
 }
 
-// The element a default screenshot centres on.
-let lastActed: { tabId: number; ref: string } | undefined;
+// The element a default screenshot centres on, for each session.
+const lastActed = new Map<string, { tabId: number; ref: string }>();
 
 async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}) {
   const d = await ask<Described>(tabId, { t: 'describe', ref });
@@ -118,7 +119,8 @@ async function act(source: string, session: string | undefined, tabId: number, r
   else await ask(tabId, { t: 'act', ref, action, value });
   const after = await settle(tabId, before);
   // A new address can reuse refs for other elements.
-  lastActed = after === before ? { tabId, ref } : undefined;
+  if (after === before) lastActed.set(session ?? 'user', { tabId, ref });
+  else lastActed.delete(session ?? 'user');
   await runs.record(source, {
     action,
     url: before,
@@ -139,19 +141,23 @@ async function act(source: string, session: string | undefined, tabId: number, r
 
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
+  if (p?.session) noteSession(p.session, source);
   switch (method) {
     case 'browser.tabs': {
       const tabs = await browser.tabs.query({});
-      return tabs.filter((t) => /^https?:/.test(t.url ?? '')).map((t) => ({ id: t.id, title: t.title, url: t.url, active: t.active }));
+      return tabs
+        .filter((t) => /^https?:/.test(t.url ?? ''))
+        .map((t) => {
+          const h = t.id !== undefined ? heldBy(t.id) : undefined;
+          return { id: t.id, title: unmark(t.title ?? ''), url: t.url, active: t.active, ...(h ? { held_by: h.session === p?.session ? 'you' : h.label } : {}) };
+        });
     }
     case 'browser.navigate': {
       let tabId: number;
       if (p.new_tab) {
-        const t = await browser.tabs.create({ url: p.url, active: true });
-        tabId = t.id!;
-        setAgentTab(tabId);
+        tabId = await openTab(p?.session, p.url);
       } else {
-        tabId = await working(p.tab_id);
+        tabId = await working(p?.session, p.tab_id);
         await browser.tabs.update(tabId, { url: p.url, active: true });
       }
       await new Promise((r) => setTimeout(r, 200));
@@ -159,43 +165,43 @@ export async function handle(method: string, p: any): Promise<unknown> {
       await glow(tabId, 'run', WORKING_MS);
       const t = await browser.tabs.get(tabId);
       await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() }, p?.session);
-      return { url: t.url, title: t.title, tab_id: tabId };
+      return { url: t.url, title: unmark(t.title ?? ''), tab_id: tabId };
     }
     case 'browser.read': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       // Text and what was left out of it, so the MCP server can say so. The address lets the CLI point at a routine for this page.
       const out = await ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter });
       return { ...out, url: (await browser.tabs.get(tabId)).url };
     }
     case 'browser.llm': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       const out = await llm.find(tabId, { scope: p.scope, full: p.full, maxBytes: p.max_bytes });
       return { ...out, page: (await browser.tabs.get(tabId)).url };
     }
     case 'browser.click': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       const { d, after, changed } = await act(source, p?.session, tabId, p.ref, 'click');
       return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}`;
     }
     case 'browser.type': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       const { d } = await act(source, p?.session, tabId, p.ref, 'type', p.text);
       if (p.submit) await act(source, p?.session, tabId, p.ref, 'press', 'Enter');
       return `Typed into “${d.label || d.loc.name || d.loc.tag}”.`;
     }
     case 'browser.select': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       const { d } = await act(source, p?.session, tabId, p.ref, 'select', p.value);
       return `Picked “${p.value}” in “${d.label}”.`;
     }
     case 'browser.upload': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       const { d, uploaded } = await act(source, p?.session, tabId, p.ref, 'upload', p.path, { field: 'file' });
       const names = uploaded!.names;
       return `Attached ${names.length === 1 ? names[0] : `${names.length} files (${names.join(', ')})`} to “${d.label || d.loc.name}”.${uploaded!.warnings.length ? ` Note: ${uploaded!.warnings.join('. ')}.` : ''}`;
     }
     case 'browser.press': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       const before = (await browser.tabs.get(tabId)).url ?? '';
       await ask(tabId, { t: 'act', action: 'press', value: p.key });
       const after = await settle(tabId, before);
@@ -203,9 +209,10 @@ export async function handle(method: string, p: any): Promise<unknown> {
       return `Pressed ${p.key}.`;
     }
     case 'browser.screenshot': {
-      const tabId = await working(p.tab_id);
+      const tabId = await working(p?.session, p.tab_id);
       if (p.full) return { data: await pngBase64(tabId), note: 'The whole tab.' };
-      const ref: string | undefined = p.ref ?? (lastActed?.tabId === tabId ? lastActed.ref : undefined);
+      const last = lastActed.get(p?.session ?? 'user');
+      const ref: string | undefined = p.ref ?? (last?.tabId === tabId ? last.ref : undefined);
       const d = ref ? await ask<Described>(tabId, { t: 'describe', ref }).catch((e) => { if (p.ref) throw e; }) : undefined;
       const { data, area } = await areaBase64(tabId, d?.rect);
       return { data, note: area ? `The area around “${d!.label || d!.loc.name || d!.loc.tag}”. Pass full: true for the whole tab.` : 'The whole tab at half size, as no element was acted on here. Pass full: true for full size.' };

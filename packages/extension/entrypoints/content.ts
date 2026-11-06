@@ -1,4 +1,5 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
+import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
 import { accessibleName, attach, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport } from '../lib/page/dom';
 
@@ -20,6 +21,7 @@ export type ContentMsg =
   | { t: 'first'; target: Locator }
   | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
   | { t: 'veil'; on: boolean }
+  | { t: 'lock'; label: string | null; ttl?: number }
   | { t: 'record'; on: boolean };
 
 function b64ToBytes(b64: string) {
@@ -61,6 +63,7 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
   main() {
+    clearStale();
     document.addEventListener('click', onClick, true);
     document.addEventListener('change', onChange, true);
 
@@ -199,6 +202,10 @@ export default defineContentScript({
             break;
           case 'veil':
             veil(msg.on);
+            send({ ok: true });
+            break;
+          case 'lock':
+            lock(msg.label, msg.ttl);
             send({ ok: true });
             break;
           case 'record':

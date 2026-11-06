@@ -351,8 +351,16 @@ if (panel) {
   check(/^Done/.test(t) && tabs.some((x) => x.active && /app=2/.test(x.url)), 'replay follows the row that is first now');
 }
 
+// Tabs a section opened for a second agent are closed after it, so later sections find the page where they left it.
+const tabIds = async () => new Set((await listTabs()).map((t) => t.id));
+const closeNew = async (before) => {
+  for (const t of await listTabs()) if (!before.has(t.id)) await panelEval(`chrome.tabs.remove(${t.id})`);
+  await sleep(300);
+};
+
 // ---------- 8. the agent goes away during a pause ----------
 {
+  const before = await tabIds();
   await evalIn((u) => u.startsWith(SITE), "localStorage.variant = 'b'");
   const other = new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: STORE }, stderr: 'inherit' });
   const c2 = new Client({ name: 'claude-code', version: '2.0.0' });
@@ -371,6 +379,63 @@ if (panel) {
   check(!/Paused before step/.test(after), 'the pause ends when its agent disconnects');
   check(/disconnected/.test(after), 'the panel says the agent is gone');
   await evalIn((u) => u.startsWith(SITE), 'delete localStorage.variant');
+  await closeNew(before);
+}
+
+// ---------- 8a. two agents at once: each has a tab of its own, and a held tab is locked ----------
+{
+  const before = await tabIds();
+  const titles = async () => (await (await fetch(`${CDP}/json/list`)).json()).filter((t) => t.type === 'page').map((t) => ({ url: t.url, title: t.title }));
+  const other = new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { HOME, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: STORE }, stderr: 'inherit' });
+  const c3 = new Client({ name: 'codex-mcp-client', version: '1.0.0' });
+  await c3.connect(other);
+  const call3 = async (name, args = {}) => {
+    const r = await c3.callTool({ name, arguments: args }, undefined, { timeout: 300_000 });
+    return { text: r.content.map((c) => c.text ?? `[${c.type}]`).join('\n'), error: !!r.isError };
+  };
+  const tabsOf = async (fn) => {
+    const lines = (await fn('tabs')).split('\n').slice(1, -1).filter((l, i) => !(i === 0 || /^Cleaning: /.test(l)));
+    return JSON.parse(lines.join('\n'));
+  };
+  await call('navigate', { url: `${SITE}/tracks.html` });
+  const b = await call3('navigate', { url: `${SITE}/history.html` });
+  const idB = Number(b.text.match(/tab (\d+)/)?.[1]);
+  const mine = (await listTabs()).find((x) => /tracks\.html/.test(x.url));
+  const theirs = (await listTabs()).find((x) => /history\.html/.test(x.url));
+  check(mine && theirs && mine.id !== theirs.id, 'two agents work in different tabs');
+  check(mine?.held_by === 'you' && theirs?.held_by === 'Codex', 'the tab list says who holds each tab');
+  check((await tabsOf(async (n) => (await call3(n)).text)).find((x) => x.id === mine.id)?.held_by === 'Claude Code', 'and says it from the other side too');
+  const ts = await titles();
+  check(ts.some((t) => /tracks\.html/.test(t.url) && t.title.startsWith('🟣 Claude Code · ')), 'the tab Claude Code holds says so in its title');
+  check(ts.some((t) => /history\.html/.test(t.url) && t.title.startsWith('🟣 Codex · ')), 'and the one Codex holds says so');
+  check(!mine.title.includes('🟣') && !theirs.title.includes('🟣'), 'the tab list gives the page title without the mark');
+  // A page that sets its own title keeps the mark.
+  await evalIn((u) => /tracks\.html/.test(u), "document.title = 'Changed by the page'");
+  await sleep(300);
+  check((await titles()).some((t) => /tracks\.html/.test(t.url) && t.title === '🟣 Claude Code · Changed by the page'), 'a title the page sets keeps the mark');
+  // Locked.
+  const poke = await call3('read_page', { tab_id: mine.id });
+  check(poke.error && /locked by Claude Code/.test(poke.text), 'a tab another agent holds is locked');
+  const nav = await call3('navigate', { url: `${SITE}/index.html`, tab_id: mine.id });
+  check(nav.error && /locked by Claude Code/.test(nav.text), 'and cannot be navigated away');
+  check(/Changed by the page/.test(await evalIn((u) => /tracks\.html/.test(u), 'document.title')) && /tracks\.html/.test((await listTabs()).find((x) => x.id === mine.id).url), 'nothing in it changed');
+  // The same routine twice at once: both finish, one after the other.
+  const [r1, r2] = await Promise.all([
+    call('routine_run', { name: 'acme-latest', params: { release_name: '4.0.1' } }),
+    call3('routine_run', { name: 'acme-latest', params: { release_name: '4.0.2' } }),
+  ]);
+  log(r1.split('\n')[0], '/', r2.text.split('\n')[0]);
+  check(/^Done/.test(r1) && /^Done/.test(r2.text), 'the same routine from two agents runs one after the other');
+  // Letting go.
+  await c3.close();
+  await sleep(1500);
+  const after = await listTabs();
+  check(!after.some((x) => x.id === idB && x.held_by), 'a tab is free when its agent leaves');
+  check(!(await titles()).some((t) => t.title.startsWith('🟣 Codex')), 'and its title is clean again');
+  await call('read_page', { tab_id: idB });
+  check((await listTabs()).find((x) => x.id === idB)?.held_by === 'you', 'another agent can then take it');
+  await call('navigate', { url: `${SITE}/tracks.html`, tab_id: mine.id });
+  await closeNew(before);
 }
 
 // ---------- 8b. the agent refines a routine: modal and click-through become a direct address ----------

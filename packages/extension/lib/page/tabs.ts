@@ -32,7 +32,10 @@ const controlled = new Map<number, { mode: 'run' | 'paused'; until: number }>();
 /** Show that this tab is being driven. The page ends the glow by itself after ttl, so a stalled run leaves nothing behind. */
 export async function glow(tabId: number, mode: 'run' | 'paused' | 'off', ttl = 8000) {
   if (mode === 'off') controlled.delete(tabId);
-  else controlled.set(tabId, { mode, until: Date.now() + ttl });
+  else {
+    controlled.set(tabId, { mode, until: Date.now() + ttl });
+    touch(tabId);
+  }
   try {
     await ask(tabId, { t: 'glow', mode, ttl });
   } catch {
@@ -76,6 +79,8 @@ export async function waitLoaded(tabId: number, timeoutMs = 30_000) {
         // A new document starts without the glow.
         const c = controlled.get(tabId);
         if (c && c.until > Date.now()) void glow(tabId, c.mode, c.until - Date.now());
+        const h = heldBy(tabId);
+        if (h) void mark(tabId, h.label);
         return;
       } catch {
         // Restricted page or still swapping documents.
@@ -99,30 +104,116 @@ export async function settle(tabId: number, beforeUrl: string): Promise<string> 
   return t.url ?? beforeUrl;
 }
 
-// The agent works in one tab, which it can change with tab_id or new_tab.
-let agentTab: number | undefined;
+// Each agent session works in a tab of its own, and holds it until it lets go or is silent for LEASE_MS.
+// Two agents never click in the same page: a tab one of them holds is locked to the other. The held tab's title
+// carries the agent's name (see mark.ts), so a person can see which tabs are in use and by whom.
+const LEASE_MS = 15 * 60_000;
+const USER = 'user';
 
-export async function agentTabId(requested?: number): Promise<number> {
-  if (requested !== undefined) {
-    agentTab = requested;
-    return requested;
-  }
-  if (agentTab !== undefined) {
-    try {
-      await browser.tabs.get(agentTab);
-      return agentTab;
-    } catch {
-      agentTab = undefined;
-    }
-  }
-  const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
-  if (active?.id !== undefined && /^https?:/.test(active.url ?? '')) return (agentTab = active.id);
-  const t = await browser.tabs.create({ url: 'about:blank', active: true });
-  return (agentTab = t.id!);
+interface Hold {
+  session: string;
+  label: string;
+  until: number;
+  marked: number;
+}
+const holds = new Map<number, Hold>();
+const tabOf = new Map<string, number>();
+const labels = new Map<string, string>();
+
+/** What to call a session in the title and in messages. */
+export const noteSession = (session: string | undefined, label: string) => void labels.set(session ?? USER, label);
+const labelOf = (session: string) => labels.get(session) ?? 'Agent';
+
+function mark(tabId: number, label: string | null) {
+  return ask(tabId, { t: 'lock', label, ttl: LEASE_MS }).catch(() => {
+    // A restricted or blank page cannot show it.
+  });
 }
 
-export function setAgentTab(id: number) {
-  agentTab = id;
+function releaseTab(tabId: number) {
+  const h = holds.get(tabId);
+  holds.delete(tabId);
+  if (h && tabOf.get(h.session) === tabId) tabOf.delete(h.session);
+  void mark(tabId, null);
+}
+
+/** Let go of the tab a session holds, when the session ends. The tab stays open. */
+export function releaseSession(session: string) {
+  const t = tabOf.get(session);
+  if (t !== undefined) releaseTab(t);
+}
+
+function claim(session: string, tabId: number): number {
+  const before = tabOf.get(session);
+  if (before !== undefined && before !== tabId) releaseTab(before);
+  const label = labelOf(session);
+  holds.set(tabId, { session, label, until: Date.now() + LEASE_MS, marked: Date.now() });
+  tabOf.set(session, tabId);
+  void mark(tabId, label);
+  return tabId;
+}
+
+/** A tab being driven stays held: called whenever its session does something to it. */
+function touch(tabId: number) {
+  const h = holds.get(tabId);
+  if (!h) return;
+  h.until = Date.now() + LEASE_MS;
+  if (Date.now() - h.marked > 60_000) {
+    h.marked = Date.now();
+    void mark(tabId, h.label);
+  }
+}
+
+/** Who holds a tab, for lists and messages. */
+export const heldBy = (tabId: number) => (holds.get(tabId) && holds.get(tabId)!.until > Date.now() ? holds.get(tabId) : undefined);
+
+async function prune() {
+  for (const [tabId, h] of holds) {
+    let gone = h.until < Date.now();
+    if (!gone) gone = await browser.tabs.get(tabId).then(() => false, () => true);
+    if (gone) {
+      holds.delete(tabId);
+      if (tabOf.get(h.session) === tabId) tabOf.delete(h.session);
+      if (h.until < Date.now()) void mark(tabId, null);
+    }
+  }
+}
+
+/**
+ * The tab a session works in. `requested` picks one: it must not be held by another session.
+ * With none, the session's own tab; else the tab the person is looking at when no other session has one
+ * (so a lone agent works where the person is), else a window of its own.
+ */
+export async function agentTabId(session: string = USER, requested?: number): Promise<number> {
+  await prune();
+  if (requested !== undefined) {
+    await browser.tabs.get(requested).catch(() => {
+      throw new Error(`There is no tab ${requested}. Call tabs to see the open ones.`);
+    });
+    const h = heldBy(requested);
+    if (h && h.session !== session) throw new Error(`Tab ${requested} is locked by ${h.label}, another agent working in the browser. Use your own tab: leave out tab_id, or pass new_tab to navigate.`);
+    return claim(session, requested);
+  }
+  const own = tabOf.get(session);
+  if (own !== undefined) return claim(session, own);
+  const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+  const alone = holds.size === 0;
+  if (alone && active?.id !== undefined && /^https?:/.test(active.url ?? '')) return claim(session, active.id);
+  if (alone) return claim(session, (await browser.tabs.create({ url: 'about:blank', active: true })).id!);
+  // Someone else is working: not in the person's window or in the other agent's.
+  const w = await browser.windows.create({ url: 'about:blank', focused: false });
+  const id = w?.tabs?.[0]?.id ?? (w?.id !== undefined ? (await browser.tabs.query({ windowId: w.id }))[0]?.id : undefined);
+  if (id === undefined) throw new Error('The browser did not open a window for this agent');
+  return claim(session, id);
+}
+
+/** A new tab opened by a session becomes the one it works in, next to its old one. */
+export async function openTab(session: string = USER, url: string): Promise<number> {
+  await prune();
+  const own = tabOf.get(session);
+  const windowId = own !== undefined ? await browser.tabs.get(own).then((t) => t.windowId, () => undefined) : undefined;
+  const t = await browser.tabs.create({ url, active: true, ...(windowId !== undefined ? { windowId } : {}) });
+  return claim(session, t.id!);
 }
 
 export { sleep };
