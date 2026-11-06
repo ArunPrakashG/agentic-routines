@@ -68,6 +68,7 @@ export type Ran = { ok: true; value: unknown; ms: number } | { ok: false; error:
 /** Runs hook code on a context. Never throws; a hook that fails is a result, not an error. */
 export async function execute(code: string, ctx: HookContext): Promise<Ran> {
   const start = Date.now();
+  if (!(browser as unknown as { offscreen?: unknown }).offscreen) return { ok: false, error: 'hooks do not run in this build of the extension', ms: 0 };
   try {
     await ensureHost();
     // The context is cut to size here, the page markup first.

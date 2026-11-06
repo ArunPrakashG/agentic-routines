@@ -1,6 +1,6 @@
 {
   "name": "agentic-routines",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Record a browser task once from your agent, replay it without the model.",
   "license": "MIT",
   "type": "module",

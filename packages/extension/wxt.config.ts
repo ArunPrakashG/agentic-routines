@@ -8,7 +8,17 @@ const KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqbu+qVmFQjwSMU5UCg/t6Jz
 
 const STORE = !!process.env.AR_STORE;
 
+// Store builds carry no hook sandbox: it needs eval, which the stores' remote-code rules do not allow.
+// Hooks run in the unpacked build and the dev builds only.
+const HOOK_ENTRYPOINTS = ['sandbox', 'offscreen'];
+
 export default defineConfig({
+  hooks: {
+    'entrypoints:resolved': (_wxt, entrypoints) => {
+      if (!STORE) return;
+      for (let i = entrypoints.length - 1; i >= 0; i--) if (HOOK_ENTRYPOINTS.includes(entrypoints[i].name)) entrypoints.splice(i, 1);
+    },
+  },
   // Release builds write somewhere else so they never disturb the unpacked build.
   outDir: process.env.AR_OUT ?? '.output',
   // The source Firefox Add-ons asks for: enough of the workspace to build the extension, and nothing else.
@@ -22,9 +32,9 @@ export default defineConfig({
     description: 'Record a browser task once from your agent, replay it without the model.',
     homepage_url: 'https://github.com/ArunPrakashG/agentic-routines',
     ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
-    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', 'offscreen', 'tabGroups'])],
+    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', ...(STORE ? [] : ['offscreen']), 'tabGroups'])],
     // Hook code runs in the sandbox page, which can reach nothing: no network, no extension API. Chromium only.
-    ...(browser === 'firefox'
+    ...(browser === 'firefox' || STORE
       ? {}
       : { content_security_policy: { sandbox: "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'" } }),
     host_permissions: ['<all_urls>'],

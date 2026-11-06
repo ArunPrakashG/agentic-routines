@@ -5,7 +5,6 @@
   "storage": "Keeps settings, the list of recent runs and the signed-in session on this device.",
   "identity": "Runs the Google sign-in window. Sign-in is optional and is only used to tie routines to an account.",
   "sidePanel": "Shows the Agentic Routines panel: routines, recorded runs and the replay controls.",
-  "offscreen": "Hosts the sandboxed page that runs a routine's hook code. The page can reach nothing: no network and no extension API. It is created only when a routine with hooks the user has allowed is run.",
   "tabGroups": "Puts the tab an agent is working in into a group named for that agent, so the person can see which tabs are in use and by whom. The tab leaves the group when the agent is done. Tabs already in one of the person's own groups are left alone.",
   "debugger": "Used for three things a normal extension cannot do: set a local file on a page's file input (uploads), take a screenshot of a window that is on a hidden desktop, and draw one frame in a window that has stopped drawing. It is attached for the length of one action and detached straight after.",
   "<all_urls>": "A routine can be recorded and replayed on any site the user chooses, so the extension cannot list the sites ahead of time. It acts only on the tab the user or their agent is working in."
