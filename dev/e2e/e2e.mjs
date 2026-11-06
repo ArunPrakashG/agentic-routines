@@ -977,6 +977,21 @@ if (panel) {
   check(r.error && /is gone from the page\. Call read_page again/.test(r.text) && !/possible injection/.test(r.text), 'a stale ref is reported in plain words, not flagged as an injection');
 }
 
+// ---------- annotated screenshots ----------
+{
+  const shot = async (args) => (await client.callTool({ name: 'screenshot', arguments: args }, undefined, { timeout: 120_000 })).content.find((c) => c.type === 'image')?.data ?? '';
+  await call('navigate', { url: `${SITE}/slow.html` });
+  await call('read_page', { wait: 6000 });
+  const full = await call('read_page', { filter: 'all' });
+  const rm = refFor(full, /“Remove”/);
+  const plain = await shot({ ref: rm });
+  const noted = await shot({ ref: rm, note: 'Broken: should be Delete' });
+  check(!!plain && !!noted && plain !== noted, 'a screenshot with ref and note is drawn on');
+  const again = await shot({ ref: rm });
+  check(again === plain, 'the marks are gone from the next picture');
+  await (await import('node:fs/promises')).writeFile(join(process.env.TMPDIR ?? '/tmp', 'marked-shot.png'), Buffer.from(noted, 'base64'));
+}
+
 const wrapper = await (await import('node:fs/promises')).readFile(join(STORE, 'bin/host'), 'utf8');
 check(wrapper.includes(join(STORE, 'bin/host.cjs')) && !wrapper.includes('dist/'), 'the host runs from its own copy');
 

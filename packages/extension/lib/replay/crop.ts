@@ -1,6 +1,7 @@
 import { dHash } from '@agentic-routines/core';
 import { platform } from '../platform';
 import { bare, rendering } from '../page/tabs';
+import { annotatePng, paint, toBase64, type Mark } from './annotate';
 
 // The third check: a perceptual hash of the area around an element.
 // captureVisibleTab only sees the active tab, and Chrome allows two calls a second.
@@ -76,7 +77,7 @@ export async function cropHash(tabId: number, r: Rect): Promise<string | undefin
 }
 
 /** What an agent sees unless it asks for more: an area around an element, else the whole tab at half size. */
-export async function areaBase64(tabId: number, around?: Rect): Promise<{ data: string; area: boolean }> {
+export async function areaBase64(tabId: number, around?: Rect, marks: Mark[] = []): Promise<{ data: string; area: boolean }> {
   const data = await pngBase64(tabId);
   const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
   const tab = await browser.tabs.get(tabId);
@@ -93,11 +94,16 @@ export async function areaBase64(tabId: number, around?: Rect): Promise<{ data: 
     [outW, outH] = [Math.round(w), Math.round(h)];
   }
   const c = new OffscreenCanvas(outW, outH);
-  c.getContext('2d')!.drawImage(img, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, outW, outH);
-  const bytes = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return { data: btoa(bin), area: !!onScreen };
+  const g = c.getContext('2d')!;
+  g.drawImage(img, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, outW, outH);
+  paint(g, marks, outW / w, x, y);
+  return { data: await toBase64(c), area: !!onScreen };
+}
+
+/** The whole tab with marks on it. */
+export async function markedPng(tabId: number, marks: Mark[]): Promise<string> {
+  const data = await pngBase64(tabId);
+  return annotatePng(data, marks, (await browser.tabs.get(tabId)).width ?? 0);
 }
 
 export async function pngBase64(tabId: number): Promise<string> {

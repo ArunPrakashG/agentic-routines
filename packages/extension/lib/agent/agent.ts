@@ -1,5 +1,6 @@
 import type { Locator, PageFingerprint, RecordedEvent, Viewport } from '@agentic-routines/core';
-import { areaBase64, cropHash, pngBase64, type Rect } from '../replay/crop';
+import { areaBase64, cropHash, markedPng, pngBase64, type Rect } from '../replay/crop';
+import { MAX_MARKS, type Mark } from '../replay/annotate';
 import * as llm from '../page/llm';
 import * as native from './native';
 import { platform } from '../platform';
@@ -109,10 +110,30 @@ export async function uploadFile(tabId: number, ref: string, value: string): Pro
 // The element a default screenshot centres on, for each session.
 const lastActed = new Map<string, { tabId: number; ref: string }>();
 
-async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}) {
+// What the next screenshot of a tab draws: what was just touched, and anything the agent pointed at.
+const marked = new Map<string, { tabId: number; url: string; marks: Mark[] }>();
+
+function addMark(session: string | undefined, tabId: number, url: string, d: Described, note: string | undefined, arrow: boolean) {
+  const key = session ?? 'user';
+  let m = marked.get(key);
+  if (!m || m.tabId !== tabId || m.url !== url) marked.set(key, (m = { tabId, url, marks: [] }));
+  const label = note || d.label || d.loc.name || d.loc.tag;
+  m.marks.push({ x: d.rect.x, y: d.rect.y, w: d.rect.w, h: d.rect.h, label, arrow });
+  if (m.marks.length > MAX_MARKS) m.marks.shift();
+}
+
+function takeMarks(session: string | undefined, tabId: number, url: string): Mark[] {
+  const key = session ?? 'user';
+  const m = marked.get(key);
+  marked.delete(key);
+  return m && m.tabId === tabId && m.url === url ? m.marks : [];
+}
+
+async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}, mk?: { on: boolean; note?: string }) {
   const d = await ask<Described>(tabId, { t: 'describe', ref });
   const crop = d.field === 'password' ? undefined : await cropHash(tabId, d.rect);
   const before = (await browser.tabs.get(tabId)).url ?? '';
+  if (mk?.on && d.field !== 'password') addMark(session, tabId, before, d, mk.note, false);
   let uploaded: Awaited<ReturnType<typeof uploadFile>> | undefined;
   if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!);
   else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
@@ -183,18 +204,18 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.click': {
       const tabId = await working(p?.session, p.tab_id);
-      const { d, after, changed } = await act(source, p?.session, tabId, p.ref, 'click');
+      const { d, after, changed } = await act(source, p?.session, tabId, p.ref, 'click', undefined, {}, { on: !!p.mark, note: p.note });
       return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}`;
     }
     case 'browser.type': {
       const tabId = await working(p?.session, p.tab_id);
-      const { d } = await act(source, p?.session, tabId, p.ref, 'type', p.text);
+      const { d } = await act(source, p?.session, tabId, p.ref, 'type', p.text, {}, { on: !!p.mark, note: p.note });
       if (p.submit) await act(source, p?.session, tabId, p.ref, 'press', 'Enter');
       return `Typed into “${d.label || d.loc.name || d.loc.tag}”.`;
     }
     case 'browser.select': {
       const tabId = await working(p?.session, p.tab_id);
-      const { d } = await act(source, p?.session, tabId, p.ref, 'select', p.value);
+      const { d } = await act(source, p?.session, tabId, p.ref, 'select', p.value, {}, { on: !!p.mark, note: p.note });
       return `Picked “${p.value}” in “${d.label}”.`;
     }
     case 'browser.upload': {
@@ -213,11 +234,17 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.screenshot': {
       const tabId = await working(p?.session, p.tab_id);
-      if (p.full) return { data: await pngBase64(tabId), note: 'The whole tab.' };
+      const url = (await browser.tabs.get(tabId)).url ?? '';
+      if (p.ref && p.note) {
+        const e = await ask<Described>(tabId, { t: 'describe', ref: p.ref });
+        addMark(p?.session, tabId, url, e, p.note, true);
+      }
+      const marks = takeMarks(p?.session, tabId, url);
+      if (p.full) return { data: marks.length ? await markedPng(tabId, marks) : await pngBase64(tabId), note: 'The whole tab.' };
       const last = lastActed.get(p?.session ?? 'user');
       const ref: string | undefined = p.ref ?? (last?.tabId === tabId ? last.ref : undefined);
       const d = ref ? await ask<Described>(tabId, { t: 'describe', ref }).catch((e) => { if (p.ref) throw e; }) : undefined;
-      const { data, area } = await areaBase64(tabId, d?.rect);
+      const { data, area } = await areaBase64(tabId, d?.rect, marks);
       return { data, note: area ? `The area around “${d!.label || d!.loc.name || d!.loc.tag}”. Pass full: true for the whole tab.` : 'The whole tab at half size, as no element was acted on here. Pass full: true for full size.' };
     }
     case 'runs.get':
