@@ -164,8 +164,14 @@ export async function aim(el: Element, action: string) {
   });
   at = { x, y };
   // The cursor stays where it landed for the next step to start from.
-  await move.finished.catch(() => {});
-  move.commitStyles?.();
+  // A page that is not being drawn (a window on another workspace, a background tab) never finishes an animation, so
+  // the cursor may not hold the action up for longer than its own trip. Timers still run there.
+  await Promise.race([move.finished.catch(() => {}), new Promise((r) => setTimeout(r, ms + 80))]);
+  try {
+    move.commitStyles?.();
+  } catch {
+    // The cursor is not rendered (hidden for a picture, or the page is not drawing): the line below places it.
+  }
   move.cancel();
   p.cur.style.transform = `translate(${x}px, ${y}px)`;
 
