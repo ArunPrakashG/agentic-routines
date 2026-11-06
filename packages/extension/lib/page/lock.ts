@@ -6,6 +6,12 @@ import { marked, MARK, unmark } from './mark';
 let label: string | undefined;
 let expiry: ReturnType<typeof setTimeout> | undefined;
 let watch: MutationObserver | undefined;
+// A page that puts its own title back every time we change it would trade blows with us for ever, so after a few
+// rounds in a moment the mark is dropped for this page and the tab group says who has the tab.
+const MAX_FIGHT = 8;
+const FIGHT_MS = 2000;
+const rounds: number[] = [];
+let yielded = false;
 
 const live = () => {
   try {
@@ -20,11 +26,25 @@ function apply() {
   if (!label) return;
   if (!live()) return void lock(null);
   const want = marked(label, document.title);
-  if (document.title !== want) document.title = want;
+  if (document.title === want) return;
+  const now = Date.now();
+  while (rounds.length && now - rounds[0] > FIGHT_MS) rounds.shift();
+  if (rounds.push(now) > MAX_FIGHT) return void give();
+  document.title = want;
+}
+
+function give() {
+  yielded = true;
+  watch?.disconnect();
+  watch = undefined;
+  label = undefined;
+  clearTimeout(expiry);
+  if (document.title.startsWith(MARK)) document.title = unmark(document.title);
 }
 
 export function lock(next: string | null, ttl = 15 * 60_000) {
   if (window !== window.top) return;
+  if (yielded && next !== null) return;
   clearTimeout(expiry);
   if (next === null) {
     label = undefined;

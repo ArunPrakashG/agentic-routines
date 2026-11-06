@@ -426,12 +426,35 @@ const closeNew = async (before) => {
   ]);
   log(r1.split('\n')[0], '/', r2.text.split('\n')[0]);
   check(/^Done/.test(r1) && /^Done/.test(r2.text), 'the same routine from two agents runs one after the other');
+  // A tab group says it too, where the browser has them, and a page cannot change that.
+  // (A tab alone in its window is not grouped, as the browser would close the window: give the held tabs a neighbour.)
+  const hasGroups = await panelEval('!!chrome.tabGroups');
+  if (hasGroups) {
+    for (const id of [mine.id, idB]) await panelEval(`chrome.tabs.get(${id}).then((t) => chrome.tabs.create({ windowId: t.windowId, active: false, url: 'about:blank' }))`);
+    await call('read_page', { tab_id: mine.id });
+    await call3('read_page', { tab_id: idB });
+    await sleep(500);
+  }
+  const groups = hasGroups ? await panelEval(`chrome.tabGroups.query({}).then((g) => g.map((x) => x.title))`) : null;
+  if (groups) check(groups.includes('Claude Code') && groups.includes('Codex'), 'each held tab is in a tab group named for its agent');
+  else log('this browser has no tab groups; skipped');
+  // A page that puts its title back every time is not fought for ever.
+  await call('read_page');
+  await call('navigate', { url: `${SITE}/tracks.html`, tab_id: mine.id });
+  await evalIn((u) => /tracks\.html/.test(u), "new MutationObserver(() => { if (document.title !== 'Stubborn') document.title = 'Stubborn'; }).observe(document.head, { childList: true, subtree: true, characterData: true }); document.title = 'Stubborn'; 1");
+  await sleep(800);
+  check((await evalIn((u) => /tracks\.html/.test(u), 'document.title')) === 'Stubborn', 'a page that resets its own title wins, and the page keeps working');
+  if (groups) check((await panelEval(`chrome.tabGroups.query({}).then((g) => g.map((x) => x.title))`)).includes('Claude Code'), 'and the tab group still says who has the tab');
+  await call('navigate', { url: `${SITE}/tracks.html`, tab_id: mine.id });
+  await sleep(500);
+  check((await titles()).some((t) => /tracks\.html/.test(t.url) && t.title.startsWith('🟣 Claude Code · ')), 'the mark is back on a fresh page');
   // Letting go.
   await c3.close();
   await sleep(1500);
   const after = await listTabs();
   check(!after.some((x) => x.id === idB && x.held_by), 'a tab is free when its agent leaves');
   check(!(await titles()).some((t) => t.title.startsWith('🟣 Codex')), 'and its title is clean again');
+  if (groups) check(!(await panelEval(`chrome.tabGroups.query({}).then((g) => g.map((x) => x.title))`)).includes('Codex'), 'and its group is gone');
   await call('read_page', { tab_id: idB });
   check((await listTabs()).find((x) => x.id === idB)?.held_by === 'you', 'another agent can then take it');
   await call('navigate', { url: `${SITE}/tracks.html`, tab_id: mine.id });

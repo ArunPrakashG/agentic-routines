@@ -120,14 +120,49 @@ const holds = new Map<number, Hold>();
 const tabOf = new Map<string, number>();
 const labels = new Map<string, string>();
 
-/** What to call a session in the title and in messages. */
-export const noteSession = (session: string | undefined, label: string) => void labels.set(session ?? USER, label);
-const labelOf = (session: string) => labels.get(session) ?? 'Agent';
+/** What to call a session in the title and in messages. Two sessions of one agent are told apart by a number. */
+export function noteSession(session: string | undefined, name: string) {
+  const key = session ?? USER;
+  if (labels.has(key)) return;
+  const taken = new Set(labels.values());
+  let label = name;
+  for (let n = 2; taken.has(label); n++) label = `${name} ${n}`;
+  labels.set(key, label);
+}
+const labelOf = (session: string) => labels.get(session) ?? (session === USER ? 'Replay' : 'Agent');
+
+// The title is the page's to change, so it is only a hint. A tab group belongs to the browser and a page cannot
+// touch it: the held tab goes in a group named for its agent, where the browser has groups and the tab is not already
+// in one of the person's own, and is not the only tab in its window.
+const ours = new Set<number>();
+
+async function group(tabId: number, label: string | null) {
+  const groups = (browser as unknown as { tabGroups?: { update(id: number, p: object): Promise<unknown> } }).tabGroups;
+  const tabs = browser.tabs as typeof browser.tabs & { group?: (o: object) => Promise<number>; ungroup?: (ids: number) => Promise<void> };
+  if (!groups || !tabs.group || !tabs.ungroup) return;
+  try {
+    if (label === null) {
+      if (ours.delete(tabId)) await tabs.ungroup(tabId);
+      return;
+    }
+    const tab = await browser.tabs.get(tabId);
+    // Grouping the only tab of a window makes the browser close that window, so it stays out.
+    if (!ours.has(tabId) && (await browser.tabs.query({ windowId: tab.windowId })).length < 2) return;
+    const gid = (tab as { groupId?: number }).groupId;
+    if (gid !== undefined && gid !== -1 && !ours.has(tabId)) return;
+    const id = ours.has(tabId) ? gid! : await tabs.group({ tabIds: tabId });
+    ours.add(tabId);
+    await groups.update(id, { title: label, color: 'purple' });
+  } catch {
+    // The tab is gone, or the browser would not group it.
+  }
+}
 
 function mark(tabId: number, label: string | null) {
-  return ask(tabId, { t: 'lock', label, ttl: LEASE_MS }).catch(() => {
+  const title = ask(tabId, { t: 'lock', label, ttl: LEASE_MS }).catch(() => {
     // A restricted or blank page cannot show it.
   });
+  return Promise.all([title, group(tabId, label)]);
 }
 
 function releaseTab(tabId: number) {
@@ -141,6 +176,7 @@ function releaseTab(tabId: number) {
 export function releaseSession(session: string) {
   const t = tabOf.get(session);
   if (t !== undefined) releaseTab(t);
+  labels.delete(session);
 }
 
 function claim(session: string, tabId: number): number {
