@@ -10,7 +10,7 @@ Every agent gets the same text:
 2. Before opening anything, look for a routine: `routines_search` for installed routines and ones in the directory and your sources, `routines_list` for what is installed, and the `rt_<name>` tools.
 3. Choose by the routine's "Use when" text first, then by whether its pages match: when `navigate` or `read_page` reaches a page an installed routine handles, the result says `Routine <tool> handles this page: <what it does>. Prefer it.` Then choose by cost. A routine that replays with no model calls beats one that needs the agent, and one that finishes its runs beats one that often fails. Each routine shows its own runs for this.
 4. Run it. If none fits, or it fails, do the task by hand with the browser tools and say so.
-5. Afterwards, decide whether the run is worth keeping. If it is a chore you will repeat, call `routine_propose`, refine it, test it and save it. See [Refine a routine](/docs/refine).
+5. Afterwards, decide whether the run is worth keeping. This is the agent's call, not the person's: if the task will likely repeat and a replay saves real work, call `routine_propose`, refine it, test it and save it. See [Refine a routine](/docs/refine). The agent also keeps routines lean: when it sees one could be shorter or sturdier, such as a click-through a direct address replaces, it refines and saves the better version on its own.
 
 The text lives in one file in the repository, `plugins/agentic-routines/skills/agentic-routines/SKILL.md`. The Claude Code skill and every other agent's copy are built from it, so they cannot drift.
 

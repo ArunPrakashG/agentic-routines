@@ -1,6 +1,6 @@
 # Refine a routine
 
-An agent does not save every run. After it finishes a browser task it decides whether the task is worth keeping, and if so it turns the run into a routine in four steps. Nothing is saved or rewritten until the agent says so.
+An agent does not save every run. After it finishes a browser task it decides, on its own and without asking the person, whether the task is likely to repeat and worth keeping, and if so it turns the run into a routine in four steps. Nothing is saved or rewritten until the agent says so.
 
 1. **`routine_propose`** with a name and a description. It returns a draft: every recorded step, numbered, with the page it happened on, the action, the target, and what happened after it ("navigated to /apps", "new on the page: “Release published”").
 2. **`routine_edit`** changes the draft.
