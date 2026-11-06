@@ -30,6 +30,9 @@ export const paths = {
   hosts: () => join(home(), 'hosts'),
   bin: () => join(home(), 'bin'),
   log: () => join(home(), 'host.log'),
+  logs: () => join(home(), 'logs'),
+  actions: () => join(home(), 'logs', 'actions.jsonl'),
+  debugFlag: () => join(home(), 'debug'),
 };
 
 /** Unix socket on macOS/Linux, named pipe on Windows. */

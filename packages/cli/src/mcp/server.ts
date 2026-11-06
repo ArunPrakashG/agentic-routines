@@ -5,6 +5,7 @@ import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, urlScore, wrapAuthored, wrapUntrusted, type Locator, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { logged } from '../debug.ts';
 import { Bridge, NotConnected } from './bridge.ts';
 import { checkUpload, splitPaths } from '../host/files.ts';
 import { paths } from '../paths.ts';
@@ -261,6 +262,9 @@ function watchRoutines(onChange: () => void) {
 
 export async function runMcp(): Promise<void> {
   const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: `${INSTRUCTIONS}\n\n${UNTRUSTED_NOTES}` });
+  // Every tool call goes through the debug log when it is on (see debug.ts).
+  const register = server.registerTool.bind(server) as (name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => RegisteredTool;
+  server.registerTool = ((name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => register(name, config, logged(name, () => bridge.agent, cb))) as unknown as typeof server.registerTool;
   const routineTools = new Map<string, RegisteredTool>();
   let refreshTimer: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {

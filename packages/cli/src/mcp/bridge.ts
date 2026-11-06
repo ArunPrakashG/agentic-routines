@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readdir, readFile, rm } from 'node:fs/promises';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
+import { current, debugOn, record, redact } from '../debug.ts';
 import { paths } from '../paths.ts';
 import { isEvent, isResponse, lineReader, type Event, type Response } from '../protocol.ts';
 
@@ -105,6 +106,19 @@ export class Bridge {
   }
 
   async call<T = unknown>(method: string, params?: unknown, timeoutMs = 60_000): Promise<T> {
+    const t = Date.now();
+    const call = current.getStore();
+    const note = (ok: boolean, out?: string) => debugOn() && record({ kind: 'bridge', call, agent: this.agent, name: method, args: redact(params, '', method), ms: Date.now() - t, ok, out: out ? out.slice(0, 300) : undefined });
+    return this.send<T>(method, params, timeoutMs).then(
+      (r) => (note(true), r),
+      (e: Error) => {
+        note(false, e.message);
+        throw e;
+      },
+    );
+  }
+
+  private async send<T>(method: string, params: unknown, timeoutMs: number): Promise<T> {
     const sock = await this.open();
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
