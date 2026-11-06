@@ -30,7 +30,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'Agentic Routines',
     description: "A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.",
-    homepage_url: 'https://github.com/ArunPrakashG/agentic-routines',
+    homepage_url: 'https://agenticroutines.arunprakashg.com',
     ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
     permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', ...(STORE ? [] : ['offscreen']), 'tabGroups'])],
     // Hook code runs in the sandbox page, which can reach nothing: no network, no extension API. Chromium only.
