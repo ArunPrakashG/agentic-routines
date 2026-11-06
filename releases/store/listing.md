@@ -36,11 +36,11 @@ Developer Tools
 
 ## Privacy practices (Chrome Web Store form)
 
-- Collects: authentication information and personally identifiable information, only if the user chooses to sign in with Google (email, name, picture, account id).
-- Does not collect: health, financial, location, web history, user activity, or website content. Recordings stay on the user's device.
-- Not sold, not used for anything outside running the product, not used for credit or lending.
-- Remote code: none. Everything runs from the package.
-- Privacy policy: docs/privacy.md, published on the site (#10) before the first submission.
+- Collects, only if the user signs in with Google or publishes a routine: personally identifiable information (email, name, picture, account id), authentication information (a session token, stored as a hash) and website content (the steps and pages of a routine the user chooses to publish).
+- Does not collect: health, financial, personal communications, location or user activity. Recordings stay on the user's device unless the user publishes.
+- All three certifications apply: not sold, not used outside the single purpose, not used for credit or lending.
+- Remote code: none. Everything runs from the package. The store build has no eval and no hook sandbox.
+- Privacy policy: https://agenticroutines.arunprakashg.com/privacy
 
 ## For reviewers
 
