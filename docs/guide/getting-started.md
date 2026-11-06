@@ -34,10 +34,10 @@ Set up Agentic Routines on this machine.
 4. Tell me to restart this agent so it loads the browser tools.
 ```
 
-## 3. Record your first routine
+## 3. Let your agent build the cache
 
-Ask your agent to do a browser task the way you normally would. Every agent run is recorded. When it finishes, ask it to save the run as a routine, or save it from the extension's side panel.
+Ask your agent to do a browser task the way you normally would. Every agent run is recorded. When it finishes, your agent decides on its own whether the task is likely to come back, and if so it saves it as a routine. You do not have to ask.
 
 The next time you ask for the same thing, the agent calls the routine instead of driving the page. See [How it works](/docs/how-it-works) for what happens during a replay.
 
-You can also record a demo by doing the task yourself with the side panel open.
+The side panel can also record a demo you do yourself. That is for trying the tool out, not how it is used.

@@ -22,7 +22,7 @@
   </picture>
 </p>
 
-Coding agents such as Claude Code drive the browser one step at a time: read the page, think, act, repeat. Every step costs tokens and seconds, and the next run pays all of it again. Agentic Routines is the cache for that work. It is a browser extension and a tool server that sit behind your agent's browser tools, for Claude Code, Codex, GitHub Copilot and OpenCode. It is made for agents, not people: you do not record or manage anything, your agent does. It works in Chrome, Edge and Firefox. It is free and open source, and so is the directory of shared routines.
+Coding agents such as Claude Code drive the browser one step at a time: read the page, think, act, repeat. Every step costs tokens and seconds, and the next run pays all of it again. Agentic Routines is the cache for that work. It is a browser extension and a tool server that sit behind your agent's browser tools, for Claude Code, Codex, GitHub Copilot and OpenCode. It does the job that tools such as Claude in Chrome do step by step, once, and then remembers it. It is made for agents, not people: you do not record or manage anything, your agent does. It works in Chrome, Edge and Firefox. It is free and open source, and so is the directory of shared routines.
 
 ## What it does
 
