@@ -68,13 +68,28 @@ export function connect() {
     for (const fn of listeners) fn(false);
     setTimeout(connect, (retry = Math.min(retry * 2, 30_000)));
   });
-  call('host.hello', { browser: platform.name }).then(
+  hello().then(
     () => {
       retry = 1000;
       for (const fn of listeners) fn(true);
     },
     () => {},
   );
+}
+
+/**
+ * Tells the host which browser and which profile this is. Every profile with the extension has its own host, and the
+ * profile id is kept in this profile's storage, so an agent can pick one and keep it. The sign-in, when there is one,
+ * helps a person tell profiles apart. Said again when it changes.
+ */
+export async function hello() {
+  const { profileId, session } = (await browser.storage.local.get(['profileId', 'session'])) as { profileId?: string; session?: { account?: { email?: string } } };
+  let profile = profileId;
+  if (!profile) {
+    profile = crypto.randomUUID();
+    await browser.storage.local.set({ profileId: profile });
+  }
+  return call('host.hello', { browser: platform.name, profile, email: session?.account?.email });
 }
 
 export function call<T = unknown>(method: string, params?: unknown): Promise<T> {
