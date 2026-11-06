@@ -157,6 +157,12 @@ export async function aim(el: Element, action: string) {
   const dist = Math.hypot(x - from.x, y - from.y);
   const ms = reduced() ? 0 : Math.min(600, Math.max(250, 220 + dist * 0.35));
   p.cur.classList.add('on');
+  // Nobody sees a page that is behind another tab, and its timers run slowly: place the cursor and go.
+  if (document.hidden) {
+    at = { x, y };
+    p.cur.style.transform = `translate(${x}px, ${y}px)`;
+    return;
+  }
   const move = p.cur.animate([{ transform: `translate(${from.x}px, ${from.y}px)` }, { transform: `translate(${x}px, ${y}px)` }], {
     duration: ms,
     easing: 'cubic-bezier(.65,0,.35,1)',
@@ -164,8 +170,14 @@ export async function aim(el: Element, action: string) {
   });
   at = { x, y };
   // The cursor stays where it landed for the next step to start from.
-  await move.finished.catch(() => {});
-  move.commitStyles?.();
+  // A page that is not being drawn (a window on another workspace, a background tab) never finishes an animation, so
+  // the cursor may not hold the action up for longer than its own trip. Timers still run there.
+  await Promise.race([move.finished.catch(() => {}), new Promise((r) => setTimeout(r, ms + 80))]);
+  try {
+    move.commitStyles?.();
+  } catch {
+    // The cursor is not rendered (hidden for a picture, or the page is not drawing): the line below places it.
+  }
   move.cancel();
   p.cur.style.transform = `translate(${x}px, ${y}px)`;
 

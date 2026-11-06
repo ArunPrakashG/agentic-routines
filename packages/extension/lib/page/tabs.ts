@@ -57,7 +57,9 @@ export async function bare<T>(tabId: number, fn: () => Promise<T>): Promise<T> {
 }
 
 // A window on a hidden workspace stops drawing, and a page waiting for a frame stops with it.
-export const rendering = (tabId: number) => ask<boolean>(tabId, { t: 'rendering' }).catch(() => true);
+// The page answers after a frame or after 150 ms, but a page behind another tab runs its timers slowly, so the wait is kept here too.
+export const rendering = (tabId: number) =>
+  Promise.race([ask<boolean>(tabId, { t: 'rendering' }).catch(() => true), sleep(200).then(() => false)]);
 
 /** Draws one frame if the window has stopped drawing. Browsers without a DevTools session leave it as it is. */
 export async function wake(tabId: number) {
