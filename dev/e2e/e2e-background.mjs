@@ -51,7 +51,18 @@ const visibility = async () => {
   return out.result.result.value;
 };
 
+// The person is on a page of their own when the agent starts: it must open a tab of its own, not take theirs.
+{
+  const own = await browserCdp();
+  await own.send('Target.createTarget', { url: `${SITE}/docs.html` });
+  await new Promise((r) => setTimeout(r, 800));
+  own.close();
+}
 let r = await call('navigate', { url: `${SITE}/index.html` });
+{
+  const pages = (await (await fetch(`${CDP}/json/list`)).json()).filter((x) => x.type === 'page').map((x) => x.url);
+  check(pages.some((u) => u.startsWith(`${SITE}/docs.html`)) && pages.some((u) => u.startsWith(`${SITE}/index.html`)), 'the agent opens a new tab and leaves the one the person was on');
+}
 const tab = r.text.match(/\(tab (\d+)\)/)?.[1];
 let page = (await call('read_page')).text;
 
