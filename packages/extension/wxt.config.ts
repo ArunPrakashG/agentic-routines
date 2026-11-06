@@ -29,7 +29,7 @@ export default defineConfig({
   vite: () => ({ plugins: [preact()] }),
   manifest: ({ browser }) => ({
     name: 'Agentic Routines',
-    description: 'Record a browser task once from your agent, replay it without the model.',
+    description: "A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.",
     homepage_url: 'https://github.com/ArunPrakashG/agentic-routines',
     ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
     permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', ...(STORE ? [] : ['offscreen']), 'tabGroups'])],

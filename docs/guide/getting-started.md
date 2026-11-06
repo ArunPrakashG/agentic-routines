@@ -1,6 +1,6 @@
 # Getting started
 
-Agentic Routines records what your agent does in the browser. You save it as a routine, with the values you fill in each time. Next time, the routine replays as one tool call, with no model doing the steps.
+Agentic Routines is a cache for your agent's browser work. Agents such as Claude Code drive the browser one step at a time, and every step costs tokens and time. Agentic Routines records what the agent does, the agent keeps the tasks that will come back as routines, and next time one tool call replays the steps with no model. You do not record or manage anything: your agent does.
 
 It has two parts: a browser extension, and one command that connects your agents to it.
 

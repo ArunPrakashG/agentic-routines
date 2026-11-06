@@ -1,17 +1,56 @@
 # 0.2.0
 
-## Agents
-- Several agents can work in the browser at once, each in its own tab group, with locks so two never drive the same tab.
-- Several browser profiles can be connected at the same time. `browser_profile` and `agentic-routines profiles` pick one.
-- Clicks, typing and screenshots work in tabs that are not in front, and the person is no longer switched to the tab an agent works in.
-- `read_page` can wait for a page that is still loading, or read one element. Tool results say which account the page is signed in as, and what a timeout may have done.
-- Annotated screenshots: `agentic-routines marks on` draws a numbered box and label on what an agent just touched. `note` and `ref` on `screenshot` add a box, label and arrow anywhere.
-- Agents decide on their own whether a task is worth saving as a routine, and tidy the routines they run.
+Edit this before publishing. Merged since v0.1.0:
 
-## Routines
-- Hooks, scripts and custom instructions for routines, from Git sources. Hooks run in the unpacked build only: the store builds leave out the sandbox they need.
-- Page and routine text is treated as untrusted data, uploads are hardened, and `page_llm_content` was added.
-- The side panel library shows a routine the moment an agent saves it.
-
-## Tools
-- `agentic-routines debug on` writes an action log, and `logs` reads it.
+- Merge pull request #95 from ArunPrakashG/chore/store-assets
+- Merge pull request #94 from ArunPrakashG/release/0.2.0
+- Merge pull request #93 from ArunPrakashG/fix/agent-decides-saving
+- Merge pull request #92 from ArunPrakashG/fix/panel-library-refresh
+- Merge pull request #91 from ArunPrakashG/feat/annotated-screenshots
+- Merge pull request #90 from ArunPrakashG/feat/tool-reliability
+- Merge pull request #88 from ArunPrakashG/fix/no-focus-steal
+- Merge pull request #82 from ArunPrakashG/fix/background-tab-clicks
+- Merge pull request #81 from ArunPrakashG/feat/browser-profiles
+- Merge pull request #80 from ArunPrakashG/feat/agent-sessions
+- Merge pull request #79 from ArunPrakashG/feat/debug-log
+- Merge pull request #72 from ArunPrakashG/chore/folder-structure
+- Merge main into chore/folder-structure
+- Merge pull request #78 from ArunPrakashG/feat/untrusted-content-upload-viewport
+- Merge remote-tracking branch 'origin/main' into feat/untrusted-content-upload-viewport
+- Treat page and routine text as untrusted, harden uploads, add page_llm_content, record the viewport
+- Merge pull request #76 from ArunPrakashG/dependabot/github_actions/actions/setup-node-7.1.0
+- Merge pull request #77 from ArunPrakashG/dependabot/github_actions/actions/setup-go-7.0.0
+- Merge pull request #75 from ArunPrakashG/dependabot/github_actions/actions/checkout-7.0.1
+- Merge pull request #74 from ArunPrakashG/dependabot/github_actions/pnpm/action-setup-6.1.0
+- Merge main into chore/folder-structure
+- Merge pull request #67 from ArunPrakashG/feat/agents-use-routines
+- Merge pull request #57 from ArunPrakashG/security/hardening
+- Merge main into security/hardening
+- Merge remote-tracking branch 'origin/main' into feat/agents-use-routines
+- Merge pull request #71 from ArunPrakashG/docs/readme-images
+- Merge main into docs/readme-images
+- Merge pull request #69 from ArunPrakashG/feat/routine-urls-surface-stats
+- Merge pull request #68 from ArunPrakashG/feat/hooks-and-instructions
+- Merge pull request #66 from ArunPrakashG/feat/free-marketplace-config-routine
+- Merge pull request #65 from ArunPrakashG/feat/agent-refines-routines
+- Merge pull request #56 from ArunPrakashG/feat/tab-control-overlay
+- Merge pull request #55 from ArunPrakashG/chore/astro-7
+- Merge pull request #54 from ArunPrakashG/fix/e2e-publish-and-waits
+- Merge pull request #52 from ArunPrakashG/chore/rename-agentic-routines
+- Merge pull request #51 from ArunPrakashG/feat/docs
+- Merge pull request #50 from ArunPrakashG/feat/site-install-step
+- Merge pull request #49 from ArunPrakashG/feat/site-deploy
+- Merge pull request #47 from ArunPrakashG/feat/site
+- Merge pull request #46 from ArunPrakashG/feat/git-sources
+- Merge pull request #45 from ArunPrakashG/feat/submit-status
+- Merge pull request #44 from ArunPrakashG/feat/admin-dashboard
+- Merge pull request #43 from ArunPrakashG/feat/review-queue
+- Merge pull request #42 from ArunPrakashG/design/submit-from-extension
+- Merge pull request #40 from ArunPrakashG/docs/directory-guidelines
+- Merge pull request #39 from ArunPrakashG/feat/directory-client
+- Merge pull request #38 from ArunPrakashG/design/admin-sources
+- Merge pull request #34 from ArunPrakashG/design/scrollbars
+- Merge pull request #33 from ArunPrakashG/design/works-with
+- Merge pull request #32 from ArunPrakashG/design/hero-v2
+- Merge pull request #31 from ArunPrakashG/feat/directory-api
+- Merge pull request #30 from ArunPrakashG/design/factual-site
