@@ -3,6 +3,7 @@ import { appendFile, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { cdpRelay } from './cdp.ts';
+import { remoteHost, type ListenConfig } from './remote.ts';
 import { checkUpload, MAX_STREAM, mb } from './files.ts';
 import { valueFor } from '../store/secrets.ts';
 import { paths, socketPath } from '../paths.ts';
@@ -27,6 +28,9 @@ function log(...a: unknown[]) {
 
 // What an agent may ask of the host over the socket. Changing sources and installing from them is only
 // ever done from the browser, after the person clicked.
+/** What an agent on another machine can ask for. Not the files here, nor the DevTools address that stays on this machine. */
+const OVER_A_LINK = /^(browser|draft|replay|runs)\.|^agent\.hello$|^store\.read$|^host\.info$/;
+
 const AGENT_MAY = new Set(['store.list', 'store.read', 'store.write', 'store.remove', 'store.setEnabled', 'sources.list', 'sources.entries', 'sources.preview']);
 
 export async function handleStore(method: string, p: any, fromBrowser = true): Promise<unknown> {
@@ -104,9 +108,10 @@ export function runHost(): void {
   // Which profile of that browser, as it says in hello. The file is rewritten when any of it changes.
   let profile: string | undefined;
   let email: string | undefined;
+  let listening: ListenConfig | undefined;
   const startedAt = Date.now();
   let focusedAt = startedAt;
-  const writeInfo = () => writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, profile, email, startedAt, focusedAt }), { mode: 0o600 });
+  const writeInfo = () => writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, profile, email, listening, startedAt, focusedAt }), { mode: 0o600 });
   // Files an agent asked to upload. The extension can read only these.
   const allowed = new Map<string, number>();
 
@@ -166,12 +171,16 @@ export function runHost(): void {
     rmSync(info, { force: true });
   };
 
-  const server = createServer((client) => {
+  const serve = (client: Socket, fromAfar = false) => {
     clients.add(client);
     client.on(
       'data',
       lineReader(async (m) => {
         if (!isRequest(m)) return;
+        if (fromAfar && !OVER_A_LINK.test(m.method)) {
+          toClient(client, { id: m.id, error: `${m.method} is not available over a remote link: it would reach this machine's files or its local DevTools address.` });
+          return;
+        }
         const session = (m.params as { session?: string } | undefined)?.session;
         // A named session outlives its connection. It ends when it is told to.
         if (session && !session.startsWith('named:')) sessions.set(client, (sessions.get(client) ?? new Set()).add(session));
@@ -185,6 +194,15 @@ export function runHost(): void {
             toBrowser({ event: 'routines.changed' });
             for (const c of clients) if (c !== client) toClient(c, { event: 'routines.changed' });
           }
+          return;
+        }
+        if (m.method === 'host.remote') {
+          const q = (m.params ?? {}) as { op?: string; id?: string };
+          if (q.op === 'revoke' && q.id) remote.drop(q.id);
+          remote.sync().then(
+            (result) => toClient(client, { id: m.id, result: result ?? null }),
+            (e) => toClient(client, { id: m.id, error: (e as Error).message }),
+          );
           return;
         }
         if (m.method === 'host.info') {
@@ -221,6 +239,16 @@ export function runHost(): void {
     };
     client.on('close', drop);
     client.on('error', drop);
+  };
+  const server = createServer((client) => serve(client));
+  const remote = remoteHost({
+    attach: (s) => serve(s, true),
+    me: () => (browser === 'unknown' ? undefined : { browser, profile, email }),
+    log: (t) => log(t),
+    listening: (l) => {
+      listening = l;
+      writeInfo();
+    },
   });
 
   process.stdin.on(
@@ -246,6 +274,7 @@ export function runHost(): void {
           profile = typeof hello.profile === 'string' ? hello.profile : undefined;
           email = typeof hello.email === 'string' ? hello.email : undefined;
           writeInfo();
+          void remote.sync();
           toBrowser({ id: req.id, result: { pid: process.pid, version: process.env.npm_package_version ?? '0.1.0' } });
           return;
         }

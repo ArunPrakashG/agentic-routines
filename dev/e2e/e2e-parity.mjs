@@ -487,6 +487,55 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check(/Not in these steps: the run also used execute/.test(proposed.text), 'proposing the run says what is missing from it');
 }
 
+// ---------- a browser on another machine, on this one ----------
+{
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const here = process.env.AGENTIC_ROUTINES_HOME; // Set by e2e-parity.sh, the same folder the host uses.
+  const far = mkdtempSync(join(tmpdir(), 'ar-far-'));
+  const cli = (args, home = here) => execFileSync(process.execPath, [`${CLI}/dist/index.js`, ...args], { env: { ...process.env, AGENTIC_ROUTINES_HOME: home }, encoding: 'utf8' });
+  // These two ask for a terminal. `script` gives them one.
+  const inTerminal = (args) => execFileSync('script', ['-qec', `${process.execPath} ${CLI}/dist/index.js ${args}`, '/dev/null'], { env: { ...process.env, AGENTIC_ROUTINES_HOME: here }, encoding: 'utf8' });
+
+  let refused = '';
+  try {
+    cli(['remote', 'pair']);
+  } catch (e) {
+    refused = String(e.stderr);
+  }
+  check(/in a terminal/.test(refused), 'without a terminal, an agent cannot make a code');
+  check(/Listening on 127\.0\.0\.1:47990/.test(inTerminal('remote listen 127.0.0.1 --port 47990')), 'the host listens on the address it was given');
+  const code = /[0-9A-Z]{4}-[0-9A-Z]{4}/.exec(inTerminal('remote pair'))?.[0];
+  check(!!code, 'pairing makes a short code');
+  check(/Paired with/.test(cli(['remote', 'connect', '127.0.0.1:47990', code, '--name', 'over-there'], far)), 'the code gives the other machine a key');
+  let again = '';
+  try {
+    cli(['remote', 'connect', '127.0.0.1:47990', code, '--name', 'again'], far);
+  } catch (e) {
+    again = String(e.stderr);
+  }
+  check(/turned that down/.test(again), 'the code works once');
+  check(!readFileSync(`${far}/remote/browsers.json`, 'utf8').includes(code), 'the code is not kept');
+
+  const transport = new StdioClientTransport({ command: process.execPath, args: [`${CLI}/dist/index.js`, 'mcp'], env: { ...process.env, AGENTIC_ROUTINES_HOME: far, AGENTIC_ROUTINES_PROFILE: 'over-there' } });
+  const farClient = new Client({ name: 'far', version: '2.0.0' });
+  await farClient.connect(transport);
+  const farCall = async (name, args = {}) => (await farClient.callTool({ name, arguments: args })).content?.map((c) => c.text ?? '').join('\n');
+  const opened = await farCall('navigate', { url: `${SITE}/chores.html` });
+  check(/chores\.html/.test(opened), 'an agent over the link drives the browser');
+  check(/Chores/.test(await farCall('read_page')), 'and reads it');
+  check(/remote link/.test(await farCall('cdp_endpoint')), 'the DevTools address stays on the machine');
+  check(/remote link/.test(await farCall('execute', { code: 'return 1' })), 'and so does execute');
+  const id = /^\s*([0-9a-f]{16})\s/m.exec(cli(['remote', 'status']))?.[1];
+  cli(['remote', 'revoke', id]);
+  await sleep(500);
+  check(/turned this connection down|revoked/i.test(await farCall('read_page')), 'a revoked key is dropped and refused');
+  await farClient.close();
+  cli(['remote', 'stop']);
+  check(/Not listening/.test(cli(['remote', 'status'])), 'it can stop listening');
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);
