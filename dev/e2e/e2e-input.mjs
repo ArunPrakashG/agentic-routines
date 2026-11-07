@@ -464,6 +464,66 @@ for (const where of ['behind another tab', 'in front']) {
   }
 }
 
+// ---------- scripts, the console and the network (#116) ----------
+{
+  await session();
+  await sleep(1000);
+  const m = 'logs.html';
+  const EXT = 'chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo';
+  await call('navigate', { url: `${SITE}/logs.html` });
+  let page = await read();
+  let r = await call('read_console_messages');
+  check(!r.error && /page started/.test(r.text), `the console, including from before the first call: ${r.text.slice(0, 200)}`);
+  check(/\[hidden/.test(r.text) && !/eyJhbGci/.test(r.text) && !/ghp_abcdef/.test(r.text), 'what looks like a credential is hidden');
+  check(!/instruction-looking/.test(r.text) || /UNTRUSTED|untrusted/.test(r.text), 'and it is marked as coming from the site');
+  r = await call('read_console_messages', { only_errors: true });
+  check(/boom from the page/.test(r.text) && !/page started/.test(r.text), `only the errors: ${r.text.slice(0, 200)}`);
+  r = await call('read_network_requests');
+  check(/Listening starts/.test(r.text), `says listening starts now: ${r.text.slice(0, 160)}`);
+  await call('click', { ref: refFor(page, /“Send a request”/) });
+  await sleep(500);
+  r = await call('read_network_requests', { url_contains: 'overview' });
+  check(/GET .*overview\.html\?key=…&who=… 200/.test(r.text) && !/s3cret/.test(r.text), `a request, with its values hidden: ${r.text.slice(0, 240)}`);
+
+  // A script waits for the person, and a no is a no.
+  const panel = await (await fetch(`${CDP}/json/new?${EXT}/sidepanel.html`, { method: 'PUT' })).json();
+  const answer = async (label) => {
+    const ws = new WebSocket(panel.webSocketDebuggerUrl);
+    await new Promise((res) => (ws.onopen = res));
+    const out = await new Promise((res) => {
+      ws.onmessage = (e) => res(JSON.parse(e.data));
+      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: `(async () => { for (let i = 0; i < 40; i++) { const b = [...document.querySelectorAll('section[aria-label="Allow a script"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)}); if (b) { b.click(); return true; } await new Promise((r) => setTimeout(r, 100)); } return false; })()`, awaitPromise: true, returnByValue: true } }));
+    });
+    ws.close();
+    return out.result.result.value;
+  };
+  let run = call('javascript', { code: '1 + 1' });
+  check(await answer('No'), 'a script waits in the panel');
+  r = await run;
+  check(r.error && /chose not/.test(r.text), `and a no stops it: ${r.text.slice(0, 160)}`);
+  run = call('javascript', { code: '2 + 2' });
+  await answer('This once');
+  r = await run;
+  check(/4/.test(r.text), `this once runs it: ${r.text.slice(0, 160)}`);
+  run = call('javascript', { code: 'await Promise.resolve(document.title)' });
+  check(await answer('Always on this site'), 'and asks again the next time');
+  r = await run;
+  check(/Logs/.test(r.text), `await works: ${r.text.slice(0, 160)}`);
+  r = await call('javascript', { code: '6 * 7' });
+  check(/42/.test(r.text), `always on this site does not ask again: ${r.text.slice(0, 160)}`);
+  r = await call('javascript', { code: 'document.cookie' });
+  check(r.error && /cookies/.test(r.text), 'a script cannot read cookies');
+  r = await call('javascript', { code: `'token=abcdefghijkl'` });
+  check(/\[hidden\]/.test(r.text) && !/abcdefghijkl/.test(r.text), `a credential in the result is hidden: ${r.text.slice(0, 160)}`);
+  r = await call('javascript', { code: `throw new Error('nope')` });
+  check(r.error && /nope/.test(r.text), 'says when a script fails');
+  r = await call('javascript', { code: `document.getElementById('out').textContent = 'set by script'` });
+  check((await say('out', m)) === 'set by script', 'and it runs in the page');
+  const d = await call('routine_propose', { name: 'logs-replay', description: 'Send a request. Use when the user asks for this.' });
+  check(!/set by script|document\.getElementById/.test(d.text), `a script is not in the routine: ${d.text.slice(0, 240)}`);
+  await fetch(`${CDP}/json/close/${panel.id}`);
+}
+
 await client.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

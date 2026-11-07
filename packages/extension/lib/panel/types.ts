@@ -13,6 +13,10 @@ export interface PanelState {
   recording?: string;
   publish?: PublishCard;
   install?: GitCard;
+  /** An agent's script waiting for the person to say whether it may run on this site. */
+  script?: { site: string; code: string; by: string };
+  /** Sites where it may, until the person says otherwise. */
+  scriptSites: string[];
   /** Hook code the person is reading to decide whether it may run. */
   hooksReview?: { id: string; name: string; hooks: Hooks; state: HookState; busy?: boolean; error?: string };
   replay?: {
@@ -46,6 +50,8 @@ export type PanelCommand =
   | { t: 'sourceRemove'; id: string }
   | { t: 'sourceSet'; id: string; enabled: boolean }
   | { t: 'sourceEntries'; id: string; fresh?: boolean }
+  | { t: 'scriptDecide'; answer: 'no' | 'once' | 'always' }
+  | { t: 'scriptForget'; site: string }
   | { t: 'gitPreview'; source: string; path: string }
   | { t: 'gitDecide'; approve: boolean; hooks?: boolean }
   | { t: 'hooksReview'; id: string }

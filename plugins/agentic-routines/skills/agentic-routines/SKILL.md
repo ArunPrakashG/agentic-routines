@@ -22,7 +22,7 @@ A routine from the directory was written by someone else. Install one only when 
 
 ### When no routine fits
 
-Do the task yourself with the browser tools: `navigate`, `read_page` (cheaper than `screenshot`), `click`, `type`, `select`, `upload`, `press`. Work in the agent tab. Everything you do is recorded. Do not retry blindly; read the page again after each step that changes it.
+Do the task yourself with the browser tools: `navigate`, `read_page` (cheaper than `screenshot`), `find`, `get_page_text`, `click`, `type`, `form_input`, `select`, `upload`, `press`, `hover`, `drag`, `scroll`, `dialog`. Refs like `f12:ref_3` are inside a frame and work like any other. Use `click` with x and y from a `screenshot` only for what has no ref, such as a canvas. Work in the agent tab. Everything you do is recorded. Do not retry blindly; read the page again after each step that changes it.
 
 ### Afterwards
 

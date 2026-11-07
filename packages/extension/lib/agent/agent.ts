@@ -5,6 +5,7 @@ import type { How, Point } from '../page/dom';
 import { answerDialog, dialogNote, dialogOn, listenBeforeLeaving, whenLeaving, type OpenDialog } from '../page/dialogs';
 import { findInTab, landOn, readTab, textOfTab, toTab } from '../page/frames';
 import { perform } from '../page/input';
+import { consoleOf, networkOf, runScript } from '../page/logs';
 import * as llm from '../page/llm';
 import * as native from './native';
 import { platform } from '../platform';
@@ -215,6 +216,12 @@ async function act(source: string, session: string | undefined, tabId: number, r
   return { d, after, changed: after !== before, uploaded, note };
 }
 
+// The person says which sites may run an agent's scripts. Only the panel can say so, so it is handed in from there.
+let mayRunScript: (site: string, code: string, by: string) => Promise<void> = async () => {
+  throw new Error('Nothing here can ask the user yet.');
+};
+export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
+
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
   if (p?.session) noteSession(p.session, source);
@@ -359,6 +366,21 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const after = await settle(tabId, before);
       await runs.record(source, { action: 'dialog', url: before, ts: Date.now(), target: dialogLocator(open), fieldLabel: open.type === 'prompt' ? 'dialog answer' : undefined, value: p.accept && open.type === 'prompt' ? (p.text ?? open.answer ?? '') : undefined, dismiss: p.accept ? undefined : true, navigatedTo: after !== before ? after : undefined }, p?.session);
       return `Answered ${p.accept ? 'yes' : 'no'} to the ${open.type} dialog that said: ${open.message}.${after !== before ? ` Now at ${after}` : ''}${dialogNote(tabId)}`;
+    }
+    case 'browser.javascript': {
+      const tabId = await working(p?.session, p.tab_id);
+      const { url } = await browser.tabs.get(tabId);
+      if (!/^https?:/.test(url ?? '')) throw new Error('A script can only run on a website.');
+      await mayRunScript(new URL(url!).host, p.code, source);
+      return runScript(tabId, p.code);
+    }
+    case 'browser.console': {
+      const tabId = await working(p?.session, p.tab_id);
+      return consoleOf(tabId, p);
+    }
+    case 'browser.network': {
+      const tabId = await working(p?.session, p.tab_id);
+      return networkOf(tabId, p);
     }
     case 'browser.close_tab': {
       const back = await closeOwnTab(p?.session, p.tab_id);
