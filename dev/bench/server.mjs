@@ -90,7 +90,7 @@ const consolePages = {
     shell(
       'New release',
       `<h1>Create internal testing release</h1><form onsubmit="return false">
-<label>App bundle <input type="file" id="bundle" accept=".aab"></label>
+${variant === 'c' ? `<div role="dialog" aria-label="What's new" id="wn" style="position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:9"><div style="background:#fff;padding:24px"><h2>What's new in the console</h2><p>Bundles can now be uploaded in bulk.</p><button type="button" onclick="document.getElementById('wn').remove()">Got it</button></div></div>` : ''}<label>App bundle <input type="file" id="bundle" accept=".aab"></label>
 <label>Release name <input id="rname"></label>
 <label>Release notes <textarea id="notes"></textarea></label>
 <button type="button" id="${variant === 'b' ? 'pick' : 'go'}">${variant === 'b' ? 'Pick who gets it' : 'Continue to testers'}</button></form>
@@ -115,10 +115,12 @@ Object.assign(draft, { file: f && f.name, size: f && f.size, name: document.getE
       `<h1>Review release</h1><p id="summary"></p><form onsubmit="return false">
 <label>Release owner <select id="owner">${['Arjun', 'Meera', 'Sana', 'Tom'].map((o) => `<option>${o}</option>`).join('')}</select></label>
 <label>Ticket <input id="ticket"></label>
+${variant === 'd' ? `<label>Change window <select id="window"><option value="">Choose</option><option>Now</option><option>Tonight</option></select></label>` : ''}
 <label><input type="checkbox" id="ack"> I have tested this build</label>
 <button type="button" id="rollout">Start rollout to Internal testing</button></form><p id="status" role="status"></p>
 <script>document.getElementById('summary').textContent = (draft.name || '') + ' · ' + (draft.file || 'no bundle') + ' · ' + (draft.countries || []).length + ' countries';
 document.getElementById('rollout').onclick = async () => { const $ = (i) => document.getElementById(i);
+if ($('window') && !$('window').value) { $('status').textContent = 'Choose a change window'; return; }
 await fetch('/__rollout', { method: 'POST', body: JSON.stringify({ task: 'console', ...draft, owner: $('owner').value, ticket: $('ticket').value, ack: $('ack').checked }) });
 $('status').textContent = 'Rollout started: ' + draft.name; };</script>`,
     ),

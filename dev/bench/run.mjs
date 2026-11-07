@@ -255,15 +255,20 @@ async function one(arm, rep) {
   } else if (kind === 'record') {
     if (!yt) v = v1;
     prompt = ask[task](v) + (task === 'ytlist' ? ' Find the video through the Filter box on the Content page, choosing Visibility, Unlisted and Apply, not through a filter address.' : '') + ` Then save what you did as a routine named ${name}. Only ${yt ? 'the description' : 'the app bundle, release name and release notes'} should change each run. Everything else stays as you did it.`;
-  } else if (kind === 'replay' || kind === 'changed') {
+  } else if (kind === 'replay' || kind === 'changed' || kind === 'dialog' || kind === 'field') {
     prompt += ' Use the saved routine.';
     if (kind === 'changed') variant = 'b';
+    if (kind === 'dialog') variant = 'c';
+    if (kind === 'field') {
+      variant = 'd';
+      prompt += ' If the console asks for a change window, choose Tonight.';
+    }
   }
   if (kind === 'cic' || kind === 'tools' || kind === 'record' || kind === 'idle') parkRoutines();
   else restoreRoutine(name);
   if (!yt) await fetch(`${BASE}/__reset?variant=${variant}`, { method: 'POST' });
   await backToRoutines();
-  const a = !yt && (kind === 'replay' || kind === 'changed' || kind === 'record') ? approver() : undefined;
+  const a = !yt && (kind === 'replay' || kind === 'changed' || kind === 'dialog' || kind === 'field' || kind === 'record') ? approver() : undefined;
   const raw = join(BENCH, 'raw', `${TAG}-${arm}-${rep}.jsonl`);
   const r = await runClaude(server, prompt, raw);
   const approvals = a?.stop() ?? 0;
