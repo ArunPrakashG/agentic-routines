@@ -16,6 +16,8 @@ export interface DraftStep extends Step {
   navigatedTo?: string;
   /** What changed on the page after it, in words. */
   effect?: string;
+  /** When it was recorded. */
+  ts?: number;
 }
 
 interface Snapshot {
@@ -181,6 +183,7 @@ function buildFromRun(run: Run, meta: { name: string; description: string; doNot
   events.forEach((e, i) => {
     const step: DraftStep = b.build(e, steps.length + 1, false);
     step.at = e.url;
+    step.ts = e.ts;
     step.navigatedTo = e.action === 'navigate' ? undefined : e.navigatedTo;
     const next = events[i + 1];
     const parts: string[] = [];
@@ -625,7 +628,7 @@ export function validateRoutine(r: Routine): { problems: string[]; warnings: str
 /** The routine this draft would save. */
 export function finalize(d: Draft, draftedBy?: string): { routine: Routine; pinned: string[] } {
   const steps: Step[] = d.steps.map((s, i) => {
-    const { at: _a, navigatedTo: _n, effect: _e, ...rest } = s;
+    const { at: _a, navigatedTo: _n, effect: _e, ts: _t, ...rest } = s;
     return { ...rest, n: i + 1 };
   });
   const used = (k: string) => steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`)) || !!d.expect?.text?.includes(`{{${k}}}`) || !!d.expect?.url?.includes(`{{${k}}}`);

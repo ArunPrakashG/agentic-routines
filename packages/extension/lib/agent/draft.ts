@@ -1,4 +1,4 @@
-import { applyOps, draftFromRoutine, draftFromRun, EditError, finalize, renderDraft, validateRoutine, type Draft, type Op, type Routine, type RunResult } from '@agentic-routines/core';
+import { applyOps, byHandOf, draftFromRoutine, draftFromRun, EditError, finalize, renderDraft, validateRoutine, type Draft, type Op, type Routine, type RunResult } from '@agentic-routines/core';
 import * as native from './native';
 import * as replay from '../replay/replay';
 import * as runs from './runs';
@@ -108,6 +108,9 @@ export async function handle(method: string, p: any): Promise<unknown> {
       // A routine that is already saved is only replaced after the new steps ran well.
       if (d.base && !(d.tested?.ok && d.tested.rev === d.rev)) throw new Error(`Not saved. This replaces ${d.base.name} v${d.base.version}, so test the latest edit first with routine_test${d.tested && d.tested.rev === d.rev ? `. The last test did not pass: ${d.tested.summary}` : ''}.`);
       const saved = await native.call<Routine>('store.write', { routine });
+      // Only when it came from a run: refining a saved routine does not change what it replaced.
+      const run = d.runId ? await runs.get(d.runId).catch(() => undefined) : undefined;
+      const by_hand = run && byHandOf(d.steps.map((x) => x.ts), run, Date.now());
       savedListeners.forEach((fn) => fn());
       if (d.runId) await runs.markSaved(d.runId).catch(() => {});
       const all = await load();
@@ -116,6 +119,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       return {
         saved: { name: saved.meta.name, version: saved.meta.version, site: saved.meta.site, steps: saved.steps.length, params: Object.keys(saved.meta.params), pauses: saved.meta.pauses, start: saved.steps[0]?.url },
         recorded: d.initial.steps.length,
+        by_hand,
         tested: d.tested && d.tested.rev === d.rev ? d.tested.summary : undefined,
         warnings,
         pinned,

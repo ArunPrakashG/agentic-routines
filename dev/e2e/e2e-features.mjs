@@ -1,5 +1,7 @@
 // What a routine does for itself over many runs: tidying, nudges, the meter, background runs, loops.
 // Started by e2e-features.sh.
+import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -158,6 +160,42 @@ async function addByHand(item) {
   await call('routine_save', { draft_id: again_id });
   check(!/Stale:/.test((await call('routines_list')).text), 'refining clears the stale mark');
   await flags({ add: null });
+}
+
+// ---------- savings meter ----------
+{
+  console.log('\n# Savings meter');
+  await session();
+  await addByHand('Pears');
+  await sleep(1200);
+  await call('click', { ref: refFor(await read(), /button.*Publish/i) });
+  const d = await call('routine_propose', { name: 'publish-chore', description: 'Adds an item and publishes the list. Use when someone wants an item published.' });
+  const id = draftOf(d.text);
+  const name = paramOf(d.text);
+  await call('routine_test', { draft_id: id, params: { [name]: 'Pears' } });
+  await call('routine_save', { draft_id: id });
+  const stats = JSON.parse(readFileSync(`${process.env.AGENTIC_ROUTINES_HOME}/routines/local/publish-chore/.stats.json`, 'utf8'));
+  check(stats.byHand?.steps >= 3, `saving keeps the run it was recorded from: ${JSON.stringify(stats.byHand)}`);
+
+  let r = await call('routine_run', { name: 'publish-chore', params: { [name]: 'Plums' } });
+  const paused = /run_id "(rp-[a-z0-9]+)"/.exec(r.text)?.[1];
+  if (paused) r = await call('routine_resume', { run_id: paused, approve: true });
+  check(/^Done/m.test(r.text), `a replay: ${r.text.slice(0, 100)}`);
+
+  const out = await new Promise((res) => execFile(process.execPath, [`${CLI}/dist/index.js`, 'stats'], { env: { HOME: process.env.DEV_DIR, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: process.env.AGENTIC_ROUTINES_HOME } }, (_e, stdout) => res(stdout)));
+  check(/This week/.test(out) && /\(measured\)/.test(out) && /\(estimated\)/.test(out), `stats labels what it knows and what it estimates: ${out.slice(0, 200)}`);
+  check(/publish-chore: 1 run/.test(out), 'stats lists the routine');
+  check(/after 1 recording/.test(out), 'recording counts against the total');
+  check(/Nothing here leaves your computer/.test(out), 'stats says how it is worked out');
+  const after = JSON.parse(readFileSync(`${process.env.AGENTIC_ROUTINES_HOME}/routines/local/publish-chore/.stats.json`, 'utf8'));
+  check(after.recent.length === 1 && after.recent[0].agent === 'claude-code', 'a run is kept with its agent');
+
+  const panel = await (await fetch(`${CDP}/json/new?chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo/sidepanel.html`, { method: 'PUT' })).json();
+  await sleep(1500);
+  const shown = await evalIn(`document.body.innerText`, 'sidepanel.html');
+  check(/This week/.test(shown) && /\(estimated\)/.test(shown), 'the panel shows the week');
+  check(/publish-chore[\s\S]*over 1 run\b/.test(shown), 'and the routine');
+  await fetch(`${CDP}/json/close/${panel.id}`);
 }
 
 await client.close();

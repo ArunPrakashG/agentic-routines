@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { deriveUrls, hookHash, parseRoutineMd, stringifyRoutineMd, type Origin, type Routine, type Step } from '@agentic-routines/core';
+import { deriveUrls, hookHash, parseRoutineMd, stringifyRoutineMd, type ByHand, type Origin, type Routine, type Step } from '@agentic-routines/core';
 import type { Surface } from '@agentic-routines/core';
 import { paths } from '../paths.ts';
 
@@ -39,6 +39,8 @@ export interface Stats {
   last?: { at: number; ok: boolean };
   /** When the routine was last deliberately refined. Runs before it say nothing about the routine as it is now. */
   refined?: number;
+  /** The run it was recorded from, to compare replays with. Stays on this computer. */
+  byHand?: ByHand;
 }
 
 export interface RunStat {
@@ -52,6 +54,8 @@ export interface RunStat {
   slow?: { n: number; ms: number }[];
   /** All the steps ran and the page did not show what the routine expects. */
   unconfirmed?: boolean;
+  steps?: number;
+  agent?: string;
 }
 
 const STATS_KEPT = 200;
@@ -110,12 +114,12 @@ export async function recordRun(id: string, r: Omit<RunStat, 'at'>): Promise<voi
   await atomicWrite(f, JSON.stringify(s) + '\n');
 }
 
-/** A deliberate new version: what went wrong before it no longer counts against it. */
-export async function markRefined(id: string): Promise<void> {
+/** What a save means for the record. A deliberate new version: what went wrong before it no longer counts against it. */
+export async function noteSaved(id: string, o: { version: number; byHand?: ByHand }): Promise<void> {
   const [owner, name] = await locate(id);
   const f = join(dir(owner, name), '.stats.json');
-  const s = await readJson<Stats>(f);
-  if (s) await atomicWrite(f, JSON.stringify({ ...s, refined: Date.now() }) + '\n');
+  const s = (await readJson<Stats>(f)) ?? { runs: 0, recent: [] };
+  await atomicWrite(f, JSON.stringify({ ...s, ...(o.version > 1 ? { refined: Date.now() } : {}), ...(o.byHand ? { byHand: o.byHand } : {}) }) + '\n');
 }
 
 export async function statsOf(id: string): Promise<Stats | undefined> {

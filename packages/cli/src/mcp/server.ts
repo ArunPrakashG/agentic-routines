@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, urlScore, wrapAuthored, wrapUntrusted, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, urlScore, wrapAuthored, wrapUntrusted, type ByHand, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { current, debugOn, logged } from '../debug.ts';
 import { Bridge, NotConnected } from './bridge.ts';
 import * as locks from '../store/locks.ts';
@@ -342,7 +342,7 @@ export async function runMcp(): Promise<void> {
       const fixed = Object.keys(fixes).map(Number);
       const slow = Object.entries(result.step_ms ?? {}).map(([n, ms]) => ({ n: Number(n), ms })).filter((x) => x.ms >= store.SLOW_STEP_MS).sort((a, b) => b.ms - a.ms).slice(0, 3);
       const unconfirmed = result.outcome?.ok === false;
-      await store.recordRun(p.id, { ok: result.status === 'done' && !unconfirmed, calls: result.model_calls, ms: result.ms, ...(fixed.length ? { fixed } : {}), ...(slow.length ? { slow } : {}), ...(unconfirmed ? { unconfirmed } : {}) }).catch(() => {});
+      await store.recordRun(p.id, { ok: result.status === 'done' && !unconfirmed, calls: result.model_calls, ms: result.ms, steps: p.routine.steps.length, ...(bridge.agent ? { agent: bridge.agent } : {}), ...(fixed.length ? { fixed } : {}), ...(slow.length ? { slow } : {}), ...(unconfirmed ? { unconfirmed } : {}) }).catch(() => {});
       result.tidy = tidyNote(p.routine, fixed, store.viewStats(await store.statsOf(p.id).catch(() => undefined)));
     }
     if (Object.keys(fixes).length) {
@@ -828,13 +828,14 @@ export async function runMcp(): Promise<void> {
       const r = await bridge.call<{
         saved: { name: string; version: number; site: string; steps: number; params: string[]; pauses: number[]; start?: string };
         recorded: number;
+        by_hand?: ByHand;
         tested?: string;
         warnings: string[];
         pinned: string[];
       }>('draft.save', a);
       scheduleRefresh();
       const x = r.saved;
-      if (x.version > 1) await store.markRefined(x.name).catch(() => {});
+      await store.noteSaved(x.name, { version: x.version, byHand: r.by_hand }).catch(() => {});
       return text(
         `Saved ${x.name} v${x.version} · ${x.steps} steps from ${r.recorded} recorded` +
           (x.params.length ? ` · asks for ${x.params.join(', ')}` : '') +
