@@ -12,7 +12,7 @@
 - A routine broken by a site change is fixed once and the fix is useful to everyone who runs the same routine. That shared upkeep is the part a single user or a model company won't do for long-tail sites.
 
 ## Product
-Same architecture as Claude in Chrome: a custom MCP server plus a Chrome extension.
+A custom MCP server plus a Chrome extension.
 1. **MCP server (stdio, works with Claude Code and Codex):** basic browser tools, all recorded, plus `routines_list`, `routine_run(name, params)`, `routine_propose` / `routine_edit` / `routine_save`.
 2. **Chrome extension (MV3):** actions through `chrome.debugger`, a11y snapshots, one tab group per agent session, native messaging to the server.
 3. **Compile on save:** drop navigation that a direct URL load reproduces (checked against the recorded snapshot), turn changing values into params, add pre/post checks per step.
@@ -29,7 +29,6 @@ Same architecture as Claude in Chrome: a custom MCP server plus a Chrome extensi
 - Stagehand v3 (Browserbase): action cache keyed on instruction, URL and variables, updates selectors when pages change.
 - Qodex, Bug0: cached replay for QA testing.
 - workflow-use, muscle-mem: record/replay with agent fallback (not re-checked).
-- Claude in Chrome: saved shortcuts.
 
 Gap: none is a drop-in layer for Claude Code and Codex, and none maintains a shared routine library across users.
 
@@ -43,6 +42,6 @@ Gap: none is a drop-in layer for Claude Code and Codex, and none maintains a sha
 ## Risks
 - **Platform risk:** Anthropic, OpenAI or Google can add record and replay to their own agents.
 - **Reach:** developers expect local tools to be free and open, so the project is both and has to earn its place by working well.
-- **Not a consumer product** unless it pivots to "teach your browser once" for non-developers, where it meets Claude in Chrome, Atlas and Gemini in Chrome head on.
+- **Not a consumer product** unless it pivots to "teach your browser once" for non-developers, where it meets the browser agents from the model vendors head on.
 - **Upkeep:** a shared library is only worth using if routines keep working; unmaintained routines are worse than none.
 - Plan: build open source and use it first; grow the directory if others ask for routines.
