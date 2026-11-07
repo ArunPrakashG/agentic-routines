@@ -1,0 +1,183 @@
+#!/bin/sh
+# Installs Agentic Routines for this user: curl -fsSL https://agenticroutines.arunprakashg.com/install | sh
+#
+#   --version 1.2.3   That version rather than the latest
+#   --no-setup        Do not connect your agents afterwards
+#
+# Everything goes in ~/.agentic-routines/app, and one command in ~/.local/bin. Nothing needs sudo.
+# To remove it: agentic-routines setup --remove, then delete those two.
+set -eu
+
+die() {
+  echo "agentic-routines: $1" >&2
+  exit 1
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "this needs $1, which is not installed."
+}
+
+get() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --retry 2 -o "$2" "$1"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$2" "$1"
+  else
+    die "this needs curl or wget, and neither is installed."
+  fi
+}
+
+checksum() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    die "this needs sha256sum or shasum to check the download, and neither is installed."
+  fi
+}
+
+which_target() {
+  os=$(uname -s)
+  arch=$(uname -m)
+  case "$arch" in
+    x86_64 | amd64) arch=x64 ;;
+    arm64 | aarch64) arch=arm64 ;;
+    *) die "there is no build for a $arch processor. Try: npx agentic-routines setup" ;;
+  esac
+  case "$os" in
+    Linux)
+      # The Node we ship needs glibc.
+      if ls /lib/ld-musl-* >/dev/null 2>&1; then
+        die "there is no build for musl systems such as Alpine. Try: npx agentic-routines setup"
+      fi
+      os=linux
+      ;;
+    Darwin)
+      # A shell under Rosetta says x64 on a machine that is arm64.
+      if [ "$arch" = x64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ]; then
+        arch=arm64
+      fi
+      os=darwin
+      ;;
+    *) die "there is no build for $os. On Windows, use install.ps1." ;;
+  esac
+  echo "$os-$arch"
+}
+
+# All in a function, so that a download cut off halfway runs nothing.
+main() {
+  want=""
+  setup=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --version)
+        [ $# -ge 2 ] || die "--version needs a version."
+        want=$2
+        shift 2
+        ;;
+      --no-setup)
+        setup=0
+        shift
+        ;;
+      *) die "what is $1? It takes --version and --no-setup." ;;
+    esac
+  done
+  case "$want" in
+    "" | [0-9]*.[0-9]*.[0-9]*) ;;
+    *) die "$want is not a version." ;;
+  esac
+  case "$want" in
+    *[!0-9A-Za-z.-]*) die "$want is not a version." ;;
+  esac
+
+  need tar
+  need uname
+  [ -n "${HOME:-}" ] || die "HOME is not set."
+  target=$(which_target)
+
+  site=https://github.com/ArunPrakashG/agentic-routines/releases
+  if [ -n "$want" ]; then
+    base=${AGENTIC_ROUTINES_BASE:-$site/download/v$want}
+  else
+    base=${AGENTIC_ROUTINES_BASE:-$site/latest/download}
+  fi
+
+  # The project had another name once, and the CLI only moves the old folder when there is no new one yet.
+  if [ -z "${AGENTIC_ROUTINES_HOME:-}" ] && [ -d "$HOME/.browser-routines" ] && [ ! -e "$HOME/.agentic-routines" ]; then
+    mv "$HOME/.browser-routines" "$HOME/.agentic-routines"
+  fi
+  app=${AGENTIC_ROUTINES_HOME:-$HOME/.agentic-routines}/app
+  mkdir -p "$app"
+  work=$(mktemp -d "$app/.install.XXXXXX")
+  trap 'rm -rf "$work"' EXIT INT TERM
+
+  get "$base/manifest.json" "$work/manifest.json" || die "could not download $base/manifest.json."
+  version=$(sed -n 's/^{"version":"\([^"]*\)".*/\1/p' "$work/manifest.json")
+  line=$(grep "^\"$target\":" "$work/manifest.json" || true)
+  [ -n "$version" ] || die "the manifest is not one this script can read."
+  [ -n "$line" ] || die "version $version has nothing for $target."
+  name=$(echo "$line" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
+  size=$(echo "$line" | sed -n 's/.*"size":\([0-9]*\).*/\1/p')
+  sum=$(echo "$line" | sed -n 's/.*"sha256":"\([0-9a-f]*\)".*/\1/p')
+  case "$version" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) die "the manifest names an odd version." ;;
+  esac
+  case "$version$name" in
+    */* | *..* | *[!0-9A-Za-z.-]*) die "the manifest names an odd file." ;;
+  esac
+  [ -n "$name" ] && [ -n "$size" ] && [ -n "$sum" ] || die "the manifest is not one this script can read."
+
+  echo "Downloading Agentic Routines $version for $target."
+  get "$base/$name" "$work/$name" || die "could not download $base/$name."
+  [ "$(wc -c <"$work/$name" | tr -d ' ')" = "$size" ] || die "the download is the wrong size, so nothing was installed."
+  [ "$(checksum "$work/$name")" = "$sum" ] || die "the download does not match its checksum, so nothing was installed."
+
+  mkdir "$work/new"
+  tar -xzf "$work/$name" -C "$work/new"
+  "$work/new/node" "$work/new/node_modules/agentic-routines/dist/index.js" help >/dev/null 2>&1 || die "the download does not run on this machine, so nothing was installed."
+
+  before=$(cat "$app/current.txt" 2>/dev/null || true)
+  rm -rf "${app:?}/$version"
+  mv "$work/new" "$app/$version"
+
+  # The one command everything points at. It reads the version each time, so an update takes effect by changing one file.
+  cat >"$work/run" <<'RUN'
+#!/bin/sh
+app=$(dirname "$0")
+version=$(cat "$app/current.txt")
+exec "$app/$version/node" "$app/$version/node_modules/agentic-routines/dist/index.js" "$@"
+RUN
+  chmod 755 "$work/run"
+  mv "$work/run" "$app/run"
+  echo "$version" >"$work/current.txt"
+  mv "$work/current.txt" "$app/current.txt"
+
+  for old in "$app"/[0-9]*; do
+    [ -d "$old" ] || continue
+    case "$(basename "$old")" in
+      "$version" | "$before") ;;
+      *) rm -rf "$old" ;;
+    esac
+  done
+
+  bin=${XDG_BIN_HOME:-$HOME/.local/bin}
+  mkdir -p "$bin"
+  printf '#!/bin/sh\nexec "%s/run" "$@"\n' "$app" >"$work/command"
+  chmod 755 "$work/command"
+  mv "$work/command" "$bin/agentic-routines"
+
+  echo "Installed $version: $bin/agentic-routines"
+  case ":$PATH:" in
+    *":$bin:"*) ;;
+    *) echo "Add it to your PATH: export PATH=\"$bin:\$PATH\"" ;;
+  esac
+  if [ "$setup" = 1 ] && (exec </dev/tty) 2>/dev/null; then
+    "$bin/agentic-routines" setup </dev/tty
+  else
+    echo "Then connect your agents: agentic-routines setup"
+  fi
+}
+
+main "$@"

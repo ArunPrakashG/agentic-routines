@@ -1,5 +1,7 @@
 // What the browser features added for parity do, end to end. Started by e2e-parity.sh.
 // Each section stands on its own page and session. Clicks a person would make go through CDP, so the page sees them as real.
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -560,6 +562,37 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check((await evalIn('chores.html', 'window.moves')) > 3, 'the pointer moves on its way, rather than jumping');
   check(/slowly by hand/.test((await call('read_page', {})).text), 'and the input still lands');
   await call('settings', { human_input: false });
+}
+
+// #130: every tool as a command, in one window with the rest. Each command is its own process.
+{
+  console.log('Commands');
+  const run = (...args) => new Promise((done) => execFile('node', [join(CLI, 'dist/index.js'), ...args, '--session', 'e2e-cli'], { env: process.env, timeout: 90_000 }, (e, out, err) => done({ code: e ? (e.code ?? 1) : 0, out, err })));
+  const tools = (await run('tools')).out;
+  const { tools: listed } = await client.listTools();
+  check(listed.every((t) => new RegExp(`^${t.name}\\b`, 'm').test(tools)), `all ${listed.length} tools are listed`);
+  let r = await run('navigate', `${SITE}/chores.html`);
+  check(r.code === 0, `navigate works from a terminal: ${r.err.slice(0, 80)}`);
+  r = await run('read-page');
+  check(/Publish list/.test(r.out), 'and the next command, a new process, reads the same tab');
+  const ref = refFor(r.out, /Publish list/);
+  check((await run('click', '--ref', ref)).code === 0, 'a flag goes through');
+  r = await run('screenshot');
+  check(existsSync(r.out.trim().split('\n').pop()), 'an image goes to a file, and the command says where');
+  r = await run('click', '--ref', 'nope');
+  check(r.code === 1, 'a tool that fails exits 1');
+  r = await run('frobnicate');
+  check(r.code === 1 && /no command or tool/.test(r.err), 'an unknown command says so');
+  r = await run('cdp_endpoint');
+  check(/ws:\/\/127\.0\.0\.1/.test(r.out), 'the DevTools address is given');
+  const ws = r.out.match(/ws:\/\/\S+/)?.[0];
+  const stillThere = ws && await new Promise((done) => {
+    const s = new WebSocket(ws);
+    s.onopen = () => { s.close(); done(true); };
+    s.onerror = () => done(false);
+  });
+  check(stillThere, 'and it outlives the command that printed it');
+  check((await run('session_delete', 'e2e-cli')).code === 0, 'the session closes');
 }
 
 await client.close();

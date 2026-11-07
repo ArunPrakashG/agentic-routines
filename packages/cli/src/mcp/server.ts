@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, toPlaywright, urlScore, wrapAuthored, wrapUntrusted, type ByHand, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { current, debugOn, logged } from '../debug.ts';
@@ -14,6 +15,7 @@ import * as secrets from '../store/secrets.ts';
 import * as sessions from '../store/sessions.ts';
 import { executeWorker, watched } from './execute.ts';
 import { fastRun } from './fast.ts';
+import { updateWhenIdle } from '../update.ts';
 import { checkUpload, splitPaths } from '../host/files.ts';
 import { paths } from '../paths.ts';
 import * as sources from '../store/sources.ts';
@@ -311,7 +313,7 @@ function watchRoutines(onChange: () => void) {
   }
 }
 
-export async function runMcp(): Promise<void> {
+export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): Promise<void> {
   const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: `${INSTRUCTIONS}\n\n${UNTRUSTED_NOTES}` });
   // With several browser profiles open, the first answer says which one the work is in.
   const withNote =
@@ -869,7 +871,8 @@ export async function runMcp(): Promise<void> {
     },
     async () =>
       guarded(async () => {
-        const r = await bridge.call<{ endpoint: string }>('cdp.endpoint', {});
+        // A command ends as soon as it has printed this, and the address has to outlast it.
+        const r = await bridge.call<{ endpoint: string }>('cdp.endpoint', { keep: o.cli });
         return text(
           [
             `Endpoint: ${r.endpoint}`,
@@ -1400,13 +1403,16 @@ export async function runMcp(): Promise<void> {
     bridge.call('agent.hello', {}, 5_000).catch(() => {});
   };
   // The agent went away while something was still being answered. That is the end of the session, not an error.
-  process.stdout.on('error', (e: NodeJS.ErrnoException) => {
-    if (e.code === 'EPIPE') process.exit(0);
-    throw e;
-  });
-  // The same when it went away between calls: the connection to the browser would keep this process running forever.
-  process.stdin.on('end', () => process.exit(0));
-  await server.connect(new StdioServerTransport());
+  if (!o.transport) {
+    process.stdout.on('error', (e: NodeJS.ErrnoException) => {
+      if (e.code === 'EPIPE') process.exit(0);
+      throw e;
+    });
+    // The same when it went away between calls: the connection to the browser would keep this process running forever.
+    process.stdin.on('end', () => process.exit(0));
+    updateWhenIdle(() => bridge.busy());
+  }
+  await server.connect(o.transport ?? new StdioServerTransport());
   // Started for a session: this server picks it up as soon as the browser can be asked.
   const startIn = process.env.AGENTIC_ROUTINES_SESSION;
   const named = startIn ? await sessions.get(startIn) : undefined;

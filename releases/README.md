@@ -23,6 +23,12 @@ The Chrome zip also goes to Edge Add-ons. The sources zip goes to Firefox Add-on
 4. Edit `releases/v0.2.0/NOTES.md`, commit the folder, tag `v0.2.0`.
 5. Upload the zips to each store (`store/listing.md` has the text), publish the npm package with `npm publish releases/v0.2.0/cli/agentic-routines-0.2.0.tgz`, and attach the files to the GitHub release.
 
+6. `pnpm release:bundle` builds what the install script downloads into `.dev/bundles/v0.2.0`, too big to commit: for each platform a Node runtime and the CLI, with `manifest.json` and `manifest.sig`. Upload every file there to the GitHub release of the tag, and mark it as the latest.
+
+The first time only, `node releases/scripts/signing-key.mjs` makes the key that signs the manifest. Commit `releases/update-key.pub`, and keep `.keys/update-signing.pem` somewhere safe: without it, installed copies never update again. On a machine without the file, put it in `AR_UPDATE_SIGNING_KEY`.
+
+`dev/e2e/e2e-install.sh` tries the install script and an update on this machine, using a throwaway key.
+
 `pnpm check:store <dir>` runs the store checks alone on a build folder.
 
 ## What the checks catch
