@@ -748,7 +748,7 @@ func (a *app) getRoutine(w http.ResponseWriter, r *http.Request) {
 func (a *app) countInstall(w http.ResponseWriter, r *http.Request) {
 	// The count ranks the directory, so one visitor counts once a day for a routine.
 	owner, name := r.PathValue("owner"), r.PathValue("name")
-	if !a.limiter.once(r.Context(), "install", clientIP(r), owner+"/"+name, 24*time.Hour) {
+	if !a.limiter.once(r.Context(), "install", a.clientIP(r), owner+"/"+name, 24*time.Hour) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

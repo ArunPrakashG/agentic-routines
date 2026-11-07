@@ -10,11 +10,13 @@ import (
 	"net/netip"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 type app struct {
 	cfg     config
+	proxy   *proxyAddrs
 	db      *store
 	google  *google
 	signer  signer
@@ -86,15 +88,52 @@ func (a *app) wrap(next http.Handler) http.Handler {
 	})
 }
 
+// proxyAddrs knows the addresses behind the proxy's host name. It looks them up at most once a minute, and a
+// failed lookup keeps the last answer, so a DNS hiccup does not put every visitor behind one address.
+type proxyAddrs struct {
+	name  string
+	mu    sync.Mutex
+	addrs map[netip.Addr]bool
+	at    time.Time
+}
+
+func (p *proxyAddrs) isProxy(ctx context.Context, remote string) bool {
+	if p == nil || p.name == "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		return false
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if time.Since(p.at) > time.Minute {
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		if found, err := net.DefaultResolver.LookupNetIP(ctx, "ip", p.name); err == nil {
+			p.addrs = make(map[netip.Addr]bool, len(found))
+			for _, f := range found {
+				p.addrs[f.Unmap()] = true
+			}
+			p.at = time.Now()
+		}
+	}
+	return p.addrs[addr.Unmap()]
+}
+
 func publicRead(path string) bool {
 	return path == "/api/v1/blocklist" || path == "/api/v1/routines" || strings.HasPrefix(path, "/api/v1/routines/")
 }
 
-// The proxy in front sets X-Client-IP from the connection it saw, replacing whatever the visitor sent, and
-// the app is not published on any port: only containers on the proxy network can reach it. A value that is
-// not an address is not believed.
-func clientIP(r *http.Request) string {
-	if v := strings.TrimSpace(r.Header.Get("X-Client-IP")); v != "" {
+// The proxy in front sets X-Client-IP from the connection it saw, replacing whatever the visitor sent. Other
+// containers can reach the app too, so the header counts only on a connection from the proxy. A value that
+// is not an address is not believed.
+func (a *app) clientIP(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Client-IP")); v != "" && a.proxy.isProxy(r.Context(), r.RemoteAddr) {
 		if _, err := netip.ParseAddr(v); err == nil {
 			return v
 		}
@@ -108,7 +147,7 @@ func clientIP(r *http.Request) string {
 
 func (a *app) limited(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !a.limiter.allow(r.Context(), "auth", clientIP(r)) {
+		if !a.limiter.allow(r.Context(), "auth", a.clientIP(r)) {
 			w.Header().Set("Retry-After", "60")
 			fail(w, http.StatusTooManyRequests, "rate_limited")
 			return
@@ -120,7 +159,7 @@ func (a *app) limited(next http.HandlerFunc) http.HandlerFunc {
 // limitedTo counts calls per visitor in a group of its own, up to limit a minute.
 func (a *app) limitedTo(group string, limit int64, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !a.limiter.within(r.Context(), group, clientIP(r), limit) {
+		if !a.limiter.within(r.Context(), group, a.clientIP(r), limit) {
 			w.Header().Set("Retry-After", "60")
 			fail(w, http.StatusTooManyRequests, "rate_limited")
 			return

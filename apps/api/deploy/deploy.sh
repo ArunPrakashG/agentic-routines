@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Build the image here, ship it to ovh-arun and restart the container there.
+# Build the image here, ship it to the server and restart the container there.
 #
 #   apps/api/deploy/deploy.sh      build HEAD's tree and deploy it
 #
 # First-time server setup (database, .env, Caddy, DNS, cache rule) is in ../README.md.
 set -euo pipefail
 
-HOST=${HOST:-ovh-arun}
-DIR=infra/apps/agenticroutines
+# Where to deploy is not in the repo: DEPLOY_HOST (an SSH name) and DEPLOY_DIR (relative to its home).
+. "${XDG_CONFIG_HOME:-$HOME/.config}/agentic-routines/deploy.env"
+HOST=${DEPLOY_HOST:?set DEPLOY_HOST in deploy.env}
+DIR=${DEPLOY_DIR:?set DEPLOY_DIR in deploy.env}
 NAME=agenticroutines-api
 cd "$(dirname "$0")/.."
 

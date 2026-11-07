@@ -13,6 +13,8 @@ type config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	SessionSecret      []byte
+	// The host name of the proxy whose X-Client-IP is believed. Empty believes nobody.
+	TrustedProxy string
 	// Who may review submissions. There is no way to become one from inside the service.
 	AdminEmails map[string]bool
 
@@ -30,6 +32,7 @@ func loadConfig() (config, error) {
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		SessionSecret:      []byte(os.Getenv("SESSION_SECRET")),
+		TrustedProxy:       os.Getenv("TRUSTED_PROXY"),
 		GoogleTokenURL:     env("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),
 		GoogleJWKSURL:      env("GOOGLE_JWKS_URL", "https://www.googleapis.com/oauth2/v3/certs"),
 		GoogleIssuers:      []string{"https://accounts.google.com", "accounts.google.com"},
