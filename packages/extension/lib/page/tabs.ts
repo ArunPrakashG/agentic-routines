@@ -1,5 +1,6 @@
 import type { ContentMsg } from '../../entrypoints/content';
 import { platform } from '../platform';
+import type { Send } from '../platform/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -61,11 +62,21 @@ export async function bare<T>(tabId: number, fn: () => Promise<T>): Promise<T> {
 export const rendering = (tabId: number) =>
   Promise.race([ask<boolean>(tabId, { t: 'rendering' }).catch(() => true), sleep(200).then(() => false)]);
 
+// A picture of a tab behind another can take seconds to come back, so nobody waits for it, and one at a time is enough.
+const drawing = new Set<number>();
+export function draw(tabId: number, send: Send) {
+  if (drawing.has(tabId)) return;
+  drawing.add(tabId);
+  void send('Page.captureScreenshot', { format: 'jpeg', quality: 1 })
+    .catch(() => {})
+    .finally(() => drawing.delete(tabId));
+}
+
 /** Draws one frame if the window has stopped drawing. Browsers without a DevTools session leave it as it is. */
 export async function wake(tabId: number) {
   if (!platform.cdp || (await rendering(tabId))) return;
   try {
-    await platform.cdp(tabId, (send) => send('Page.captureScreenshot', { format: 'jpeg', quality: 1 }));
+    await platform.cdp(tabId, async (send) => draw(tabId, send));
   } catch {
     // Something else is attached, or the page is restricted.
   }
@@ -188,7 +199,10 @@ function releaseTab(tabId: number) {
  */
 export async function releaseSession(session: string) {
   const t = tabOf.get(session);
-  if (t !== undefined) releaseTab(t);
+  if (t !== undefined) {
+    releaseTab(t);
+    await platform.release?.(t);
+  }
   labels.delete(session);
   const mine = [...(opened.get(session) ?? [])];
   opened.delete(session);

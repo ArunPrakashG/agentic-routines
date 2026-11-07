@@ -1,7 +1,7 @@
 import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { accessibleName, attach, busyWhy, signedInAs, watchChanges, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport } from '../lib/page/dom';
+import { accessibleName, aimAt, attach, busyWhy, landed, readyToType, signedInAs, typedInto, watchChanges, watchLanding, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
@@ -13,7 +13,12 @@ export type ContentMsg =
   | { t: 'viewport' }
   | { t: 'describe'; ref: string }
   | { t: 'rendering' }
-  | { t: 'act'; ref?: string; action: string; value?: string }
+  | { t: 'act'; ref?: string; action: string; value?: string; quick?: boolean }
+  | { t: 'aim'; ref: string; action: string; quick?: boolean }
+  | { t: 'landed' }
+  | { t: 'ready'; ref: string; keep?: boolean; quick?: boolean }
+  | { t: 'typed'; ref: string; value: string }
+  | { t: 'hookmay'; ref: string; action: 'click' | 'type' }
   | { t: 'snapshot'; ref?: string }
   | { t: 'hookact'; ref: string; action: 'click' | 'type'; value?: string }
   | { t: 'attach'; ref: string; files: { name: string; type: string; b64: string }[] }
@@ -137,7 +142,7 @@ export default defineContentScript({
             // The cursor lands on the element first, so a person watching sees what is about to happen.
             void (async () => {
               try {
-                if (msg.ref && msg.action !== 'read') await aim(el, msg.action);
+                if (msg.ref && msg.action !== 'read') await aim(el, msg.action, msg.quick);
                 switch (msg.action) {
                   case 'click':
                     click(el);
@@ -165,33 +170,35 @@ export default defineContentScript({
             })();
             break;
           }
+          case 'aim': {
+            const el = byRef(msg.ref);
+            // The cursor lands on the element first, so a person watching sees what is about to happen.
+            void aim(el, msg.action, msg.quick).finally(() => {
+              const at = aimAt(el);
+              if (at.hit) watchLanding(el);
+              send({ ok: at });
+            });
+            break;
+          }
+          case 'landed':
+            send({ ok: landed() });
+            break;
+          case 'ready': {
+            const el = byRef(msg.ref);
+            void aim(el, 'type', msg.quick).finally(() => send({ ok: readyToType(el, msg.keep) }));
+            break;
+          }
+          case 'typed':
+            send({ ok: typedInto(byRef(msg.ref), msg.value) });
+            break;
           case 'snapshot':
             send({ ok: snapshot(msg.ref) });
             break;
-          case 'hookact': {
+          case 'hookmay': {
             // A hook points at an element by ref; whether it may touch it is decided here, in the page, not by the hook.
-            let el: Element;
-            try {
-              el = byRef(msg.ref);
-            } catch (e) {
-              send({ err: (e as Error).message });
-              break;
-            }
-            const why = hookMay(el, msg.action);
-            if (why) {
-              send({ err: `refused: ${why}` });
-              break;
-            }
-            void (async () => {
-              try {
-                await aim(el, msg.action);
-                if (msg.action === 'click') click(el);
-                else type(el, msg.value ?? '');
-                send({ ok: true });
-              } catch (e) {
-                send({ err: (e as Error).message });
-              }
-            })();
+            const why = hookMay(byRef(msg.ref), msg.action);
+            if (why) send({ err: `refused: ${why}` });
+            else send({ ok: true });
             break;
           }
           case 'markUpload': {
