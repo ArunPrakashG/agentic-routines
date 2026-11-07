@@ -209,6 +209,8 @@ export interface RunResult {
   approved_in_panel?: string[];
   /** Set when the page is a very different size from the one the routine was recorded at. */
   viewport_note?: string;
+  /** Set when a step did not match in a tab behind another: some pages only finish drawing in front. */
+  hidden_note?: string;
   /** Steps that paused because they look irreversible, though the routine did not ask for it. */
   forced_pauses?: number[];
   /** A test of a draft: it stops at the first pause without approving it. */

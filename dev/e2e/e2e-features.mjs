@@ -167,35 +167,84 @@ async function addByHand(item) {
   console.log('\n# Savings meter');
   await session();
   await addByHand('Pears');
-  await sleep(1200);
-  await call('click', { ref: refFor(await read(), /button.*Publish/i) });
-  const d = await call('routine_propose', { name: 'publish-chore', description: 'Adds an item and publishes the list. Use when someone wants an item published.' });
+  const d = await call('routine_propose', { name: 'meter-chore', description: 'Adds an item for the meter to count. Use when someone wants it counted.' });
   const id = draftOf(d.text);
   const name = paramOf(d.text);
   await call('routine_test', { draft_id: id, params: { [name]: 'Pears' } });
   await call('routine_save', { draft_id: id });
-  const stats = JSON.parse(readFileSync(`${process.env.AGENTIC_ROUTINES_HOME}/routines/local/publish-chore/.stats.json`, 'utf8'));
+  const statsFile = `${process.env.AGENTIC_ROUTINES_HOME}/routines/local/meter-chore/.stats.json`;
+  const stats = JSON.parse(readFileSync(statsFile, 'utf8'));
   check(stats.byHand?.steps >= 3, `saving keeps the run it was recorded from: ${JSON.stringify(stats.byHand)}`);
 
-  let r = await call('routine_run', { name: 'publish-chore', params: { [name]: 'Plums' } });
-  const paused = /run_id "(rp-[a-z0-9]+)"/.exec(r.text)?.[1];
-  if (paused) r = await call('routine_resume', { run_id: paused, approve: true });
+  const r = await call('routine_run', { name: 'meter-chore', params: { [name]: 'Plums' } });
   check(/^Done/m.test(r.text), `a replay: ${r.text.slice(0, 100)}`);
 
   const out = await new Promise((res) => execFile(process.execPath, [`${CLI}/dist/index.js`, 'stats'], { env: { HOME: process.env.DEV_DIR, PATH: process.env.PATH, AGENTIC_ROUTINES_HOME: process.env.AGENTIC_ROUTINES_HOME } }, (_e, stdout) => res(stdout)));
   check(/This week/.test(out) && /\(measured\)/.test(out) && /\(estimated\)/.test(out), `stats labels what it knows and what it estimates: ${out.slice(0, 200)}`);
-  check(/publish-chore: 1 run/.test(out), 'stats lists the routine');
+  check(/meter-chore: 1 run/.test(out), 'stats lists the routine');
   check(/after 1 recording/.test(out), 'recording counts against the total');
   check(/Nothing here leaves your computer/.test(out), 'stats says how it is worked out');
-  const after = JSON.parse(readFileSync(`${process.env.AGENTIC_ROUTINES_HOME}/routines/local/publish-chore/.stats.json`, 'utf8'));
+  const after = JSON.parse(readFileSync(statsFile, 'utf8'));
   check(after.recent.length === 1 && after.recent[0].agent === 'claude-code', 'a run is kept with its agent');
 
   const panel = await (await fetch(`${CDP}/json/new?chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo/sidepanel.html`, { method: 'PUT' })).json();
   await sleep(1500);
   const shown = await evalIn(`document.body.innerText`, 'sidepanel.html');
   check(/This week/.test(shown) && /\(estimated\)/.test(shown), 'the panel shows the week');
-  check(/publish-chore[\s\S]*over 1 run\b/.test(shown), 'and the routine');
+  check(/meter-chore[\s\S]*over 1 run\b/.test(shown), 'and the routine');
   await fetch(`${CDP}/json/close/${panel.id}`);
+}
+
+// ---------- behind the person's tab ----------
+{
+  console.log('\n# Run in the background');
+  await session();
+  await addByHand('Figs');
+  await call('click', { ref: refFor(await read(), /button.*Publish/i) });
+  const d = await call('routine_propose', { name: 'publish-chore', description: 'Adds an item and publishes the list. Use when someone wants an item published.' });
+  const id = draftOf(d.text);
+  const name = paramOf(d.text);
+  check(/Test passed/.test((await call('routine_test', { draft_id: id, params: { [name]: 'Figs' } })).text), 'the routine tests');
+  check(/pauses before step/.test((await call('routine_save', { draft_id: id })).text), 'the routine pauses before publishing');
+
+  // The person is reading something else, with the panel open beside it.
+  const panel = await (await fetch(`${CDP}/json/new?chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo/sidepanel.html`, { method: 'PUT' })).json();
+  const person = await (await fetch(`${CDP}/json/new?${SITE}/docs.html`, { method: 'PUT' })).json();
+  await fetch(`${CDP}/json/activate/${person.id}`);
+  await sleep(800);
+  await evalIn(`window.moved = 0; document.addEventListener('visibilitychange', () => window.moved++); true`, 'docs.html');
+  const before = await evalIn(`document.visibilityState`, 'docs.html');
+  check(before === 'visible', 'the person has their own tab in front');
+
+  const run = call('routine_run', { name: 'publish-chore', params: { [name]: 'Dates' } });
+  const reached = await (async () => {
+    for (let i = 0; i < 40; i++) {
+      await sleep(500);
+      if (await evalIn(`[...document.querySelectorAll('button')].some((b) => /approve/i.test(b.textContent))`, 'sidepanel.html')) return true;
+    }
+    return false;
+  })();
+  check(reached, 'the pause reaches the panel');
+  const badge = await evalIn(`(chrome.action.getBadgeText({}, (t) => (window.badge = t)), true)`, 'sidepanel.html').then(() => sleep(200)).then(() => evalIn(`window.badge`, 'sidepanel.html'));
+  check(badge === '1', `the toolbar icon says something waits: ${badge}`);
+  check((await evalIn(`document.visibilityState`, 'docs.html')) === 'visible' && (await evalIn(`window.moved`, 'docs.html')) === 0, 'the page did not come forward at the pause');
+  await evalIn(`[...document.querySelectorAll('button')].find((b) => /approve/i.test(b.textContent)).click()`, 'sidepanel.html');
+  const done = await run;
+  check(/^Done/m.test(done.text), `it finishes: ${done.text.slice(0, 100)}`);
+  check((await evalIn(`document.visibilityState`, 'docs.html')) === 'visible' && (await evalIn(`window.moved`, 'docs.html')) === 0, 'the person was never moved off their tab');
+  await fetch(`${CDP}/json/close/${person.id}`);
+  await fetch(`${CDP}/json/close/${panel.id}`);
+
+  // A step that does not match behind another tab says so.
+  const person2 = await (await fetch(`${CDP}/json/new?${SITE}/docs.html`, { method: 'PUT' })).json();
+  await fetch(`${CDP}/json/activate/${person2.id}`);
+  await flags({ add: 'Renamed for this' });
+  const changed = await call('routine_run', { name: 'meter-chore', params: { [(paramOf((await call('routine_propose', { name: 'x-x', description: 'Only to read its parameter. Use when never.', from_routine: 'meter-chore' })).text) ?? 'item')]: 'Kale' } });
+  check(/behind another/.test(changed.text), `behind another tab the result says so: ${changed.text.slice(0, 220)}`);
+  const stop = /run_id "(rp-[a-z0-9]+)"/.exec(changed.text)?.[1];
+  if (stop) await call('routine_resume', { run_id: stop, approve: false });
+  await flags({ add: null });
+  await fetch(`${CDP}/json/close/${person2.id}`);
 }
 
 await client.close();
