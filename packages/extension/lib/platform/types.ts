@@ -12,6 +12,6 @@ export interface Platform {
   release?: (tabId: number) => Promise<void>;
   /** What a tab's DevTools session says, from then on. Also `detached`, when that session ends. */
   onEvent?: (fn: (tabId: number, method: string, params: any) => void) => void;
-  /** Make the toolbar button open the panel. */
-  openPanelOnClick(): void;
+  /** The toolbar button: `first` says what the click was for, and with true the panel opens as well. */
+  onToolbar(first: (tab: Browser.tabs.Tab) => boolean): void;
 }

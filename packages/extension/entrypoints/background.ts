@@ -11,6 +11,7 @@ import * as replay from '../lib/replay/replay';
 import * as runs from '../lib/agent/runs';
 import { watchDialogs } from '../lib/page/dialogs';
 import { watchLogs } from '../lib/page/logs';
+import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
 import { ask, releaseSession, tellAll, watchTabs } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
@@ -20,6 +21,7 @@ type LastRuns = Record<string, { id: string; at: number; changed: number[] }>;
 export default defineBackground(() => {
   watchDialogs();
   watchTabs();
+  watchHandoffs();
   watchLogs();
 
   // ---------- requests from the MCP server, through the host ----------
@@ -435,6 +437,7 @@ export default defineBackground(() => {
 
   // ---------- human demos ----------
   browser.runtime.onMessage.addListener((msg: any, sender, send) => {
+    if (msg?.t === 'handoff.continue') return void fromCard(sender, msg.nonce);
     if (msg?.t === 'recording?') return void send(!!recording && sender.tab?.id === recording.tabId);
     if (msg?.t !== 'human' || !recording || sender.tab?.id !== recording.tabId) return;
     if (!sender.frameId) return void runs.record('You', msg.event);
@@ -451,7 +454,14 @@ export default defineBackground(() => {
     if (cmd === 'record') setRecording(!recording);
   });
 
-  platform.openPanelOnClick();
+  platform.onToolbar((tab) => {
+    // A tab that is with the person: this click is them giving it back.
+    if (tab.id !== undefined && handedOver(tab.id)) {
+      fromToolbar(tab.id);
+      return false;
+    }
+    return true;
+  });
   browser.action.setBadgeBackgroundColor?.({ color: '#3530E0' });
 
   // The session stays out of reach of content scripts.

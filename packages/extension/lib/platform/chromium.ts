@@ -90,7 +90,11 @@ export const chromium: Platform = {
   onEvent(fn) {
     hearing.add(fn);
   },
-  openPanelOnClick() {
-    (browser as any).sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  onToolbar(first) {
+    // Opened by hand, as the click also has to reach us. Only within the click itself does the browser allow it.
+    (browser as any).sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+    browser.action.onClicked.addListener((tab) => {
+      if (first(tab)) (browser as any).sidePanel.open({ tabId: tab.id }).catch(() => {});
+    });
   },
 };

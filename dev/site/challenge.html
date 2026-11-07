@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Just a moment</title>
+<h1>Checking your browser</h1>
+<p>A stand-in for a bot check. Nothing here is a real one: the button takes it away, as a person passing a check would.</p>
+<div class="cf-turnstile" style="width:300px;height:65px;border:1px solid #888"></div>
+<button id="pass">I passed</button>
+<script>
+  document.getElementById('pass').onclick = () => document.querySelector('.cf-turnstile').remove();
+</script>

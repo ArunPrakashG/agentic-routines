@@ -4,7 +4,9 @@ import type { Platform } from './types';
 
 export const gecko: Platform = {
   name: 'Firefox',
-  openPanelOnClick() {
-    browser.action.onClicked.addListener(() => (browser as any).sidebarAction.toggle());
+  onToolbar(first) {
+    browser.action.onClicked.addListener((tab) => {
+      if (first(tab)) (browser as any).sidebarAction.toggle();
+    });
   },
 };

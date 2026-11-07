@@ -19,6 +19,7 @@ export type Action =
   | 'scroll'
   | 'set'
   | 'dialog'
+  | 'handoff'
   | 'each'
   | 'if';
 
@@ -77,7 +78,7 @@ export interface Step {
   label: string;
   /** navigate: target URL. */
   url?: string;
-  /** type/select/set/upload/press/dialog: a literal, "{{param}}" or "{{secret:name}}". */
+  /** type/select/set/upload/press/dialog: a literal, "{{param}}" or "{{secret:name}}". handoff: what the person is asked to do. */
   value?: string;
   target?: Locator;
   page?: PageFingerprint;
@@ -234,6 +235,8 @@ export interface RunResult {
   viewport_note?: string;
   /** Set when a step did not match in a tab behind another: some pages only finish drawing in front. */
   hidden_note?: string;
+  /** Where the tab went to the person and came back. */
+  handoffs?: { n: number; reason: string }[];
   /** Steps that paused because they look irreversible, though the routine did not ask for it. */
   forced_pauses?: number[];
   /** A test of a draft: it stops at the first pause without approving it. */

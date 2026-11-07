@@ -83,6 +83,7 @@ export interface Compiled {
 export function eventLabel(e: RecordedEvent): string {
   if (e.action === 'navigate') return shortUrl(e.url);
   if (e.action === 'dialog') return `${e.dismiss ? 'No' : 'Yes'} to “${targetLabel(e.target)}”`;
+  if (e.action === 'handoff') return `Hand over: ${e.value ?? ''}`.slice(0, 100);
   if (e.action === 'drag') return `${targetLabel(e.target)} to ${targetLabel(e.pointer?.to?.target)}`;
   if (e.action === 'scroll' && !e.target) return `the page by ${e.pointer?.by?.y ?? 0} px`;
   return e.fieldLabel || targetLabel(e.target);
