@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -28,9 +29,10 @@ var (
 	secretName    = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
 	useWhen       = regexp.MustCompile(`(?i)\buse when\b`)
 	// {{name}} is filled in with a value the person gives; {{secret:name}} with one from their environment.
-	placeRef  = regexp.MustCompile(`\{\{(secret:)?([a-z0-9_]+)\}\}`)
-	placeOnly = regexp.MustCompile(`^\{\{([a-z0-9_]+)\}\}$`)
-	actions   = map[string]bool{"navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true}
+	placeRef    = regexp.MustCompile(`\{\{(secret:)?([a-z0-9_]+)\}\}`)
+	placeOnly   = regexp.MustCompile(`^\{\{([a-z0-9_]+)\}\}$`)
+	modsPattern = regexp.MustCompile(`^((ctrl|shift|alt|cmd)(\+(ctrl|shift|alt|cmd))*)?$`)
+	actions     = map[string]bool{"navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true, "hover": true, "drag": true, "scroll": true}
 	// Names that would read as the service or as a place, not a person.
 	reserved = map[string]bool{"local": true, "admin": true, "api": true, "me": true, "root": true, "support": true, "official": true, "agentic-routines": true, "agenticroutines": true, "browser-routines": true, "browserroutines": true, "routines": true, "www": true}
 )
@@ -163,7 +165,49 @@ type step struct {
 	Pause  string       `json:"pause,omitempty"`
 	Pick   string       `json:"pick,omitempty"`
 	// Text for the agent that runs the routine. Shown to it inside the untrusted-content envelope.
-	Instructions string `json:"instructions,omitempty"`
+	Instructions string   `json:"instructions,omitempty"`
+	Pointer      *pointer `json:"pointer,omitempty"`
+}
+
+type spot struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type dropOn struct {
+	Target *locator `json:"target,omitempty"`
+	Spot   *spot    `json:"spot,omitempty"`
+}
+
+// How a pointer step was done, beyond the element it was done to.
+type pointer struct {
+	Spot   *spot   `json:"spot,omitempty"`
+	Button string  `json:"button,omitempty"`
+	Count  int     `json:"count,omitempty"`
+	Mods   string  `json:"mods,omitempty"`
+	To     *dropOn `json:"to,omitempty"`
+	By     *spot   `json:"by,omitempty"`
+}
+
+func (s *spot) onElement() bool {
+	return s == nil || (s.X >= 0 && s.X <= 1 && s.Y >= 0 && s.Y <= 1)
+}
+
+// Places on the element, the usual buttons, nothing else.
+func (p *pointer) ok() bool {
+	if p == nil {
+		return true
+	}
+	if !p.Spot.onElement() || (p.To != nil && !p.To.Spot.onElement()) {
+		return false
+	}
+	if p.Button != "" && p.Button != "left" && p.Button != "right" && p.Button != "middle" {
+		return false
+	}
+	if p.Count < 0 || p.Count > 3 || !modsPattern.MatchString(p.Mods) {
+		return false
+	}
+	return p.By == nil || (math.Abs(p.By.X) <= 100000 && math.Abs(p.By.Y) <= 100000)
 }
 
 type routineIn struct {
@@ -329,6 +373,9 @@ func (r *routineIn) check(name string) string {
 			return "bad_steps"
 		}
 		if s.Pick != "" && s.Pick != "first" {
+			return "bad_steps"
+		}
+		if !s.Pointer.ok() {
 			return "bad_steps"
 		}
 		if len(s.Instructions) > 1000 {

@@ -136,16 +136,17 @@ export function veil(on: boolean) {
 }
 
 /** Move the cursor onto an element and outline it. Resolves when the cursor has arrived, so the action lands with it. */
-export async function aim(el: Element, action: string, quick = false) {
+export async function aim(el: Element, action: string, quick = false, spot?: { x: number; y: number }) {
   if (mode !== 'run') return;
-  (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
+  // A point on the page is already on screen, and is only right if the page stays where it is.
+  if (!spot) (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return;
   const p = ensure();
   clearTimeout(linger);
 
-  const x = Math.round(r.x + Math.min(r.width / 2, 140));
-  const y = Math.round(r.y + r.height / 2);
+  const x = Math.round(spot?.x ?? r.x + Math.min(r.width / 2, 140));
+  const y = Math.round(spot?.y ?? r.y + r.height / 2);
   const label = accessibleName(el).replace(/\s+/g, ' ').trim();
   p.chip.textContent = [VERBS[action] ?? action, label.length > 28 ? label.slice(0, 27) + '…' : label].filter(Boolean).join(' · ');
 

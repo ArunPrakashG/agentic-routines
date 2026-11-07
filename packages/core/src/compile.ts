@@ -77,7 +77,10 @@ export interface Compiled {
 }
 
 export function eventLabel(e: RecordedEvent): string {
-  return e.action === 'navigate' ? shortUrl(e.url) : e.fieldLabel || targetLabel(e.target);
+  if (e.action === 'navigate') return shortUrl(e.url);
+  if (e.action === 'drag') return `${targetLabel(e.target)} to ${targetLabel(e.pointer?.to?.target)}`;
+  if (e.action === 'scroll' && !e.target) return `the page by ${e.pointer?.by?.y ?? 0} px`;
+  return e.fieldLabel || targetLabel(e.target);
 }
 
 export const isItemUrl = (u?: string) => !!u && urlPattern(u).includes(':id');
@@ -137,6 +140,7 @@ export function stepBuilder(opts: Pick<CompileOptions, 'params' | 'fixed'>) {
     } else if (e.value !== undefined) {
       step.value = e.value;
     }
+    if (e.pointer) step.pointer = e.pointer;
     if (isIrreversible(e)) step.pause = 'auto';
     return step;
   }

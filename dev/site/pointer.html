@@ -1,0 +1,46 @@
+<!doctype html><meta charset="utf-8"><title>Pointer</title>
+<style>
+body{margin:12px;font:14px sans-serif}
+#board{border:1px solid #888;display:block}
+.menu{display:inline-block;position:relative;margin:8px 0}
+.menu .items{display:none;position:absolute;left:0;top:100%;background:#eee;padding:6px;z-index:2}
+.menu:hover .items{display:block}
+#track{position:relative;width:400px;height:24px;background:#ddd;margin:8px 0}
+#handle{position:absolute;left:0;top:0;width:24px;height:24px;background:#47c;cursor:grab;touch-action:none}
+#card,#bin{display:inline-block;padding:12px;border:1px solid #888;margin:4px}
+#panel{height:80px;width:300px;overflow:auto;border:1px solid #888}
+#far{margin-top:2600px}
+</style>
+<h1>Pointer</h1>
+<canvas id="board" width="400" height="120"></canvas><p id="board-out">board none</p>
+<button id="dbl">Twice</button><p id="dbl-out">dbl none</p>
+<button id="ctx">Context</button><p id="ctx-out">ctx none</p>
+<button id="mod">Held</button><p id="mod-out">mod none</p>
+<div class="menu"><button id="top">Files</button><div class="items"><button id="open">Open file</button></div></div><p id="open-out">open none</p>
+<div id="track"><div id="handle" role="slider" aria-label="Handle"></div></div><p id="handle-out">handle 0</p>
+<div id="card" draggable="true" role="button" tabindex="0" aria-label="Card">Card</div><div id="bin" role="button" tabindex="0" aria-label="Bin">Bin</div><p id="bin-out">bin empty</p>
+<input id="field" aria-label="Field"><p id="keys">keys none</p><p id="count">downs 0</p>
+<div id="panel" tabindex="0" aria-label="Panel"><div style="height:600px">top of panel</div></div><p id="panel-out">panel 0</p>
+<button id="far">Far button</button><p id="far-out">far none</p>
+<script>
+// A page that only believes the browser: synthetic events change nothing here.
+const $ = (id) => document.getElementById(id);
+const g = $('board').getContext('2d');
+g.fillStyle = '#cde'; g.fillRect(0, 0, 400, 120);
+$('board').addEventListener('click', (e) => { if (e.isTrusted) $('board-out').textContent = `board ${Math.round(e.offsetX)},${Math.round(e.offsetY)}`; });
+$('dbl').addEventListener('dblclick', (e) => { if (e.isTrusted) $('dbl-out').textContent = 'dbl yes'; });
+$('ctx').addEventListener('contextmenu', (e) => { e.preventDefault(); if (e.isTrusted) $('ctx-out').textContent = 'ctx yes'; });
+$('mod').addEventListener('click', (e) => { if (e.isTrusted) $('mod-out').textContent = `mod ${e.ctrlKey ? 'ctrl' : ''}${e.shiftKey ? 'shift' : ''}`; });
+$('open').addEventListener('click', (e) => { if (e.isTrusted) $('open-out').textContent = 'open yes'; });
+let grab = null;
+$('handle').addEventListener('pointerdown', (e) => { if (e.isTrusted) { grab = e.clientX - $('handle').offsetLeft; $('handle').setPointerCapture(e.pointerId); } });
+$('handle').addEventListener('pointermove', (e) => { if (grab !== null) { const x = Math.max(0, Math.min(376, e.clientX - grab)); $('handle').style.left = `${x}px`; $('handle-out').textContent = `handle ${Math.round(x)}`; } });
+$('handle').addEventListener('pointerup', () => { grab = null; });
+$('card').addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', 'card'));
+$('bin').addEventListener('dragover', (e) => e.preventDefault());
+$('bin').addEventListener('drop', (e) => { e.preventDefault(); $('bin-out').textContent = `bin ${e.isTrusted ? e.dataTransfer.getData('text/plain') : 'fake'}`; });
+let downs = 0;
+addEventListener('keydown', (e) => { if (e.isTrusted && !['Shift','Control','Alt','Meta'].includes(e.key)) { $('keys').textContent = `keys ${(e.ctrlKey ? 'ctrl+' : '') + e.key}`; if (e.key === 'ArrowDown') $('count').textContent = `downs ${++downs}`; } });
+$('panel').addEventListener('scroll', () => { $('panel-out').textContent = `panel ${Math.round($('panel').scrollTop)}`; });
+$('far').addEventListener('click', (e) => { if (e.isTrusted) $('far-out').textContent = 'far yes'; });
+</script>

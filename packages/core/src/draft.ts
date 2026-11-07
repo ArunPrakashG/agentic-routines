@@ -332,11 +332,12 @@ export function hints(d: Draft): Hint[] {
       typed.set(key, i);
     }
     const p = steps[i - 1];
-    if (s.action === 'click' && p?.action === 'click' && key && key === `${p.at && urlPattern(p.at)}|${p.target?.css}|${targetLabel(p.target)}` && !s.navigatedTo && !p.navigatedTo && !isProtected(s))
+    if (s.action === 'click' && p?.action === 'click' && !s.pointer?.spot && key && key === `${p.at && urlPattern(p.at)}|${p.target?.css}|${targetLabel(p.target)}` && !s.navigatedTo && !p.navigatedTo && !isProtected(s))
       out.push({ kind: 'retry', steps: [i, i + 1], text: `Steps ${i} and ${i + 1} click “${targetLabel(s.target)}” twice in a row.` });
   });
 
   for (const s of steps) {
+    if (s.action === 'scroll') out.push({ kind: 'retry', steps: [s.n, s.n], text: `Step ${s.n} only scrolls. A replay scrolls to whatever it clicks by itself, so this can go unless the page loads more as it scrolls.`, edit: { op: 'remove', steps: [s.n] } });
     if (isProtected(s)) out.push({ kind: 'side-effect', steps: [s.n, s.n], text: `Step ${s.n} “${s.label}” submits, publishes, pays or deletes. It stays, and the routine pauses before it every run.` });
     const leaves = [s.url, s.at, s.page?.url].find((u) => u && !onSite(u, d.site));
     if (leaves) out.push({ kind: 'off-site', steps: [s.n, s.n], text: `Step ${s.n} is on ${hostOf(leaves)}, which is not ${d.site}. A routine stays on one site; the save will be refused while this step is in.` });

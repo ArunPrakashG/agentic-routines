@@ -1,7 +1,7 @@
-import { resolve, type Locator, type RecordedEvent } from '@agentic-routines/core';
+import { resolve, type Locator, type RecordedEvent, type Spot } from '@agentic-routines/core';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { accessibleName, aimAt, attach, busyWhy, landed, readyToType, signedInAs, typedInto, watchChanges, watchLanding, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport } from '../lib/page/dom';
+import { accessibleName, aimAt, attach, busyWhy, drag, hover, landed, pointAt, readyToType, scrollBy, scrollPos, signedInAs, spotOn, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
@@ -13,8 +13,12 @@ export type ContentMsg =
   | { t: 'viewport' }
   | { t: 'describe'; ref: string }
   | { t: 'rendering' }
-  | { t: 'act'; ref?: string; action: string; value?: string; quick?: boolean }
-  | { t: 'aim'; ref: string; action: string; quick?: boolean }
+  | { t: 'act'; ref?: string; action: string; value?: string; how?: How; quick?: boolean }
+  | { t: 'aim'; ref: string; action: string; spot?: Spot; at?: Point; moving?: boolean; quick?: boolean }
+  | { t: 'at'; x: number; y: number }
+  | { t: 'where'; ref: string; spot?: Spot }
+  | { t: 'scrollpos'; p: Point }
+  | { t: 'scrollby'; p: Point; by: Point }
   | { t: 'landed' }
   | { t: 'ready'; ref: string; keep?: boolean; quick?: boolean }
   | { t: 'typed'; ref: string; value: string }
@@ -24,7 +28,7 @@ export type ContentMsg =
   | { t: 'attach'; ref: string; files: { name: string; type: string; b64: string }[] }
   | { t: 'markUpload'; ref: string }
   | { t: 'unmarkUpload' }
-  | { t: 'resolve'; target: Locator }
+  | { t: 'resolve'; target: Locator; wide?: boolean }
   | { t: 'first'; target: Locator }
   | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
   | { t: 'veil'; on: boolean }
@@ -45,12 +49,49 @@ function human(event: Omit<RecordedEvent, 'ts' | 'url' | 'page'>) {
   browser.runtime.sendMessage({ t: 'human', event: { ...event, ts: Date.now(), url: location.href, page: fingerprint(), view: viewport() } }).catch(() => {});
 }
 
+// A press that moved far enough on something made to be dragged is a drag, and the click that follows it is not a click.
+const DRAG_PX = 12;
+let pressed: { el: Element; x: number; y: number } | undefined;
+let dragged = false;
+
+function onPress(e: PointerEvent) {
+  dragged = false;
+  if (recording && e.target instanceof Element) pressed = { el: e.target, x: e.clientX, y: e.clientY };
+}
+
+function onLetGo(e: MouseEvent) {
+  const p = pressed;
+  pressed = undefined;
+  if (!p || Math.hypot(e.clientX - p.x, e.clientY - p.y) < DRAG_PX) return;
+  const made = p.el.closest('canvas,svg,[draggable=true],[role=slider]') || /grab|move/.test(getComputedStyle(p.el).cursor);
+  if (!made) return;
+  const end = document.elementFromPoint(e.clientX, e.clientY) ?? document.body;
+  dragged = true;
+  human({ action: 'drag', target: describe(p.el), pointer: { spot: spotOn(p.el, p.x, p.y), to: { target: describe(end), spot: spotOn(end, e.clientX, e.clientY) } } });
+}
+
+/** Not a control, but drawn to be clicked: a canvas, a map, anything with a hand cursor. */
+const drawnToClick = (el: Element) => !!el.closest('canvas,svg') || getComputedStyle(el).cursor === 'pointer';
+
 function onClick(e: MouseEvent) {
-  const el = (e.target as Element)?.closest?.('a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],[role=switch]');
-  if (!el) return;
+  if (dragged) {
+    dragged = false;
+    return;
+  }
+  const top = e.target as Element;
+  const el = top?.closest?.('a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],[role=switch]');
+  if (!el) {
+    if (top instanceof Element && recording && drawnToClick(top)) human({ action: 'click', target: describe(top), pointer: { spot: spotOn(top, e.clientX, e.clientY) } });
+    return;
+  }
   // Typing into fields is recorded on change, not on the click into them.
   if (/^(input|textarea|select)$/i.test(el.tagName) && fieldKind(el) !== 'other') return;
   human({ action: 'click', target: describe(el) });
+}
+
+function onContextMenu(e: MouseEvent) {
+  if (!recording || !(e.target instanceof Element)) return;
+  human({ action: 'click', target: describe(e.target), pointer: { button: 'right', spot: spotOn(e.target, e.clientX, e.clientY) } });
 }
 
 function onChange(e: Event) {
@@ -66,6 +107,19 @@ function onChange(e: Event) {
   if (kind === 'text') return human({ action: 'type', target: describe(el), field: 'text', fieldLabel: label, value: (el as HTMLInputElement).value ?? (el as HTMLElement).innerText });
 }
 
+/** Elements at the recorded path, and of a tag that is rare enough to look through. */
+function ownKind(target: Locator): Element[] {
+  const out = new Set<Element>();
+  try {
+    for (const el of Array.from(document.querySelectorAll(target.css))) out.add(el);
+  } catch {
+    // Not a selector this page can use.
+  }
+  const same = document.getElementsByTagName(target.tag);
+  if (same.length <= 50) for (const el of Array.from(same)) out.add(el);
+  return [...out].filter((el) => el.tagName.toLowerCase() === target.tag && visible(el));
+}
+
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
@@ -73,6 +127,10 @@ export default defineContentScript({
     watchChanges();
     clearStale();
     document.addEventListener('click', onClick, true);
+    document.addEventListener('contextmenu', onContextMenu, true);
+    document.addEventListener('pointerdown', onPress, true);
+    document.addEventListener('pointerup', onLetGo, true);
+    document.addEventListener('dragend', onLetGo, true);
     document.addEventListener('change', onChange, true);
 
     browser.runtime.onMessage.addListener((msg: ContentMsg, _sender, send) => {
@@ -121,8 +179,11 @@ export default defineContentScript({
             break;
           }
           case 'resolve': {
-            const els = interactive();
-            const res = resolve(msg.target, els.map((el) => ({ item: el, loc: describe(el) })));
+            // A place on something with no name, like a canvas, is looked for among its own kind as well as the controls.
+            const own = msg.wide ? ownKind(msg.target) : [];
+            const els = [...new Set([...interactive(), ...own])];
+            let res = resolve(msg.target, els.map((el) => ({ item: el, loc: describe(el) })));
+            if (res.kind !== 'found' && own.length === 1 && !msg.target.name) res = { kind: 'found', item: own[0], score: 0 };
             const cand = (r: { item: Element; score: number }) => ({ ref: refOf(r.item), role: describe(r.item).role, name: accessibleName(r.item), score: r.score, rect: rectOf(r.item) });
             if (res.kind === 'found') send({ ok: { kind: 'found', view: viewport(), disabled: res.item.hasAttribute('disabled') || res.item.getAttribute('aria-disabled') === 'true', ...cand({ item: res.item, score: res.score }) } });
             else send({ ok: { kind: res.kind, view: viewport(), candidates: res.ranked.map(cand) } });
@@ -142,10 +203,16 @@ export default defineContentScript({
             // The cursor lands on the element first, so a person watching sees what is about to happen.
             void (async () => {
               try {
-                if (msg.ref && msg.action !== 'read') await aim(el, msg.action, msg.quick);
+                if (msg.ref && msg.action !== 'read') await aim(el, msg.action, msg.quick, msg.how?.at ?? (msg.how?.spot && aimAt(el, msg.how)));
                 switch (msg.action) {
                   case 'click':
-                    click(el);
+                    click(el, msg.how);
+                    break;
+                  case 'hover':
+                    hover(el, msg.how);
+                    break;
+                  case 'drag':
+                    drag(el, msg.how!);
                     break;
                   case 'type':
                     type(el, msg.value ?? '');
@@ -172,14 +239,28 @@ export default defineContentScript({
           }
           case 'aim': {
             const el = byRef(msg.ref);
+            const how = { spot: msg.spot, at: msg.at };
             // The cursor lands on the element first, so a person watching sees what is about to happen.
-            void aim(el, msg.action, msg.quick).finally(() => {
-              const at = aimAt(el);
-              if (at.hit) watchLanding(el);
+            void aim(el, msg.action, msg.quick, msg.at ?? (msg.spot && aimAt(el, how))).finally(() => {
+              const at = aimAt(el, how);
+              if (at.hit) watchLanding(el, msg.moving);
               send({ ok: at });
             });
             break;
           }
+          case 'at':
+            send({ ok: pointAt(msg.x, msg.y) });
+            break;
+          case 'where':
+            send({ ok: whereOn(byRef(msg.ref), msg.spot) });
+            break;
+          case 'scrollpos':
+            send({ ok: scrollPos(msg.p) });
+            break;
+          case 'scrollby':
+            scrollBy(msg.p, msg.by);
+            send({ ok: true });
+            break;
           case 'landed':
             send({ ok: landed() });
             break;

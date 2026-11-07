@@ -12,14 +12,28 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `navigate` | Open an address in the agent tab. If an installed routine handles the page, it adds a hint line (see [Finding a routine first](#finding-a-routine-first)). |
 | `read_page` | The page as an outline of roles and names. Interactive elements get a ref such as `ref_12`. Text a person can't see is left out. The result is wrapped as [untrusted data](/docs/safety). Adds the same hint line when the tab has moved to a page a routine handles. |
 | `page_llm_content` | The text the site publishes for models, when it has any: a Markdown version of this page, else `/llms.txt` or `/llms-full.txt`. Costs far less than `read_page`. See below. |
-| `click` | Click an element by ref. |
+| `click` | Click an element by ref, or a point by `x` and `y` from your last screenshot. `button`, `count` (2 is a double click) and `modifiers` (`ctrl+shift`) are optional. |
+| `hover` | Leave the pointer over a ref or a point, to open a menu or a tooltip. |
+| `drag` | Press on one place and let go on another: a slider, a list to reorder, a map. Each end is a ref or a point, and both have to be on screen. |
+| `scroll` | Turn the wheel: `direction` and `amount`, over the middle of the page or over a ref or a point. Only a `ref` brings that element into view. `click` and `type` do that by themselves. |
+| `wait` | Wait some seconds. `read_page` with `wait` is usually better: it stops when the page is quiet. |
 | `type` | Type into a field by ref. Replaces what is there. `submit` presses Enter after. |
 | `select` | Pick an option in a select, by label or value. |
 | `upload` | Attach files from this machine. Pass the `ref` of the file input, or of the button, label or drop zone in front of it, and an absolute `path` (or `paths` for several). See below. |
-| `press` | Press a key in the focused element: Enter, Escape, Tab, ArrowDown. |
-| `screenshot` | The area around the last element, or the whole tab with `full: true`. `read_page` costs less. |
+| `press` | Press keys in the focused element: Enter, Escape, ArrowDown, `ctrl+a`. Several, separated by spaces, go one after another; `repeat` presses it that many times. |
+| `screenshot` | The area around the last element, or the whole tab with `full: true`, or part of the last picture enlarged with `region`. `read_page` costs less. |
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
+
+### Points on the page
+
+Most things have a ref, and a ref is better: it keeps working when the page moves. A point is for what has none: a canvas, a map, a place on a chart.
+
+`x` and `y` are pixels in the last picture you took of that tab, whatever its size, so read them off the picture. Once the page has moved (a scroll, a new address) a point is refused until you take another picture, because it no longer means anything. `region` zooms into part of the picture, and points then count in the zoomed one.
+
+In a routine, a point becomes what was under it: a click on a button is a click on that button, wherever it sits next time. On a canvas or something large, the step keeps the element and where on it, as a fraction of its size. If something else is drawn over that place when the routine runs, the step stops and does not click.
+
+A hover a person makes while recording is not kept, since a pointer crosses a lot of things on its way. If a recorded task goes through a menu that only opens under the pointer, have the agent do that part with `hover`.
 
 ### Uploading files
 

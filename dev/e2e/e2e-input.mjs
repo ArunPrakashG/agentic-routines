@@ -46,6 +46,19 @@ async function say(id, match = 'trusted.html') {
   return out.result.result.value;
 }
 
+// Anything else about the page, the same way.
+async function evalIn(expression, match) {
+  const t = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'page' && x.url.includes(match));
+  const ws = new WebSocket(t.webSocketDebuggerUrl);
+  await new Promise((r) => (ws.onopen = r));
+  const out = await new Promise((res) => {
+    ws.onmessage = (e) => res(JSON.parse(e.data));
+    ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true } }));
+  });
+  ws.close();
+  return out.result.result.value;
+}
+
 async function browserCdp() {
   const v = await (await fetch(`${CDP}/json/version`)).json();
   const ws = new WebSocket(v.webSocketDebuggerUrl);
@@ -68,7 +81,8 @@ const toFront = async (match) => {
 };
 
 // ---------- real input (#111) ----------
-for (const where of ['behind another tab', 'in front']) {
+const only = process.env.ONLY;
+for (const where of only ? [] : ['behind another tab', 'in front']) {
   let r = await call('navigate', { url: `${SITE}/trusted.html?${where === 'in front' ? 'front' : 'behind'}` });
   check(!r.error, `opens the page, ${where}`);
   const tab = Number(r.text.match(/\(tab (\d+)\)/)?.[1]);
@@ -101,7 +115,7 @@ for (const where of ['behind another tab', 'in front']) {
 }
 
 // ---------- and a replay does the same ----------
-{
+if (!only) {
   await session();
   await sleep(1500);
   await call('navigate', { url: `${SITE}/trusted.html?replay` });
@@ -125,6 +139,149 @@ for (const where of ['behind another tab', 'in front']) {
   check((await say('count', '?replay')) === 'clicks 1', 'the replay clicks for real');
   check((await say('name-out', '?replay')) === 'name Meera', 'the replay types for real');
   check((await say('keys', '?replay')) === 'keys Escape', 'the replay presses for real');
+}
+
+// ---------- pointer tools (#112) ----------
+const rectOf = (id, match) => evalIn(`(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight }; })()`, match);
+for (const where of ['behind another tab', 'in front']) {
+  await session();
+  await sleep(500);
+  const m = where === 'in front' ? 'pointer.html?front' : 'pointer.html?behind';
+  let r = await call('navigate', { url: `${SITE}/${m.slice(m.indexOf('pointer'))}` });
+  const tab = Number(r.text.match(/\(tab (\d+)\)/)?.[1]);
+  if (where === 'in front') await toFront(m);
+  const said = (id) => say(id, m);
+  let page = await read({ tab_id: tab });
+  const ref = (re) => refFor(page, re);
+
+  // A point read off a picture.
+  r = await call('screenshot', { full: true, tab_id: tab });
+  const size = r.text.match(/picture is (\d+)×(\d+)/);
+  check(r.images.length === 1 && !!size, `a screenshot says how big it is, ${where}: ${size?.[0] ?? r.text.slice(0, 300)}`);
+  const b = await rectOf('board', m);
+  const px = (x, y, v = b) => ({ x: (x * Number(size[1])) / v.vw, y: (y * Number(size[2])) / v.vh });
+  r = await call('click', { ...px(b.x + 100, b.y + 50), tab_id: tab });
+  await sleep(100);
+  const hit = (await said('board-out')).match(/board (\d+),(\d+)/);
+  check(hit && Math.abs(hit[1] - 100) <= 2 && Math.abs(hit[2] - 50) <= 2, `a click on a canvas lands where it was aimed, ${where}: ${await said('board-out')}`);
+  r = await call('screenshot', { region: [px(b.x, b.y).x, px(b.x, b.y).y, px(b.x + 200, b.y + 100).x, px(b.x + 200, b.y + 100).y], tab_id: tab });
+  const zoom = r.text.match(/picture is (\d+)×(\d+)/);
+  check(r.images.length === 1 && Number(zoom?.[1]) >= 200, `a region of the picture, enlarged, ${where}: ${zoom?.[0] ?? r.text.slice(0, 300)}`);
+  // Points are now in that picture.
+  r = await call('click', { x: (20 / 200) * Number(zoom[1]), y: (40 / 100) * Number(zoom[2]), tab_id: tab });
+  await sleep(100);
+  const hit2 = (await said('board-out')).match(/board (\d+),(\d+)/);
+  check(hit2 && Math.abs(hit2[1] - 20) <= 2 && Math.abs(hit2[2] - 40) <= 2, `a point in the region lands right, ${where}: ${await said('board-out')}`);
+
+  // Buttons, counts and keys held.
+  await call('click', { ref: ref(/“Twice”/), count: 2, tab_id: tab });
+  await sleep(100);
+  check((await said('dbl-out')) === 'dbl yes', `a double click, ${where}`);
+  await call('click', { ref: ref(/“Context”/), button: 'right', tab_id: tab });
+  await sleep(100);
+  check((await said('ctx-out')) === 'ctx yes', `a right click, ${where}`);
+  await call('click', { ref: ref(/“Held”/), modifiers: 'ctrl', tab_id: tab });
+  await sleep(100);
+  check((await said('mod-out')) === 'mod ctrl', `a click with ctrl held, ${where}`);
+
+  // A menu that only opens under the pointer.
+  check(!/Open file/.test(page), `the menu is shut, ${where}`);
+  r = await call('hover', { ref: ref(/“Files”/), tab_id: tab });
+  await sleep(150);
+  page = await read({ tab_id: tab });
+  check(/Open file/.test(page), `hovering opens it, ${where}: ${r.text.split('\n').at(-1).slice(0, 80)}`);
+  r = await call('click', { ref: ref(/“Open file”/), tab_id: tab });
+  await sleep(100);
+  check((await said('open-out')) === 'open yes', `and what opened can be clicked, ${where}${(await said('open-out')) === 'open yes' ? '' : `: ${r.text.slice(0, 160)}`}`);
+
+  // Dragging.
+  r = await call('screenshot', { full: true, tab_id: tab });
+  const h = await rectOf('handle', m);
+  const a = px(h.x + 12, h.y + 12, h);
+  const z = px(h.x + 212, h.y + 12, h);
+  r = await call('drag', { x: a.x, y: a.y, to_x: z.x, to_y: z.y, tab_id: tab });
+  await sleep(150);
+  const moved = Number((await said('handle-out')).split(' ')[1]);
+  check(!r.error && Math.abs(moved - 200) <= 3, `a drag moves a handle the page follows, ${where}: ${await said('handle-out')} ${r.error ? r.text.slice(0, 120) : ''}`);
+  r = await call('drag', { ref: ref(/“Card”/), to_ref: ref(/“Bin”/), tab_id: tab });
+  await sleep(300);
+  check((await said('bin-out')) === 'bin card', `a drag the browser itself carries, ${where}: ${await said('bin-out')} ${r.text.slice(0, 120)}`);
+
+  // Keys.
+  await call('click', { ref: ref(/“Field”/), tab_id: tab });
+  r = await call('press', { key: 'ArrowDown', repeat: 3, tab_id: tab });
+  await sleep(100);
+  check((await said('count')) === 'downs 3', `a key three times, ${where}`);
+  await call('press', { key: 'ctrl+a Escape', tab_id: tab });
+  await sleep(100);
+  check((await said('keys')) === 'keys Escape', `keys one after another, ${where}: ${await said('keys')}`);
+
+  // Scrolling.
+  const y0 = await evalIn('scrollY', m);
+  r = await call('scroll', { direction: 'down', amount: 4, tab_id: tab });
+  await sleep(100);
+  const y1 = await evalIn('scrollY', m);
+  check(!r.error && y1 > y0, `the page scrolls, ${where}: ${r.text}`);
+  r = await call('click', { x: 5, y: 5, tab_id: tab });
+  check(r.error && /out of date/.test(r.text), `a point from before the scroll is refused, ${where}`);
+  r = await call('scroll', { direction: 'down', amount: 1, ref: ref(/“Panel”/), tab_id: tab });
+  await sleep(100);
+  check((await said('panel-out')) !== 'panel 0', `a panel scrolls on its own, ${where}: ${r.text} ${await said('panel-out')}`);
+  await call('scroll', { direction: 'up', amount: 50, tab_id: tab });
+  r = await call('scroll', { ref: ref(/“Far button”/), tab_id: tab });
+  const f = await rectOf('far', m);
+  check(f.y >= 0 && f.y < f.vh, `a ref is brought into view, ${where}`);
+  r = await call('wait', { seconds: 0.2, tab_id: tab });
+  check(!r.error, `waits, ${where}`);
+  r = await call('hover', { tab_id: tab });
+  check(r.error, `a pointer tool with nowhere to go says so, ${where}`);
+}
+
+// ---------- and they replay ----------
+{
+  await session();
+  await sleep(1500);
+  const m = 'pointer.html?replay';
+  await call('navigate', { url: `${SITE}/pointer.html?replay` });
+  let page = await read();
+  const ref = (re) => refFor(page, re);
+  let r = await call('screenshot', { full: true });
+  const size = r.text.match(/picture is (\d+)×(\d+)/);
+  const b = await rectOf('board', m);
+  const px = (x, y, v = b) => ({ x: (x * Number(size[1])) / v.vw, y: (y * Number(size[2])) / v.vh });
+  await call('click', px(b.x + 300, b.y + 30));
+  await call('click', { ref: ref(/“Twice”/), count: 2 });
+  await call('click', { ref: ref(/“Held”/), modifiers: 'ctrl' });
+  await call('hover', { ref: ref(/“Files”/) });
+  await sleep(150);
+  page = await read();
+  await call('click', { ref: ref(/“Open file”/) });
+  await call('screenshot', { full: true });
+  const h = await rectOf('handle', m);
+  await call('drag', { ...px(h.x + 12, h.y + 12, h), to_x: px(h.x + 112, 0, h).x, to_y: px(0, h.y + 12, h).y });
+  await call('scroll', { direction: 'down', amount: 2 });
+  await call('press', { key: 'ArrowDown', repeat: 2 });
+  const d = await call('routine_propose', { name: 'pointer-replay', description: 'Everything on the pointer page. Use when the user asks for this.' });
+  check(!d.error, `proposes a routine of it: ${d.text.split('\n').filter((l) => /hover|drag|scroll/.test(l)).join(' | ').slice(0, 300)}`);
+  const id = d.text.match(/^Draft (d-\S+)/m)?.[1];
+  let t = await call('routine_test', { draft_id: id });
+  check(!t.error && /passed|ok|done/i.test(t.text), `tests it on the live page: ${t.text.split('\n')[0].slice(0, 200)}`);
+  t = await call('routine_save', { draft_id: id });
+  check(!t.error, `saves it ${t.error ? t.text.slice(0, 200) : ''}`);
+  await call('navigate', { url: `${SITE}/pointer.html?replay2` });
+  t = await call('routine_run', { name: 'pointer-replay' });
+  check(/done|finished/i.test(t.text), `runs it: ${t.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
+  await sleep(200);
+  const rm = 'pointer.html?replay';
+  const out = (await say('board-out', rm)).match(/board (\d+),(\d+)/);
+  check(out && Math.abs(out[1] - 300) <= 3 && Math.abs(out[2] - 30) <= 3, `the replay clicks the same place on the canvas: ${await say('board-out', rm)}`);
+  check((await say('dbl-out', rm)) === 'dbl yes', 'the replay double clicks');
+  check((await say('mod-out', rm)) === 'mod ctrl', 'the replay holds ctrl');
+  check((await say('open-out', rm)) === 'open yes', 'the replay hovers and clicks what opened');
+  const moved = Number((await say('handle-out', rm)).split(' ')[1]);
+  check(Math.abs(moved - 100) <= 4, `the replay drags: ${await say('handle-out', rm)}`);
+  check((await evalIn('scrollY', rm)) > 0, 'the replay scrolls');
+  check((await say('count', rm)) === 'downs 2', `the replay presses twice: ${await say('count', rm)}`);
 }
 
 await client.close();

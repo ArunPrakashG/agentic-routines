@@ -13,7 +13,10 @@ export type Action =
   | 'upload'
   | 'press'
   | 'wait'
-  | 'read';
+  | 'read'
+  | 'hover'
+  | 'drag'
+  | 'scroll';
 
 /** Everything we know about an element, captured when it was used. */
 export interface Locator {
@@ -31,6 +34,26 @@ export interface Locator {
   near?: string;
   /** The dialog the element sat in, by its name, when it sat in one. */
   modal?: string;
+}
+
+/** A place on an element, as fractions of its box. For what has no finer name: a canvas, a map, a slider's track. */
+export interface Spot {
+  x: number;
+  y: number;
+}
+
+/** How a pointer step was done, beyond the element it was done to. */
+export interface Pointer {
+  spot?: Spot;
+  button?: 'left' | 'right' | 'middle';
+  /** 2 is a double click. */
+  count?: number;
+  /** Keys held: "ctrl", "ctrl+shift". */
+  mods?: string;
+  /** drag: where it was let go. */
+  to?: { target: Locator; spot?: Spot };
+  /** scroll: pixels. */
+  by?: { x: number; y: number };
 }
 
 /** A cheap description of the page, used before every step. */
@@ -60,6 +83,7 @@ export interface Step {
   pick?: 'first';
   /** Text for the agent about this step: what to check, what a good result looks like. */
   instructions?: string;
+  pointer?: Pointer;
 }
 
 export interface ParamSpec {
@@ -126,6 +150,7 @@ export interface RecordedEvent {
   crop?: string;
   /** The page size at that moment. */
   view?: Viewport;
+  pointer?: Pointer;
 }
 
 export interface Run {
