@@ -12,6 +12,7 @@ import * as runs from '../lib/agent/runs';
 import { watchDialogs } from '../lib/page/dialogs';
 import { watchLogs } from '../lib/page/logs';
 import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
+import { policyOf } from '../lib/page/policy';
 import { ask, heldBy, isLent, lend, lentTabs, releaseSession, takeBack, tellAll, watchTabs } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
@@ -36,6 +37,7 @@ export default defineBackground(() => {
     if (method === 'directory.submissions') return directory.mine();
     // An agent can ask. The person reads the steps and clicks Install in the panel; nothing is installed before that.
     if (method === 'git.install') return askToInstall(String(p.source), String(p.path), agent.agentName(p.agent));
+    if (method === 'replay.start' && policyOf(p?.session)?.readOnly) throw new Error('This session is read-only, so it cannot run a routine. Only the person can change that.');
     if (method === 'replay.start') return replay.start({ ...p, foreign: p.foreign === true || isForeign(p.routine) });
     if (method === 'replay.resume') return replay.resume(p);
     if (method === 'agent.hello') {

@@ -65,7 +65,7 @@ export function runHost(): void {
   const info = join(paths.hosts(), `${process.pid}.json`);
   const clients = new Set<Socket>();
   // Agent sessions by connection, to tell the browser when one goes away.
-  const sessions = new Map<Socket, string>();
+  const sessions = new Map<Socket, Set<string>>();
   // Requests forwarded to the extension: our id -> where the answer goes.
   const pending = new Map<number, { client: Socket; id: number }>();
   let nextId = 1;
@@ -130,7 +130,8 @@ export function runHost(): void {
       lineReader(async (m) => {
         if (!isRequest(m)) return;
         const session = (m.params as { session?: string } | undefined)?.session;
-        if (session) sessions.set(client, session);
+        // A named session outlives its connection. It ends when it is told to.
+        if (session && !session.startsWith('named:')) sessions.set(client, (sessions.get(client) ?? new Set()).add(session));
         if (m.method.startsWith('store.') || m.method.startsWith('sources.')) {
           try {
             toClient(client, { id: m.id, result: await handleStore(m.method, m.params, false) });
@@ -161,9 +162,8 @@ export function runHost(): void {
     );
     const drop = () => {
       clients.delete(client);
-      const session = sessions.get(client);
+      for (const session of sessions.get(client) ?? []) toBrowser({ event: 'agent.gone', data: { session } });
       sessions.delete(client);
-      if (session) toBrowser({ event: 'agent.gone', data: { session } });
       for (const [k, v] of pending) if (v.client === client) pending.delete(k);
     };
     client.on('close', drop);
