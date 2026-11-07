@@ -121,6 +121,14 @@ interface Hold {
 const holds = new Map<number, Hold>();
 const tabOf = new Map<string, number>();
 const labels = new Map<string, string>();
+// Tabs a session opened itself. When the session ends they are closed, and the group goes with them.
+// A tab the person had open is never in here, even if the agent was pointed at it.
+const opened = new Map<string, Set<number>>();
+const made = (session: string, tabId: number) => {
+  if (!opened.has(session)) opened.set(session, new Set());
+  opened.get(session)!.add(tabId);
+  return tabId;
+};
 
 /** What to call a session in the title and in messages. Two sessions of one agent are told apart by a number. */
 export function noteSession(session: string | undefined, name: string) {
@@ -174,11 +182,26 @@ function releaseTab(tabId: number) {
   void mark(tabId, null);
 }
 
-/** Let go of the tab a session holds, when the session ends. The tab stays open. */
-export function releaseSession(session: string) {
+/**
+ * The session has ended: let go of the tab it holds and close the tabs it opened, which takes its group with them.
+ * A tab the person is looking at, or has since taken over, stays open.
+ */
+export async function releaseSession(session: string) {
   const t = tabOf.get(session);
   if (t !== undefined) releaseTab(t);
   labels.delete(session);
+  const mine = [...(opened.get(session) ?? [])];
+  opened.delete(session);
+  for (const id of mine) {
+    try {
+      const tab = await browser.tabs.get(id);
+      const win = await browser.windows.get(tab.windowId);
+      if (tab.active && win.focused) continue;
+      await browser.tabs.remove(id);
+    } catch {
+      // Already closed.
+    }
+  }
 }
 
 function claim(session: string, tabId: number): number {
@@ -235,12 +258,12 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
   const own = tabOf.get(session);
   if (own !== undefined) return claim(session, own);
   const alone = holds.size === 0;
-  if (alone) return claim(session, (await browser.tabs.create({ url: 'about:blank', active: false })).id!);
+  if (alone) return claim(session, made(session, (await browser.tabs.create({ url: 'about:blank', active: false })).id!));
   // Someone else is working: not in the person's window or in the other agent's.
   const w = await browser.windows.create({ url: 'about:blank', focused: false });
   const id = w?.tabs?.[0]?.id ?? (w?.id !== undefined ? (await browser.tabs.query({ windowId: w.id }))[0]?.id : undefined);
   if (id === undefined) throw new Error('The browser did not open a window for this agent');
-  return claim(session, id);
+  return claim(session, made(session, id));
 }
 
 /** A new tab opened by a session becomes the one it works in, next to its old one. */
@@ -249,7 +272,7 @@ export async function openTab(session: string = USER, url: string): Promise<numb
   const own = tabOf.get(session);
   const windowId = own !== undefined ? await browser.tabs.get(own).then((t) => t.windowId, () => undefined) : undefined;
   const t = await browser.tabs.create({ url, active: false, ...(windowId !== undefined ? { windowId } : {}) });
-  return claim(session, t.id!);
+  return claim(session, made(session, t.id!));
 }
 
 export { sleep };

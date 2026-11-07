@@ -238,8 +238,7 @@ export default defineBackground(() => {
       const { session } = data as { session: string };
       agents.delete(session);
       replay.agentGone(session);
-      releaseSession(session);
-      push();
+      void releaseSession(session).then(push);
       return;
     }
     if (e === 'routines.changed') refreshRoutines();
