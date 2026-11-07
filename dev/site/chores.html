@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Chores</title>
+<h1>Chores</h1>
+<div id="banner" hidden>
+  <p>The terms have changed.</p>
+  <button id="dismiss">Close notice</button>
+</div>
+<label>Item <input id="item" name="item"></label>
+<button id="add"></button>
+<button id="publish">Publish list</button>
+<ul id="list"></ul>
+<p id="status"></p>
+<script>
+  // What a test changes between runs lives in localStorage: chores.add renames the button, chores.lose makes adding do nothing, chores.banner shows the notice.
+  const $ = (id) => document.getElementById(id);
+  const flag = (k) => localStorage.getItem(`chores.${k}`);
+  const label = flag('add') ?? 'Add item';
+  const add = $('add');
+  add.textContent = label;
+  add.id = label === 'Add item' ? 'add' : `add-${label.length}`;
+  add.className = label === 'Add item' ? '' : 'renamed';
+  $('banner').hidden = !flag('banner');
+  $('dismiss').onclick = () => ($('banner').hidden = true);
+  const shown = () => {
+    $('list').replaceChildren(...JSON.parse(sessionStorage.getItem('items') ?? '[]').map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+  };
+  shown();
+  add.onclick = () => {
+    if (flag('lose')) return;
+    const v = $('item').value.trim();
+    if (!v) return;
+    sessionStorage.setItem('items', JSON.stringify([...JSON.parse(sessionStorage.getItem('items') ?? '[]'), v]));
+    shown();
+    $('status').textContent = `Added ${v}`;
+    $('item').value = '';
+  };
+  $('publish').onclick = () => ($('status').textContent = `Published ${$('list').children.length} items`);
+</script>

@@ -1,7 +1,7 @@
 import { parse, stringify } from 'yaml';
 import { checkHooks, readHooks } from './hooks.ts';
 import { checkUrls, readUrls } from './urls.ts';
-import { SURFACES, type RoutineMeta, type Surface } from './types.ts';
+import { MAX_EXPECT, SURFACES, type Expect, type RoutineMeta, type Surface } from './types.ts';
 import type { Viewport } from './viewport.ts';
 
 const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -47,8 +47,16 @@ export function parseRoutineMd(text: string): { meta: RoutineMeta; body: string 
     instructions: raw.instructions ? String(raw.instructions).slice(0, 4000) : undefined,
     repo: repoOf(raw.repo),
     hooks: readHooks((raw as { hooks?: unknown }).hooks),
+    expect: expectOf((raw as { expect?: unknown }).expect),
   };
   return { meta, body: text.slice(m[0].length).trim() };
+}
+
+function expectOf(raw: unknown): Expect | undefined {
+  const e = raw as Expect | null | undefined;
+  const text = typeof e?.text === 'string' ? e.text.slice(0, MAX_EXPECT) : undefined;
+  const url = typeof e?.url === 'string' ? e.url.slice(0, MAX_EXPECT) : undefined;
+  return text || url ? { ...(text ? { text } : {}), ...(url ? { url } : {}) } : undefined;
 }
 
 export function stringifyRoutineMd(meta: RoutineMeta, body: string): string {

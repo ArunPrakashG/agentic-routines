@@ -3,7 +3,7 @@ import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
 import { answerDialog, dialogOn, listenBeforeLeaving, waitDialog } from '../page/dialogs';
-import { resolveInTab } from '../page/frames';
+import { resolveInTab, textOfTab } from '../page/frames';
 import { perform as input } from '../page/input';
 import { platform } from '../platform';
 import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from '../page/tabs';
@@ -75,6 +75,9 @@ export interface ReplayState {
   prepared?: { n: number; ov: { skip?: boolean; value?: string } };
   /** The step whose hook-made pause the agent approved. */
   hookApproved?: number;
+  /** How the finished run compared with what the routine expects. */
+  outcome?: RunResult['outcome'];
+  stepMs: Record<number, number>;
 }
 
 /** A hook asked for the run to stop. */
@@ -130,6 +133,8 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     viewport_note: s.viewportNote,
     forced_pauses: s.forcedPauses.length ? s.forcedPauses : undefined,
+    outcome: s.outcome,
+    step_ms: s.stepMs,
     fixes: s.fixes,
     crops: s.crops,
     ...(s.test ? { test: true, skipped: s.skipped, trace: s.trace } : {}),
@@ -486,9 +491,32 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
   return 'next';
 }
 
+/** All the steps ran. Did the task happen? Pages take a moment to show it, so this looks for a few seconds. Never fails the run itself. */
+async function checkOutcome(s: ReplayState) {
+  const want = s.routine.meta.expect;
+  if (!want || s.skipped.length) return;
+  const plain = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  const text = fill(want.text, s.params);
+  const url = fill(want.url, s.params, {}, true);
+  const wanted = [text && `“${text}”`, url && `an address with ${url}`].filter(Boolean).join(' and ');
+  const end = Date.now() + OUTCOME_WAIT_MS;
+  while (true) {
+    const ok = await (async () => {
+      if (url && !((await browser.tabs.get(s.tabId)).url ?? '').includes(url)) return false;
+      return !text || plain((await textOfTab(s.tabId)).text).includes(plain(text));
+    })().catch(() => false);
+    if (ok || Date.now() > end) {
+      s.outcome = { ok, wanted };
+      return;
+    }
+    await sleep(500);
+  }
+}
+
 // The page glows for as long as the replay is driving it, amber while it waits for a person.
 const DRIVING_MS = 8000;
 const DIALOG_WAIT_MS = 5000;
+const OUTCOME_WAIT_MS = 5000;
 const PAUSED_MS = 15 * 60_000;
 
 async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<typeof result>> {
@@ -582,7 +610,10 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
         await hook(s, 'pause.approved', step);
       }
       await glow(s.tabId, 'run', DRIVING_MS);
-      if ((await runStep(s, step, choiceRef, ov)) === 'stop') {
+      const began = Date.now();
+      const went = await runStep(s, step, choiceRef, ov);
+      s.stepMs[step.n] = (s.stepMs[step.n] ?? 0) + Date.now() - began;
+      if (went === 'stop') {
         await hook(s, 'step.changed', step, { detail: { candidates: s.candidates?.length ?? 0 } });
         if (s.test) {
           const near = (s.candidates ?? []).map((c) => `${c.ref} ${c.role ?? ''} “${c.name ?? c.text ?? ''}”`).join('; ');
@@ -606,6 +637,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
       s.i++;
       notify(s);
     }
+    await checkOutcome(s).catch(() => {});
     s.status = 'done';
   } catch (e) {
     s.status = 'failed';
@@ -665,6 +697,7 @@ export async function start(p: { routine: Routine; params: Record<string, string
     foreign: !!p.foreign,
     forcedPauses: [],
     fitWindow: p.fit,
+    stepMs: {},
   };
   // Attached before the first step, so the bar this puts up has already moved the page before anything is measured.
   await platform.cdp?.(s.tabId, async () => {}).catch(() => {});
