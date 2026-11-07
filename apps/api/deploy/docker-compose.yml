@@ -2,10 +2,9 @@
 # Kept in the repo (apps/api/deploy/) and copied there by deploy.sh; edit it here, not on the server.
 #
 # The main proxy sends /api/* and /healthz to the API container and everything else to agenticroutines-site (the
-# static website, shipped by apps/site/deploy/deploy.sh). Both are reached over the "proxy" network. Postgres is the
-# shared one, reached over "shared_services". Redis holds only rate limits, so it is this app's own, on a network
-# nothing else joins, and starts empty.
-# .env next to this file (mode 600, never in the repo) holds DATABASE_URL, TAG (the image to run), GOOGLE_CLIENT_ID,
+# static website, shipped by apps/site/deploy/deploy.sh). Both are reached over the "proxy" network. Postgres and Redis are the
+# shared ones, reached over "shared_services".
+# .env next to this file (mode 600, never in the repo) holds DATABASE_URL, REDIS_URL, TAG (the image to run), GOOGLE_CLIENT_ID,
 # GOOGLE_CLIENT_SECRET, SESSION_SECRET and ADMIN_EMAILS (who may review submissions).
 
 name: agenticroutines
@@ -18,7 +17,6 @@ services:
     env_file: .env
     environment:
       PORT: "8080"
-      REDIS_URL: redis://agenticroutines-redis:6379/0
       TRUSTED_PROXY: caddy
     expose: ["8080"]
     read_only: true
@@ -29,23 +27,7 @@ services:
     pids_limit: 128
     # Lets requests in flight finish.
     stop_grace_period: 15s
-    depends_on: [agenticroutines-redis]
-    networks: [proxy, shared_services, internal]
-
-  agenticroutines-redis:
-    image: redis:7-alpine
-    container_name: agenticroutines-redis
-    restart: unless-stopped
-    user: "999:1000"
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "24mb", "--maxmemory-policy", "volatile-lru"]
-    tmpfs: ["/data:uid=999,gid=1000"]
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    mem_limit: 48m
-    cpus: 0.25
-    pids_limit: 32
-    networks: [internal]
+    networks: [proxy, shared_services]
 
   # The static site from apps/site, shipped into ./site (conf/Caddyfile and www/current).
   agenticroutines-site:
@@ -67,7 +49,6 @@ services:
     networks: [proxy]
 
 networks:
-  internal:
   proxy:
     external: true
     name: proxy
