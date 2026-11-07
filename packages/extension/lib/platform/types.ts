@@ -10,6 +10,8 @@ export interface Platform {
   cdp?: <T>(tabId: number, fn: (send: Send) => Promise<T>) => Promise<T>;
   /** Let go of a tab's DevTools session now, when nothing is driving it any more. */
   release?: (tabId: number) => Promise<void>;
+  /** What a tab's DevTools session says, from then on. Also `detached`, when that session ends. */
+  onEvent?: (fn: (tabId: number, method: string, params: any) => void) => void;
   /** Make the toolbar button open the panel. */
   openPanelOnClick(): void;
 }

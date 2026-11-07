@@ -18,6 +18,8 @@ const held = new Map<number, { ready: Promise<void>; timer?: ReturnType<typeof s
 const REFUSED_MS = 10 * 60_000;
 let refusedUntil = 0;
 
+const hearing = new Set<(tabId: number, method: string, params: any) => void>();
+
 let listening = false;
 function listen() {
   if (listening) return;
@@ -27,6 +29,11 @@ function listen() {
     clearTimeout(held.get(source.tabId)?.timer);
     held.delete(source.tabId);
     if (reason === 'canceled_by_user') refusedUntil = Date.now() + REFUSED_MS;
+    for (const fn of hearing) fn(source.tabId, 'detached', {});
+  });
+  browser.debugger.onEvent.addListener((source, method, params) => {
+    if (source.tabId === undefined) return;
+    for (const fn of hearing) fn(source.tabId, method, params);
   });
 }
 
@@ -43,6 +50,8 @@ async function attach(tabId: number) {
   }
   // A tab behind another one takes input and keeps its focus as if it were in front.
   await browser.debugger.sendCommand(target, 'Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
+  // For dialogs, which nothing else can see.
+  await browser.debugger.sendCommand(target, 'Page.enable').catch(() => {});
   // The bar takes its height from the page a moment after attaching.
   await new Promise((r) => setTimeout(r, 200));
 }
@@ -77,6 +86,9 @@ export const chromium: Platform = {
     clearTimeout(h.timer);
     held.delete(tabId);
     await browser.debugger.detach({ tabId }).catch(() => {});
+  },
+  onEvent(fn) {
+    hearing.add(fn);
   },
   openPanelOnClick() {
     (browser as any).sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});

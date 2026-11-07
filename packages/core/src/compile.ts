@@ -6,8 +6,12 @@ const IRREVERSIBLE =
   /\b(start rollout|roll ?out|publish|submit|send|pay|purchase|buy|place order|checkout|delete|remove|destroy|revoke|transfer|withdraw|confirm|deploy|go live|refund)\b/i;
 const CLICKABLE_ROLES = new Set(['button', 'link', 'menuitem', 'tab', 'option']);
 
+export const soundsIrreversible = (text: string) => IRREVERSIBLE.test(text);
+
 /** Would a person stop and think before clicking this? */
-export function isIrreversible(e: Pick<RecordedEvent, 'action' | 'target'>): boolean {
+export function isIrreversible(e: Pick<RecordedEvent, 'action' | 'target' | 'dismiss'>): boolean {
+  // Yes to "Delete this list?" is the moment it happens.
+  if (e.action === 'dialog') return !e.dismiss && IRREVERSIBLE.test(e.target?.name ?? '');
   if (e.action !== 'click' && e.action !== 'press') return false;
   const t = e.target;
   if (!t) return false;
@@ -78,6 +82,7 @@ export interface Compiled {
 
 export function eventLabel(e: RecordedEvent): string {
   if (e.action === 'navigate') return shortUrl(e.url);
+  if (e.action === 'dialog') return `${e.dismiss ? 'No' : 'Yes'} to “${targetLabel(e.target)}”`;
   if (e.action === 'drag') return `${targetLabel(e.target)} to ${targetLabel(e.pointer?.to?.target)}`;
   if (e.action === 'scroll' && !e.target) return `the page by ${e.pointer?.by?.y ?? 0} px`;
   return e.fieldLabel || targetLabel(e.target);
@@ -119,7 +124,7 @@ export function stepBuilder(opts: Pick<CompileOptions, 'params' | 'fixed'>) {
       secrets.push(name);
       step.value = `{{secret:${name}}}`;
       delete step.crop;
-    } else if ((e.action === 'type' || e.action === 'upload') && e.value !== undefined) {
+    } else if ((e.action === 'type' || e.action === 'upload' || e.action === 'dialog') && e.value !== undefined) {
       const named = byValue.get(e.value);
       const auto = snake(e.fieldLabel || targetLabel(e.target) || (e.action === 'upload' ? 'file' : 'text'));
       const name = named ?? uniq(auto, params);
@@ -141,6 +146,7 @@ export function stepBuilder(opts: Pick<CompileOptions, 'params' | 'fixed'>) {
       step.value = e.value;
     }
     if (e.pointer) step.pointer = e.pointer;
+    if (e.dismiss) step.dismiss = true;
     if (isIrreversible(e)) step.pause = 'auto';
     return step;
   }

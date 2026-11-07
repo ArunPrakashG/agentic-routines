@@ -9,13 +9,17 @@ import * as native from '../lib/agent/native';
 import { platform } from '../lib/platform';
 import * as replay from '../lib/replay/replay';
 import * as runs from '../lib/agent/runs';
-import { ask, releaseSession, tellAll } from '../lib/page/tabs';
+import { watchDialogs } from '../lib/page/dialogs';
+import { ask, releaseSession, tellAll, watchTabs } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
 // When each routine last ran and which steps changed then, by owner/name.
 type LastRuns = Record<string, { id: string; at: number; changed: number[] }>;
 
 export default defineBackground(() => {
+  watchDialogs();
+  watchTabs();
+
   // ---------- requests from the MCP server, through the host ----------
   native.onRequest(async (method, p) => {
     if (method.startsWith('browser.') || method === 'runs.get') return agent.handle(method, p);

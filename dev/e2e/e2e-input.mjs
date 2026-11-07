@@ -402,6 +402,68 @@ for (const where of ['behind another tab', 'in front']) {
   }
 }
 
+// ---------- dialogs and tabs (#115) ----------
+{
+  await session();
+  await sleep(1000);
+  const m = 'dialogs.html';
+  let r = await call('navigate', { url: `${SITE}/dialogs.html` });
+  let page = await read();
+  const ref = (re) => refFor(page, re);
+  r = await call('click', { ref: ref(/“Show notice”/) });
+  check(/alert dialog/.test(r.text) && /Saved a copy/.test(r.text), `a click that opens an alert says so: ${r.text.slice(0, 200)}`);
+  r = await call('read_page');
+  check(r.error && /Saved a copy/.test(r.text), `reading a stopped page says why and does not hang: ${r.text.slice(0, 200)}`);
+  r = await call('dialog', { accept: true });
+  check(!r.error && (await say('out', m)) === 'alert done', `answers an alert: ${r.text.slice(0, 160)}`);
+  await call('click', { ref: ref(/“Ask to archive”/) });
+  await call('dialog', { accept: false });
+  check((await say('out', m)) === 'confirm no', `says no to a confirm: ${await say('out', m)}`);
+  r = await call('click', { ref: ref(/“Ask for a name”/) });
+  check(/prompt dialog/.test(r.text), 'says a prompt opened');
+  await call('dialog', { accept: true, text: 'Asha' });
+  check((await say('out', m)) === 'prompt Asha', `types into a prompt: ${await say('out', m)}`);
+  r = await call('dialog', { accept: true });
+  check(r.error, 'with no dialog open, says so');
+
+  const d = await call('routine_propose', { name: 'dialogs-replay', description: 'Answer the dialogs. Use when the user asks for this.' });
+  const id = d.text.match(/^Draft (d-\S+)/m)?.[1];
+  check(/dialog/.test(d.text), `a routine keeps the answers: ${d.text.slice(0, 300)}`);
+  await call('routine_save', { draft_id: id });
+  await call('navigate', { url: `${SITE}/dialogs.html?replay` });
+  r = await call('routine_run', { name: 'dialogs-replay', params: { dialog_answer: 'Ravi' } });
+  check(/done|finished/i.test(r.text), `replays them: ${r.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
+  check((await say('out', 'dialogs.html?replay')) === 'prompt Ravi', `with the new answer: ${await say('out', 'dialogs.html?replay')}`);
+
+  // A page that asks before it is left.
+  await call('navigate', { url: `${SITE}/dialogs.html?leave` });
+  page = await read();
+  await call('click', { ref: refFor(page, /“Make unsaved changes”/) });
+  r = await call('navigate', { url: `${SITE}/fields.html` });
+  check(r.error && /force/.test(r.text), `leaving a page that asks says so: ${r.text.slice(0, 200)}`);
+  check((await say('out', 'dialogs.html?leave')) === 'dirty', 'and stays on it');
+  r = await call('navigate', { url: `${SITE}/fields.html`, force: true });
+  check(!r.error && /fields\.html/.test(r.text), `force leaves: ${r.text.slice(0, 200)}`);
+
+  // Tabs.
+  await call('navigate', { url: `${SITE}/dialogs.html?tabs` });
+  const home = Number((await call('navigate', { url: `${SITE}/dialogs.html?tabs` })).text.match(/\(tab (\d+)\)/)?.[1]);
+  page = await read();
+  r = await call('click', { ref: refFor(page, /“Open another”/) });
+  const popped = Number(r.text.match(/new tab, (\d+)/)?.[1]);
+  check(popped > 0, `a click that opens a tab says which: ${r.text.slice(0, 200)}`);
+  const list = JSON.parse((await call('tabs')).text.match(/\[[\s\S]*\]/)[0]);
+  check(list.find((t) => t.id === popped)?.yours === true, 'and it counts as yours');
+  await call('navigate', { url: `${SITE}/fields.html`, tab_id: popped });
+  r = await call('close_tab');
+  check(new RegExp(`tab ${home}`).test(r.text), `closing it goes back to where it came from: ${r.text}`);
+  const other = list.find((t) => t.yours !== true && t.id !== home && t.id !== popped);
+  if (other) {
+    r = await call('close_tab', { tab_id: other.id });
+    check(r.error && /not one you opened/.test(r.text), `a tab it did not open stays open: ${r.text.slice(0, 160)}`);
+  }
+}
+
 await client.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

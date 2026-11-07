@@ -1,7 +1,8 @@
-import { compareViewport, CROP_DRIFT, fill, hashDistance, isIrreversible, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
+import { compareViewport, CROP_DRIFT, fill, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
+import { answerDialog, dialogOn, listenBeforeLeaving, waitDialog } from '../page/dialogs';
 import { resolveInTab } from '../page/frames';
 import { perform as input } from '../page/input';
 import { platform } from '../platform';
@@ -410,6 +411,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     // Whatever the routine says, and whatever the params fill in, it never leaves its own site. Checked after the values are put in.
     const url = fill(step.url, s.params, {}, true) ?? '';
     if (!mayBeOn(s, url)) throw offSite(s, url, 'This step opens');
+    await listenBeforeLeaving(s.tabId);
     await browser.tabs.update(s.tabId, { url });
     await sleep(200);
     await waitLoaded(s.tabId);
@@ -417,6 +419,17 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     return 'next';
   }
   await stayOnSite(s);
+  if (kind === 'dialog') {
+    const open = await waitDialog(s.tabId, DIALOG_WAIT_MS);
+    if (!open) throw new Error(`Stopped: step ${step.n} answers a dialog, and none opened`);
+    // The pause was decided by what it said when it was recorded. A page can ask something else now.
+    if (!step.dismiss && !isIrreversible(step) && soundsIrreversible(open.message)) throw new Error(`Stopped: step ${step.n} would say yes to a dialog that says something else now: ${open.message}`);
+    const before = await urlOf();
+    await answerDialog(s.tabId, !step.dismiss, value);
+    await settle(s.tabId, before);
+    await after(before);
+    return 'next';
+  }
   if (kind === 'press' && !step.target) {
     const before = await urlOf();
     const a = await hook(s, 'action.press.before', step);
@@ -475,6 +488,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
 
 // The page glows for as long as the replay is driving it, amber while it waits for a person.
 const DRIVING_MS = 8000;
+const DIALOG_WAIT_MS = 5000;
 const PAUSED_MS = 15 * 60_000;
 
 async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<typeof result>> {
@@ -504,6 +518,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
       const step = s.routine.steps[s.i];
       if (s.test && pauseFor(s, step)) {
         // A test never performs a step that pauses, and never approves one. What follows is still checked.
+        if (step.action === 'dialog' && dialogOn(s.tabId)) await answerDialog(s.tabId, false);
         s.skipped.push(step.n);
         s.trace.push(`${step.n}. skipped “${step.label}”, it pauses in a real run`);
         s.i++;

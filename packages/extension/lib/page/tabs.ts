@@ -1,5 +1,6 @@
 import type { ContentMsg } from '../../entrypoints/content';
 import { platform } from '../platform';
+import { dialogOn, unlessDialog } from './dialogs';
 import type { Send } from '../platform/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -23,13 +24,14 @@ export async function ask<T = unknown>(tabId: number, msg: ContentMsg, frame?: n
   const named = 'ref' in msg && msg.ref ? FRAMED.exec(msg.ref) : null;
   const frameId = named ? Number(named[1]) : (frame ?? 0);
   const out = named ? ({ ...msg, ref: named[2] } as ContentMsg) : msg;
-  let res: { ok?: T; err?: string } | undefined;
-  try {
-    res = await browser.tabs.sendMessage(tabId, out, { frameId });
-  } catch {
-    await ensureContent(tabId, frameId);
-    res = await browser.tabs.sendMessage(tabId, out, { frameId });
-  }
+  const res = await unlessDialog(tabId, async (): Promise<{ ok?: T; err?: string } | undefined> => {
+    try {
+      return await browser.tabs.sendMessage(tabId, out, { frameId });
+    } catch {
+      await ensureContent(tabId, frameId);
+      return browser.tabs.sendMessage(tabId, out, { frameId });
+    }
+  });
   if (!res) throw new Error('The page did not answer');
   if (res.err) throw new Error(res.err);
   return res.ok as T;
@@ -99,6 +101,8 @@ export async function waitLoaded(tabId: number, timeoutMs = 30_000) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
     const t = await browser.tabs.get(tabId);
+    // Stopped until someone answers: there is nothing more to wait for here.
+    if (dialogOn(tabId)) return;
     if (t.status === 'complete') {
       try {
         await ensureContent(tabId);
@@ -291,6 +295,51 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
   const id = w?.tabs?.[0]?.id ?? (w?.id !== undefined ? (await browser.tabs.query({ windowId: w.id }))[0]?.id : undefined);
   if (id === undefined) throw new Error('The browser did not open a window for this agent');
   return claim(session, made(session, id));
+}
+
+// A tab that a page opened because of what a session did there, and the tab it came from. Within a moment of the session
+// acting, because a person can open tabs from there too, and those are theirs.
+const SPAWN_MS = 10_000;
+const cameFrom = new Map<number, number>();
+const spawned = new Map<number, number>();
+
+export function watchTabs() {
+  browser.tabs.onCreated.addListener((t) => {
+    if (t.id === undefined || t.openerTabId === undefined) return;
+    const h = heldBy(t.openerTabId);
+    if (!h || LEASE_MS - (h.until - Date.now()) > SPAWN_MS) return;
+    made(h.session, t.id);
+    cameFrom.set(t.id, t.openerTabId);
+    spawned.set(t.openerTabId, t.id);
+  });
+}
+
+/** The tab what a session just did has opened, once. */
+export function takeSpawned(tabId: number) {
+  const id = spawned.get(tabId);
+  spawned.delete(tabId);
+  return id;
+}
+
+export const isOwnTab = (session: string = USER, tabId: number) => !!opened.get(session)?.has(tabId);
+
+/** Close a tab a session opened, or its pages opened for it. Any other is the person's. Back to where it came from, if that is still there. */
+export async function closeOwnTab(session: string = USER, requested?: number) {
+  const id = requested ?? tabOf.get(session);
+  if (id === undefined) throw new Error('You have no tab open.');
+  if (!isOwnTab(session, id)) throw new Error(`Tab ${id} is not one you opened, so it stays open.`);
+  const from = cameFrom.get(id);
+  opened.get(session)!.delete(id);
+  cameFrom.delete(id);
+  if (holds.get(id)?.session === session) holds.delete(id);
+  const current = tabOf.get(session) === id;
+  if (current) tabOf.delete(session);
+  await platform.release?.(id);
+  await browser.tabs.remove(id).catch(() => {});
+  if (!current || from === undefined) return undefined;
+  const alive = await browser.tabs.get(from).then(() => true, () => false);
+  const h = heldBy(from);
+  return alive && (!h || h.session === session) ? claim(session, from) : undefined;
 }
 
 /** A new tab opened by a session becomes the one it works in, next to its old one. */

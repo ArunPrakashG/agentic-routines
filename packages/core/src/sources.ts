@@ -69,7 +69,7 @@ export interface Source {
 
 const MAX_FILE = 256 * 1024;
 const MAX_STEPS = 200;
-const ACTIONS: Action[] = ['navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read', 'hover', 'drag', 'scroll', 'set'];
+const ACTIONS: Action[] = ['navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read', 'hover', 'drag', 'scroll', 'set', 'dialog'];
 const STEPS_BLOCK = /\n```steps\r?\n([\s\S]*?)\r?\n```\s*$/;
 export const FILE_PATH = /^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/;
 /** A routine on its own in the root of a repository. */
