@@ -284,6 +284,60 @@ for (const where of ['behind another tab', 'in front']) {
   check((await say('count', rm)) === 'downs 2', `the replay presses twice: ${await say('count', rm)}`);
 }
 
+// ---------- what the outline used to miss, and fields as states ----------
+{
+  await session();
+  await sleep(1500);
+  const m = 'fields.html';
+  await call('navigate', { url: `${SITE}/fields.html` });
+  let page = await read();
+  const ref = (re) => refFor(page, re);
+  check(/clickable “Delete list”/.test(page), `a clickable with no role is in the outline: ${page.split('\n').filter((l) => /Delete|Archive/.test(l)).join(' | ')}`);
+  check(/clickable “Archive it”/.test(page), 'so is one with only a hand cursor, once');
+  check(!/clickable “A real link”/.test(page), 'a wrapper around a real control is not');
+  let r = await call('find', { query: 'delete list' });
+  check(/ref_\d+ clickable “Delete list”/.test(r.text), `find sees it: ${r.text.slice(0, 200)}`);
+  await call('click', { ref: refFor(r.text, /Delete list/) });
+  check((await say('plain-out', m)) === 'plain yes', 'and a click on what find gave lands');
+  r = await call('find', { query: 'Order total' });
+  check(/text “Order total/.test(r.text), `find sees plain words: ${r.text.slice(0, 200)}`);
+  for (const hidden of ['secret instruction', 'tiny instruction']) {
+    r = await call('find', { query: hidden });
+    check(/Nothing on the page/.test(r.text), `find does not see what nobody can: ${hidden}`);
+  }
+  r = await call('get_page_text');
+  check(/Order total/.test(r.text) && !/secret instruction|tiny instruction/.test(r.text), `the page's words, without the hidden ones: ${r.text.slice(0, 160)}`);
+  const set = (re, value) => call('form_input', { ref: ref(re), value });
+  r = await set(/“Newsletter”/, true);
+  check(!r.error && (await evalIn(`document.getElementById('news').checked`, m)) === true, `ticks a checkbox: ${r.text.slice(0, 120)}`);
+  r = await set(/“Newsletter”/, true);
+  check(/already/.test(r.text) && (await evalIn(`document.getElementById('news').checked`, m)) === true, `ticking it again leaves it: ${r.text.slice(0, 120)}`);
+  await set(/“Dark mode”/, 'on');
+  check((await evalIn(`document.getElementById('sw').getAttribute('aria-checked')`, m)) === 'true', 'turns on a switch');
+  await set(/“Small”/, true);
+  check((await evalIn(`document.getElementById('small').checked`, m)) === true, 'chooses a radio');
+  r = await set(/“Large”/, false);
+  check(r.error, 'and says a radio does not go off by itself');
+  await set(/“Country”/, 'Japan');
+  await set(/“Volume”/, 70);
+  await set(/“Day”/, '2026-12-25');
+  await set(/“Name”/, 'Asha');
+  const state = () => evalIn(`[document.getElementById('country').value, document.getElementById('vol').value, document.getElementById('day').value, document.getElementById('who').value].join('|')`, m);
+  check((await state()) === 'Japan|70|2026-12-25|Asha', `a select, slider, date and text: ${await state()}`);
+  r = await set(/“Day”/, 'next friday');
+  check(r.error && /YYYY-MM-DD/.test(r.text), `a date in the wrong form is refused: ${r.text.slice(0, 160)}`);
+  const d = await call('routine_propose', { name: 'fields-replay', description: 'Fill in the fields page. Use when the user asks for this.' });
+  check(!d.error && /form_input|set/i.test(d.text), `proposes a routine of it: ${d.text.slice(0, 200)}`);
+  const id = d.text.match(/^Draft (d-\S+)/m)?.[1];
+  await call('routine_save', { draft_id: id });
+  await call('navigate', { url: `${SITE}/fields.html?ticked` });
+  r = await call('routine_run', { name: 'fields-replay', params: { name: 'Asha' } });
+  check(/done|finished/i.test(r.text), `replays it: ${r.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
+  const rm = 'fields.html?ticked';
+  check((await say('news-out', rm)) === 'news changes 0', `a replay does not untick what is already ticked: ${await say('news-out', rm)}`);
+  check((await say('plain-out', rm)) === 'plain yes', 'a replay clicks the plain clickable');
+}
+
 await client.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

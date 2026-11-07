@@ -16,7 +16,8 @@ export type Action =
   | 'read'
   | 'hover'
   | 'drag'
-  | 'scroll';
+  | 'scroll'
+  | 'set';
 
 /** Everything we know about an element, captured when it was used. */
 export interface Locator {
@@ -71,7 +72,7 @@ export interface Step {
   label: string;
   /** navigate: target URL. */
   url?: string;
-  /** type/select/upload/press: a literal, "{{param}}" or "{{secret:name}}". */
+  /** type/select/set/upload/press: a literal, "{{param}}" or "{{secret:name}}". */
   value?: string;
   target?: Locator;
   page?: PageFingerprint;

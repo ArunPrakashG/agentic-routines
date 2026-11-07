@@ -1,6 +1,6 @@
 import { platform } from '../platform';
 import type { Send } from '../platform/types';
-import type { How, Point } from './dom';
+import type { FieldState, How, Point } from './dom';
 import { ask, draw, sleep } from './tabs';
 
 // Real input. Through a DevTools session a click, a key and typed text reach the page the way a person's do, so a site
@@ -240,12 +240,39 @@ async function realPress(tabId: number, ref: string | undefined, keys: string) {
   return true;
 }
 
+const ON = /^(true|on|checked|yes|1)$/i;
+const OFF = /^(false|off|unchecked|no|0)$/i;
+
+/** Bring a field to a state, whatever state it is in now. What is ticked already stays ticked. */
+async function setField(tabId: number, ref: string, value: string): Promise<string | undefined> {
+  const state = () => ask<FieldState>(tabId, { t: 'fieldstate', ref });
+  const now = await state();
+  if (now.kind === 'file') throw new Error('That is a file input. Call upload with this ref and the path of the file instead.');
+  if (now.kind === 'other') throw new Error('That is not a field. Use click, or read_page to find the field.');
+  if (now.kind === 'text') return perform(tabId, ref, 'type', value);
+  if (now.kind !== 'toggle') {
+    await ask(tabId, { t: 'act', ref, action: 'set', value, quick: await behind(tabId) });
+    return undefined;
+  }
+  if (!ON.test(value) && !OFF.test(value)) throw new Error(`That takes true or false, not \u201c${value}\u201d.`);
+  const want = ON.test(value);
+  if (now.on === want) return 'It already was.';
+  if (!want && now.radio) throw new Error('A radio button goes off when another in its group is chosen. Set that one to true.');
+  const note = await perform(tabId, ref, 'click');
+  for (const end = Date.now() + LAND_MS; Date.now() < end; await sleep(50)) {
+    const s = await state().catch(() => undefined);
+    if (!s || (s.kind === 'toggle' && s.on === want)) return note;
+  }
+  throw new Error(`The click did not turn it ${want ? 'on' : 'off'}. ${note ?? 'The page may refuse it, or draw it from something else.'}`);
+}
+
 /**
  * Do something to the page. Real input where the browser has it, and DOM events otherwise or when it did not arrive.
  * What comes back, if anything, is for the agent to hear.
  */
 export async function perform(tabId: number, ref: string | undefined, action: string, value?: string, how: How = {}): Promise<string | undefined> {
   if (action === 'scroll') return scrollNote(tabId, ref, how);
+  if (action === 'set') return setField(tabId, ref!, value ?? '');
   let note: string | undefined;
   if (platform.cdp) {
     try {

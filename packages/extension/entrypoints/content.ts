@@ -1,11 +1,14 @@
 import { resolve, type Locator, type RecordedEvent, type Spot } from '@agentic-routines/core';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { accessibleName, aimAt, attach, busyWhy, drag, hover, landed, pointAt, readyToType, scrollBy, scrollPos, signedInAs, spotOn, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
+import { accessibleName, aimAt, attach, busyWhy, clickedThing, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
   | { t: 'read'; filter?: 'interactive' | 'all'; wait?: number }
+  | { t: 'find'; query: string }
+  | { t: 'pagetext' }
+  | { t: 'fieldstate'; ref: string }
   | { t: 'fingerprint' }
   | { t: 'text'; ref: string }
   | { t: 'account' }
@@ -70,9 +73,6 @@ function onLetGo(e: MouseEvent) {
   human({ action: 'drag', target: describe(p.el), pointer: { spot: spotOn(p.el, p.x, p.y), to: { target: describe(end), spot: spotOn(end, e.clientX, e.clientY) } } });
 }
 
-/** Not a control, but drawn to be clicked: a canvas, a map, anything with a hand cursor. */
-const drawnToClick = (el: Element) => !!el.closest('canvas,svg') || getComputedStyle(el).cursor === 'pointer';
-
 function onClick(e: MouseEvent) {
   if (dragged) {
     dragged = false;
@@ -81,11 +81,18 @@ function onClick(e: MouseEvent) {
   const top = e.target as Element;
   const el = top?.closest?.('a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],[role=switch]');
   if (!el) {
-    if (top instanceof Element && recording && drawnToClick(top)) human({ action: 'click', target: describe(top), pointer: { spot: spotOn(top, e.clientX, e.clientY) } });
+    const thing = top instanceof Element && recording ? clickedThing(top, e.clientX, e.clientY) : undefined;
+    if (thing) human({ action: 'click', target: describe(thing.el), ...(thing.spot ? { pointer: { spot: thing.spot } } : {}) });
     return;
   }
-  // Typing into fields is recorded on change, not on the click into them.
-  if (/^(input|textarea|select)$/i.test(el.tagName) && fieldKind(el) !== 'other') return;
+  // Typing into fields is recorded on change, not on the click into them. A tick is recorded as what it came to.
+  if (/^(input|textarea|select)$/i.test(el.tagName) && (fieldKind(el) !== 'other' || toggleOf(el) !== undefined)) return;
+  if (toggleOf(el) !== undefined) {
+    const target = describe(el);
+    // The page answers the click first.
+    setTimeout(() => human({ action: 'set', target, value: String(toggleOf(el)), fieldLabel: accessibleName(el) }), 50);
+    return;
+  }
   human({ action: 'click', target: describe(el) });
 }
 
@@ -98,6 +105,8 @@ function onChange(e: Event) {
   const el = e.target as Element;
   const kind = fieldKind(el);
   const label = accessibleName(el);
+  if (toggleOf(el) !== undefined) return human({ action: 'set', target: describe(el), fieldLabel: label, value: String(toggleOf(el)) });
+  if (isState(el)) return human({ action: 'set', target: describe(el), fieldLabel: label, value: (el as HTMLInputElement).value });
   if (kind === 'password') return human({ action: 'type', target: describe(el), field: 'password', fieldLabel: label });
   if (kind === 'file') {
     const f = (el as HTMLInputElement).files?.[0];
@@ -154,6 +163,15 @@ export default defineContentScript({
               send({ ok: out });
             })();
             break;
+          case 'find':
+            send({ ok: findOnPage(msg.query) });
+            break;
+          case 'pagetext':
+            send({ ok: pageText() });
+            break;
+          case 'fieldstate':
+            send({ ok: fieldState(byRef(msg.ref)) });
+            break;
           case 'viewport':
             send({ ok: viewport() });
             break;
@@ -175,13 +193,15 @@ export default defineContentScript({
             break;
           case 'describe': {
             const el = byRef(msg.ref);
-            send({ ok: { loc: describe(el), rect: rectOf(el), field: fieldKind(el), label: accessibleName(el), page: fingerprint(), view: viewport() } });
+            send({ ok: { loc: describe(el), rect: rectOf(el), field: fieldKind(el), state: toggleOf(el), label: accessibleName(el), page: fingerprint(), view: viewport() } });
             break;
           }
           case 'resolve': {
             // A place on something with no name, like a canvas, is looked for among its own kind as well as the controls.
-            const own = msg.wide ? ownKind(msg.target) : [];
-            const els = [...new Set([...interactive(), ...own])];
+            // So is something with no role at all: it was recorded because a page made it clickable, or found by its words.
+            const plain = msg.target.role === 'generic';
+            const own = msg.wide || plain ? ownKind(msg.target) : [];
+            const els = [...new Set([...interactive(), ...own, ...(plain ? plainClickables() : [])])];
             let res = resolve(msg.target, els.map((el) => ({ item: el, loc: describe(el) })));
             if (res.kind !== 'found' && own.length === 1 && !msg.target.name) res = { kind: 'found', item: own[0], score: 0 };
             const cand = (r: { item: Element; score: number }) => ({ ref: refOf(r.item), role: describe(r.item).role, name: accessibleName(r.item), score: r.score, rect: rectOf(r.item) });
@@ -222,6 +242,9 @@ export default defineContentScript({
                     break;
                   case 'select':
                     select(el, msg.value ?? '');
+                    break;
+                  case 'set':
+                    setValue(el, msg.value ?? '');
                     break;
                   case 'press':
                     press(msg.value ?? 'Enter');

@@ -466,7 +466,7 @@ function applyOne(d: Draft, op: Op): string {
         if (!s) throw new EditError(`There is no step ${op.step}.`);
         tied.push(s);
       } else if (op.value !== undefined) {
-        tied.push(...d.steps.filter((s) => (s.action === 'type' || s.action === 'upload' || s.action === 'select') && recorded(d, s) === op.value));
+        tied.push(...d.steps.filter((s) => (s.action === 'type' || s.action === 'upload' || s.action === 'select' || s.action === 'set') && recorded(d, s) === op.value));
         if (!tied.length) throw new EditError(`No typed value equals “${clip(op.value, 40)}”. Name the step with step: N instead.`);
       }
       for (const s of tied) {
