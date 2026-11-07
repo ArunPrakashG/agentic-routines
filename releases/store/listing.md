@@ -22,7 +22,7 @@ Agentic Routines is the cache for that work. It sits behind your agent's browser
 
 It is made for agents, not people. You do not record or manage anything: your agent decides which tasks are worth keeping, tidies them (a direct address instead of a click-through, typed values as parameters) and looks for a saved routine before it does a task by hand.
 
-- Works with Claude Code, Codex, GitHub Copilot and OpenCode.
+- Works with Claude Code, Codex, GitHub Copilot, OpenCode, Cursor, Windsurf, Gemini CLI, Zed and other MCP clients.
 - Made for long chores you repeat on sites with no API: releases, long forms, admin portals. A quick lookup is not worth saving, and your agent leaves it alone.
 - Runs the same steps for every value in a list or every row on a page.
 - Install routines other people maintain, so your agent skips the recording.

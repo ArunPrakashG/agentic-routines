@@ -24,4 +24,6 @@ DEV_DIR=$DIR/hooks AGENTIC_ROUTINES_HOME=$DIR/hooks/store node "$ROOT/dev/e2e/e2
 node "$ROOT/dev/e2e/e2e-sources.mjs" || code=$?
 # What setup tells each agent, exclusive mode and taking it back out: the built CLI against a throwaway home, no browser.
 node "$ROOT/dev/e2e/e2e-agents.mjs" || code=$?
+# Setup and removal for every agent it knows, in JSON, JSONC, TOML and YAML: the built CLI against a throwaway home, no browser.
+node "$ROOT/dev/e2e/e2e-clients.mjs" || code=$?
 exit ${code:-0}

@@ -55,8 +55,11 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
 } else {
   console.log(`agentic-routines
 
-  setup [--dry-run]   Connect your browsers and agents (Claude Code, Codex, Copilot, OpenCode) and tell
-                      them to use Agentic Routines for the browser and to prefer a saved routine
+  setup [--dry-run]   Connect your browsers and agents, and tell them to use Agentic Routines for the
+                      browser and to prefer a saved routine. In a terminal it asks which agents
+        [--agent <name> ...]  Those agents; "none" prints the entry to add by hand
+        [--all-agents]        Every agent found on this computer
+        [--yes]               The same, without asking
         [--exclusive] Also turn off other browser tools in those agents (--no-exclusive turns them back on)
         [--remove]    Take it all back out: tool server, guidance, plugin, hook and host
   doctor              Check what is connected and what is not, guidance and exclusivity included
