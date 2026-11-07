@@ -1,7 +1,7 @@
 import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { appendFile, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { checkUpload, MAX_STREAM, mb } from './files.ts';
 import { valueFor } from '../store/secrets.ts';
 import { paths, socketPath } from '../paths.ts';
@@ -60,7 +60,36 @@ export async function handleStore(method: string, p: any, fromBrowser = true): P
   }
 }
 
+const CAPTURE_NAME = /^[\w.-]{1,120}\.(webm|mp4|har)$/;
+const CAPTURE_DAYS = 14;
+
+async function appendCapture(p: { name: string; data: string; base64: boolean }) {
+  if (!CAPTURE_NAME.test(p.name) || p.name.includes('..')) throw new Error('Not a name for a capture');
+  const dir = paths.captures();
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, p.name);
+  await appendFile(path, p.base64 ? Buffer.from(p.data, 'base64') : p.data, { mode: 0o600 });
+  return { path, bytes: (await stat(path)).size };
+}
+
+async function removeCapture(p: { path: string }) {
+  if (dirname(p.path) !== paths.captures() || !CAPTURE_NAME.test(basename(p.path))) throw new Error('Not a capture');
+  await rm(p.path, { force: true });
+  return true;
+}
+
+/** Captures can hold whatever was on the page. They do not stay for ever. */
+async function pruneCaptures() {
+  const dir = paths.captures();
+  for (const f of await readdir(dir).catch(() => [] as string[])) {
+    const path = join(dir, f);
+    const s = await stat(path).catch(() => undefined);
+    if (s && Date.now() - s.mtimeMs > CAPTURE_DAYS * 86_400_000) await rm(path, { force: true }).catch(() => {});
+  }
+}
+
 export function runHost(): void {
+  void pruneCaptures();
   mkdirSync(paths.hosts(), { recursive: true, mode: 0o700 });
   const sock = socketPath(process.pid);
   const info = join(paths.hosts(), `${process.pid}.json`);
@@ -202,6 +231,14 @@ export function runHost(): void {
         if (req.method === 'host.secret') {
           const q = req.params as { name: string; origin: string };
           valueFor(String(q.name), String(q.origin)).then(
+            (result) => toBrowser({ id: req.id, result }),
+            (e) => toBrowser({ id: req.id, error: (e as Error).message }),
+          );
+          return;
+        }
+        // Videos and network captures from the browser. The name is checked, so nothing lands outside their folder.
+        if (req.method === 'fs.capture' || req.method === 'fs.captureRemove') {
+          (req.method === 'fs.capture' ? appendCapture(req.params as { name: string; data: string; base64: boolean }) : removeCapture(req.params as { path: string })).then(
             (result) => toBrowser({ id: req.id, result }),
             (e) => toBrowser({ id: req.id, error: (e as Error).message }),
           );

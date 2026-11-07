@@ -247,6 +247,7 @@ function describeTest(r: RunResult): string {
 }
 
 export function describeResult(r: RunResult & { tidy?: string }): string {
+  if (r.flight_recording) return `${describeResult({ ...r, flight_recording: undefined })}\nThe last minute of the tab is in ${r.flight_recording}.`;
   if (r.test) return describeTest(r);
   const calls = `${r.model_calls} model call${r.model_calls === 1 ? '' : 's'}`;
   // The note about the page size goes first: it changes how far the result can be trusted.
@@ -376,7 +377,7 @@ export async function runMcp(): Promise<void> {
     return result;
   }
 
-  async function run(id: string, params: Record<string, string>, fit?: boolean) {
+  async function run(id: string, params: Record<string, string>, fit?: boolean, flight?: boolean) {
     const r = await store.read(id);
     if (r.meta.surface && r.meta.surface !== 'browser') return fail(`${r.meta.name} acts on the ${r.meta.surface}, which this version cannot control. Only browser routines run.`);
     const missing = missingParams(r, params);
@@ -399,7 +400,7 @@ export async function runMcp(): Promise<void> {
     if ('heldBy' in lock) return fail(`${r.meta.name} is already running for ${lock.heldBy}. Only one run of a routine goes at a time. Try again when it has finished.`);
     let result: RunResult;
     try {
-      result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r), fit, foreign: !!origin }, 15 * 60_000);
+      result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r), fit, flight, foreign: !!origin }, 15 * 60_000);
     } catch (e) {
       await lock.release();
       throw e;
@@ -831,6 +832,38 @@ export async function runMcp(): Promise<void> {
     }),
   );
 
+  const captureText = (r: { path?: string; bytes?: number; [k: string]: unknown }) => text(r.path ? `Saved ${r.path}${r.bytes ? ` (${Math.round(r.bytes / 1024)} KB)` : ''}. ${JSON.stringify(Object.fromEntries(Object.entries(r).filter(([k, v]) => k !== 'path' && k !== 'bytes' && v !== undefined)))}` : JSON.stringify(r));
+
+  server.registerTool(
+    'recording',
+    {
+      description:
+        'Record a tab to a video file, for a demo or to see what went wrong. start, then stop to get the path; status; cancel throws it away. Works on a tab behind others, with fewer pictures a second. The agent cursor and glow are left out unless cursor is true. The toolbar button says REC while it runs. Files are kept 14 days.',
+      inputSchema: { action: z.enum(['start', 'stop', 'status', 'cancel']), format: z.enum(['webm', 'mp4']).optional(), cursor: z.boolean().optional(), ...tab },
+    },
+    async (a) => guarded(async () => captureText(await bridge.call('browser.recording', a, 2 * 60_000))),
+  );
+
+  server.registerTool(
+    'flight_recorder',
+    {
+      description:
+        'Keep the last minute of a tab in memory, a couple of pictures a second, so that when something breaks you can see how it got there. start, then save_last to write it as a video that plays 5 times faster; status; cancel. A routine run that fails on a tab with it on saves it by itself, and routine_run can turn it on for one run.',
+      inputSchema: { action: z.enum(['start', 'status', 'save_last', 'cancel']), ...tab },
+    },
+    async (a) => guarded(async () => captureText(await bridge.call('browser.flight_recorder', a, 2 * 60_000))),
+  );
+
+  server.registerTool(
+    'network',
+    {
+      description:
+        'Capture what a tab sends to a HAR file, to look at or to give someone. start, then stop to get the path; status; cancel. Credentials are replaced, typed passwords and stored secrets left out, and response bodies are not kept. It stops accidents, not someone who is trying: read a capture before you share it.',
+      inputSchema: { action: z.enum(['start', 'status', 'stop', 'cancel']), ...tab },
+    },
+    async (a) => guarded(async () => captureText(await bridge.call('browser.network_capture', a))),
+  );
+
   server.registerTool('close_tab', { description: 'Close a tab you opened, or that a page opened because of what you did. Any other tab is the user\'s and stays open. With no tab_id, the one you are working in.', inputSchema: { tab_id: z.number().int().optional() } }, async (a) =>
     guarded(async () => text(await bridge.call<string>('browser.close_tab', a))),
   );
@@ -962,9 +995,9 @@ export async function runMcp(): Promise<void> {
     {
       description:
         'Replay a saved routine without the model. Same as its rt_ tool. A routine only works on its own site, and a step that looks irreversible in a routine from someone else waits for the user in the side panel. match_viewport: true resizes the browser window to the size the routine was recorded at and puts it back afterwards; otherwise a window of a very different size is reported in the result and the picture check is relaxed.',
-      inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional(), match_viewport: z.boolean().optional() },
+      inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional(), match_viewport: z.boolean().optional(), flight_recorder: z.boolean().optional().describe('Keep the last minute of the tab, and save it as a video if the run fails') },
     },
-    async ({ name, params, match_viewport }) => run(name, params ?? {}, match_viewport),
+    async ({ name, params, match_viewport, flight_recorder }) => run(name, params ?? {}, match_viewport, flight_recorder),
   );
 
   server.registerTool(

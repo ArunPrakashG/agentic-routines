@@ -12,6 +12,7 @@ import * as runs from '../lib/agent/runs';
 import { watchDialogs } from '../lib/page/dialogs';
 import { watchLogs } from '../lib/page/logs';
 import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
+import { videoPiece, watchCaptures } from '../lib/page/capture';
 import { policyOf } from '../lib/page/policy';
 import { scrub, scrubText, watchSecrets } from '../lib/page/secrets';
 import { changeSettings, onSettingsChanged, settings } from '../lib/page/settings';
@@ -66,6 +67,7 @@ export default defineBackground(() => {
 
   onSettingsChanged(() => push());
   watchSecrets();
+  watchCaptures();
   browser.notifications?.onClicked.addListener((id) => {
     const tabId = Number(/^handoff-(\d+)$/.exec(id)?.[1]);
     if (!tabId) return;
@@ -487,6 +489,13 @@ export default defineBackground(() => {
 
   // ---------- human demos ----------
   browser.runtime.onMessage.addListener((msg: any, sender, send) => {
+    // Video on its way to a file, from the page that makes it. Nothing else here hears from that page.
+    if (msg?.t === 'rec.piece' && sender.id === browser.runtime.id && !sender.tab) {
+      videoPiece(msg.id, msg.data);
+      send(true);
+      return;
+    }
+    if (typeof msg?.t === 'string' && msg.t.startsWith('rec.')) return;
     if (msg?.t === 'handoff.continue') return void fromCard(sender, msg.nonce);
     if (msg?.t === 'recording?') return void send(!!recording && sender.tab?.id === recording.tabId);
     if (msg?.t !== 'human' || !recording || sender.tab?.id !== recording.tabId) return;

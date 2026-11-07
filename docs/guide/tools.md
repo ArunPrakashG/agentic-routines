@@ -35,6 +35,20 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
 
+### Video, flight recorder and network capture
+
+| Tool | What it does |
+|---|---|
+| `recording` | Record a tab to WebM or MP4: `start`, `stop`, `status`, `cancel`. The agent's cursor and glow are left out unless `cursor` is true. The toolbar button says REC while it runs |
+| `flight_recorder` | Keep the last minute of a tab: `start`, `status`, `save_last`, `cancel`. A routine that fails on a tab with it on saves it by itself, and `routine_run` takes `flight_recorder: true` for one run |
+| `network` | Capture what a tab sends to a HAR file: `start`, `status`, `stop`, `cancel` |
+
+The files go in `~/.agentic-routines/captures`, readable only by your account, and are deleted after 14 days. Video needs a Chromium browser.
+
+These are built from pictures the browser takes of the tab, about 8 a second at best for `recording` and 2 for the flight recorder. A tab behind others gives fewer. The flight recorder's video plays 5 times faster than it happened, so that saving it takes seconds, not a minute. It costs some speed and memory while it is on, about 10 MB per tab.
+
+A network capture leaves out response bodies and cookies, replaces the values of credential headers, and takes out anything that looks like a token or a password, along with stored secrets and passwords the agent typed. It stops accidents, not someone who is trying. Read a capture before you share it, as it still shows where you went.
+
 ### Secrets
 
 | Tool | What it does |

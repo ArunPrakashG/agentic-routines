@@ -1,3 +1,4 @@
+import { flightOn, saveFlight, startFlight, stopFlight } from '../page/capture';
 import { secretForField } from '../page/secrets';
 import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { challengeOn, uploadFile } from '../agent/agent';
@@ -46,6 +47,9 @@ export interface ReplayState {
   by?: string;
   /** The session of that agent, to notice when it goes away. */
   session?: string;
+  /** The video kept when the run failed, and whether the recorder was started just for this run. */
+  flightRecording?: string;
+  flightForRun?: boolean;
   /** The panel stopped waiting and gave the pause back to the agent. */
   handedBack?: boolean;
   error?: string;
@@ -157,6 +161,7 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     candidates: s.candidates,
     error: s.error,
     read: Object.keys(s.read).length ? s.read : undefined,
+    flight_recording: s.flightRecording,
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     viewport_note: s.viewportNote,
     hidden_note: s.hiddenNote,
@@ -735,6 +740,10 @@ async function loop(s: ReplayState, choiceRef?: string): Promise<ReturnType<type
 async function ended(s: ReplayState) {
   if (s.ended || !s.started) return;
   s.ended = true;
+  if (flightOn(s.tabId)) {
+    if (s.status === 'failed') s.flightRecording = await saveFlight(s.tabId).then((f) => f.path, () => undefined);
+    if (s.flightForRun) stopFlight(s.tabId);
+  }
   await hook(s, 'run.end', undefined, { detail: { status: s.status, error: s.error } }).catch(() => ({}));
 }
 
@@ -878,7 +887,7 @@ async function waitForRoutine(r: Routine, session?: string): Promise<string | un
   return undefined;
 }
 
-export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
+export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; flight?: boolean; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
   if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
     return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const busy = await waitForRoutine(p.routine, p.session);
@@ -905,6 +914,7 @@ export async function start(p: { routine: Routine; params: Record<string, string
     trace: [],
     hooks: await hooks.forRoutine(p.routine),
     foreign: !!p.foreign,
+    flightForRun: !!p.flight,
     forcedPauses: [],
     jumps: {},
     loops: [],
@@ -912,6 +922,14 @@ export async function start(p: { routine: Routine; params: Record<string, string
     fitWindow: p.fit,
     stepMs: {},
   };
+  if (p.flight && !flightOn(s.tabId)) {
+    try {
+      startFlight(s.tabId);
+    } catch {
+      // Firefox: the run goes on without it.
+      s.flightForRun = false;
+    }
+  } else s.flightForRun = false;
   // Attached before the first step, so the bar this puts up has already moved the page before anything is measured.
   await platform.cdp?.(s.tabId, async () => {}).catch(() => {});
   live.set(s.id, s);

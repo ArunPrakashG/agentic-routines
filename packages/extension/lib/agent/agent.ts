@@ -12,7 +12,8 @@ import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
-import { refuseScript, secretForField } from '../page/secrets';
+import { flightStatus, networkStatus, recordingStatus, saveFlight, startFlight, startNetwork, startRecording, stopFlight, stopNetwork, stopRecording } from '../page/capture';
+import { noteTyped, refuseScript, secretForField } from '../page/secrets';
 import { changeSettings, settings } from '../page/settings';
 import { adopt, agentTabId, ask, cleanUp, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, lentTabs, nameSession, noteSession, onItsSites, openTab, releaseSession, sessionTabs, settle, takePopupRefused, takeSpawned, waitLoaded } from '../page/tabs';
 import { listed, notListed, policyOf, setPolicy, takeRefused } from '../page/policy';
@@ -193,6 +194,7 @@ async function act(source: string, session: string | undefined, tabId: number, r
   else {
     // Asked for at the last moment, for this field, and kept nowhere. What is recorded is the name.
     const stored = /^\{\{secret:([a-z0-9_]+)\}\}$/.exec(value ?? '')?.[1];
+    if (d.field === 'password' && value && !stored) noteTyped(value);
     note = await perform(tabId, ref, action, stored ? await secretForField(tabId, ref, stored) : value, how);
   }
   const after = await settle(tabId, before);
@@ -247,7 +249,7 @@ let mayRunScript: (site: string, code: string, by: string) => Promise<void> = as
 export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
 
 // All a read-only session may call. Anything added later stays refused until someone decides otherwise.
-const READ_ONLY = new Set(['browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
+const READ_ONLY = new Set(['browser.recording', 'browser.flight_recorder', 'browser.network_capture', 'browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
 
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
@@ -260,6 +262,30 @@ export async function handle(method: string, p: any): Promise<unknown> {
       setPolicy(p.target, p.policy);
       if (p.policy?.name) nameSession(p.target, p.policy.name);
       return true;
+    }
+    case 'browser.recording': {
+      const tabId = await working(p?.session, p.tab_id);
+      if (p.action === 'start') return startRecording(tabId, p);
+      if (p.action === 'stop') return stopRecording(tabId);
+      if (p.action === 'cancel') return stopRecording(tabId, true);
+      return recordingStatus(tabId);
+    }
+    case 'browser.flight_recorder': {
+      const tabId = await working(p?.session, p.tab_id);
+      if (p.action === 'start') return startFlight(tabId);
+      if (p.action === 'save_last') return saveFlight(tabId);
+      if (p.action === 'cancel') {
+        stopFlight(tabId);
+        return { on: false };
+      }
+      return flightStatus(tabId);
+    }
+    case 'browser.network_capture': {
+      const tabId = await working(p?.session, p.tab_id);
+      if (p.action === 'start') return startNetwork(tabId);
+      if (p.action === 'stop') return stopNetwork(tabId);
+      if (p.action === 'cancel') return stopNetwork(tabId, true);
+      return networkStatus(tabId);
     }
     case 'browser.settings':
       return p.change ? changeSettings(p.change) : settings();

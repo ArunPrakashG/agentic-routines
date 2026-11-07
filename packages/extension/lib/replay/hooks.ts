@@ -1,10 +1,11 @@
+import { ensureOffscreen } from '../page/offscreen';
 import { HOOK_EVENTS, HOOK_LIMITS, hookHash, readDirectives, type Directive, type HookContext, type HookEvent, type HookLogEntry, type HookReport, type HookState, type Hooks, type Routine } from '@agentic-routines/core';
 
 // Hooks: code a routine's author wrote, run in a sandbox that can reach nothing, answering with directives
 // this side validates and performs. The sandbox page is framed by an offscreen document, because a service
 // worker cannot hold a frame. Firefox has neither, so there hooks are not supported and the routine runs without them.
 
-export const supported = () => !!(browser as unknown as { offscreen?: unknown }).offscreen;
+export const supported = () => !!(browser.runtime.getManifest() as { sandbox?: unknown }).sandbox;
 
 /** The id approvals are kept under: the same one the routine is found by. */
 export const idOf = (r: Routine & { owner?: string }) => `${r.owner ?? r.meta.owner ?? 'local'}/${r.meta.name}`;
@@ -53,24 +54,14 @@ export async function revoke(id: string) {
 
 let seq = 0;
 
-async function ensureHost() {
-  const off = (browser as unknown as { offscreen: { hasDocument?: () => Promise<boolean>; createDocument: (o: object) => Promise<void> } }).offscreen;
-  if (await off.hasDocument?.()) return;
-  try {
-    await off.createDocument({ url: 'offscreen.html', reasons: ['IFRAME_SCRIPTING'], justification: 'Runs the hooks of a routine in a sandbox that cannot reach the network.' });
-  } catch (e) {
-    if (!/single|already/i.test((e as Error).message)) throw e;
-  }
-}
-
 export type Ran = { ok: true; value: unknown; ms: number } | { ok: false; error: string; ms: number };
 
 /** Runs hook code on a context. Never throws; a hook that fails is a result, not an error. */
 export async function execute(code: string, ctx: HookContext): Promise<Ran> {
   const start = Date.now();
-  if (!(browser as unknown as { offscreen?: unknown }).offscreen) return { ok: false, error: 'hooks do not run in this build of the extension', ms: 0 };
+  if (!supported()) return { ok: false, error: 'hooks do not run in this build of the extension', ms: 0 };
   try {
-    await ensureHost();
+    await ensureOffscreen();
     // The context is cut to size here, the page markup first.
     let json = JSON.stringify(ctx);
     if (json.length > HOOK_LIMITS.context && ctx.dom) {

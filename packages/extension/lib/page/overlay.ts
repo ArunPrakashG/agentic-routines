@@ -138,10 +138,13 @@ browser.storage?.onChanged.addListener((c) => {
 });
 
 /** Hide everything while the browser takes a picture of the page. */
-export function veil(on: boolean) {
-  veiled = on;
-  if (parts) parts.host.style.display = on ? 'none' : '';
+export function veil(on: boolean, hold?: boolean) {
+  // Out of a video for as long as it runs, whatever a screenshot does in the meantime.
+  if (hold !== undefined) held = hold;
+  veiled = on || held;
+  if (parts) parts.host.style.display = veiled ? 'none' : '';
 }
+let held = false;
 
 /** Move the cursor onto an element and outline it. Resolves when the cursor has arrived, so the action lands with it. */
 export async function aim(el: Element, action: string, quick = false, spot?: { x: number; y: number }) {
