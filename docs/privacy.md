@@ -1,12 +1,21 @@
 # Privacy
 
-Agentic Routines keeps your routines and recordings on your computer. Nothing is sent anywhere unless you sign in and choose to publish, and signing in is optional.
+Agentic Routines keeps your routines and recordings on your computer. Nothing is sent anywhere unless you sign in and choose to publish, or connect your browser to an agent on another computer of yours. Both are optional.
 
 ## On your computer
 
 - Routines, recorded runs, settings and the list of recent runs are stored in the browser and in a folder in your home directory (`~/.agentic-routines`).
 - A recorded run can contain what was on the page: element names, addresses and the values you or your agent typed. Values that were marked as secrets are never stored.
-- The extension talks only to the companion program on your computer, which your coding agent starts. It does not send page content over the network.
+- The extension talks to the companion program on your computer, which your coding agent starts. Unless you connect it to another computer as described below, it does not send page content over the network.
+
+## If you connect your browser to another computer
+
+You can connect the extension to an agent on another computer by entering an address and a one-time code in its settings. It is off until you do, and Disconnect turns it off. We run no server in the middle and receive none of this.
+
+- While connected, what the agent works with goes to that computer: the pages it reads, their addresses, what is typed, screenshots, recordings and network captures, and files it asks to download with your sign-ins. Routines and recordings are kept there.
+- This link is not encrypted by us. Anyone on the network path can read and change what passes, unless you use something that encrypts it, such as Tailscale, WireGuard or an SSH tunnel.
+- The address, the name of that computer and a key for it are kept in the browser's extension storage, and a key for the browser on that computer. They stay until you disconnect.
+- That computer's owner can use your browser with your sign-ins, so connect only to a computer of your own.
 
 ## If you sign in with Google
 

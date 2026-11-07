@@ -46,7 +46,7 @@ The Google client is in Testing status, so only its listed test users can sign i
 | Path | What it is |
 |---|---|
 | `env/` | `up.sh`, `down.sh` and `reload-extension.mjs`: the environment above |
-| `e2e/` | The end-to-end checks. `e2e.sh` runs the browser ones, `e2e-api.mjs` the API, `e2e-sources.mjs` Git sources, `e2e-agents.mjs` what setup tells each agent, `e2e-hooks.sh` hooks alone, `e2e-parity.sh` hand-overs, lent tabs, sessions, settings, secrets, capture, the local CDP endpoint and compiled routines |
+| `e2e/` | The end-to-end checks. `e2e.sh` runs the browser ones, `e2e-api.mjs` the API, `e2e-sources.mjs` Git sources, `e2e-remote.mjs` a browser on another computer with no browser, `e2e-agents.mjs` what setup tells each agent, `e2e-hooks.sh` hooks alone, `e2e-parity.sh` hand-overs, lent tabs, sessions, settings, secrets, capture, the local CDP endpoint and compiled routines |
 | `images/` | `readme-images.sh` rebuilds the README screenshots from a real run (`shots.mjs`, then `readme-images.mjs`) |
 | `fixtures/`, `site/` | The test files and the test site |
 | `bench/` | The benchmark behind the numbers on the website |

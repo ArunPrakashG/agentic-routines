@@ -1,23 +1,31 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createECDH, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { connect, createServer, type Server, type Socket } from 'node:net';
+import { hostname, networkInterfaces } from 'node:os';
 import { join } from 'node:path';
+import { WebSocket, WebSocketServer } from 'ws';
 import { home } from '../paths.ts';
+import { nativeFrame, nativeReader, type Message } from '../protocol.ts';
 
-// A browser on one machine and the agent on another. The browser's host listens on a network address; everything else, CDP
-// included, stays on the machine.
+// A browser on another computer. The agent and this program stay here; the extension over there connects out to the address
+// the person types in, and needs nothing else on that computer. There is no server of ours in the middle.
 //
-// Pairing: `remote pair` makes a code of 8 characters (40 bits) that works once, for 10 minutes, and five wrong guesses throw
-// away all that are pending. The host keeps only a slow hash of it. Over ephemeral ECDH both sides prove they know the code, and
-// the host hands over a key of its own for that browser profile. The slow hash means that whoever saw one proof cannot search
-// the codes before they expire.
+// A small process listens. For each browser that proves itself it starts an ordinary host and passes messages between the two,
+// so to agents here that browser is like any other, the DevTools address and the files included, and the HTTP API and CDP stay
+// on this machine. It stops when told to through its settings file, so nothing here ever signals a process by a stale id.
 //
-// Every later connection: both sides prove they hold the key with an HMAC over fresh nonces, the host first, so nothing talks to
-// a host that has not proved itself. The key is never sent. After that the link is plain: anyone on the path can read and change
-// what passes, so this belongs on Tailscale, WireGuard or a network you trust. The docs say so too.
+// Pairing: a code of 8 characters (40 bits) that works once, for 10 minutes, and five wrong guesses throw away all that are
+// pending. Only a slow hash of it is kept. Over ephemeral ECDH both sides prove they know the code, and this side hands over a
+// key of its own for that browser. The slow hash means that whoever saw one proof cannot search the codes before they expire.
+//
+// Every later connection: both sides prove they hold the key with an HMAC over fresh nonces, this side first, so the extension
+// says nothing to what has not proved itself. The key is never sent. After that the link is plain: anyone on the path can read
+// and change what passes, so this belongs on Tailscale, an SSH tunnel or a network you trust. The docs and the panel say so too.
+//
+// The extension's half is packages/extension/lib/agent/link.ts.
 
 export const DEFAULT_PORT = 47931;
-const SCHEME = 'agentic-routines-remote-v1';
+const SCHEME = 'agentic-routines-link-v1';
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const CODE_MS = 10 * 60_000;
 const MAX_CODES = 5;
@@ -26,25 +34,22 @@ const ITERATIONS = 100_000;
 const HANDSHAKE_MS = 15_000;
 const MAX_HANDSHAKE_BYTES = 8 * 1024;
 const MAX_STRANGERS = 8;
+const MAX_MESSAGE = 64 * 1024 * 1024;
+const BEAT_MS = 3_000;
+const GONE_AFTER_MS = 12_000;
 
 export interface ListenConfig {
   address: string;
   port: number;
 }
-export interface PairedClient {
+export interface PairedBrowser {
   key: string;
   name: string;
-  profile?: string;
   pairedAt: number;
 }
-export interface RemoteBrowser {
-  name: string;
-  address: string;
-  port: number;
-  id: string;
-  key: string;
-  browser: string;
-  profile?: string;
+export interface ListenerState extends ListenConfig {
+  at: number;
+  connected: { id: string; name: string; since: number }[];
 }
 
 const dir = () => join(home(), 'remote');
@@ -67,16 +72,20 @@ function writeJson(name: string, value: unknown) {
 
 export const listenConfig = () => readJson<ListenConfig | null>('listen.json', null);
 export const setListenConfig = (c: ListenConfig | null) => (c ? writeJson('listen.json', c) : rmSync(file('listen.json'), { force: true }));
-export const pairedClients = () => readJson<Record<string, PairedClient>>('clients.json', {});
-const setPairedClients = (c: Record<string, PairedClient>) => writeJson('clients.json', c);
-export const remoteBrowsers = () => readJson<RemoteBrowser[]>('browsers.json', []);
-export const setRemoteBrowsers = (b: RemoteBrowser[]) => writeJson('browsers.json', b);
+export const pairedBrowsers = () => readJson<Record<string, PairedBrowser>>('browsers.json', {});
+const setPairedBrowsers = (c: Record<string, PairedBrowser>) => writeJson('browsers.json', c);
 
-export function revokeClient(id: string): boolean {
-  const all = pairedClients();
-  if (!all[id]) return false;
+/** What is listening now, going by the mark it keeps fresh. */
+export function listenerState(): ListenerState | undefined {
+  const s = readJson<ListenerState | null>('listener.json', null);
+  return s && Date.now() - s.at < GONE_AFTER_MS ? s : undefined;
+}
+
+export function revokeBrowser(id: string): boolean {
+  const all = pairedBrowsers();
+  if (!Object.hasOwn(all, id)) return false;
   delete all[id];
-  setPairedClients(all);
+  setPairedBrowsers(all);
   return true;
 }
 
@@ -85,11 +94,6 @@ export function revokeClient(id: string): boolean {
 type Pending = { codes: { key: string; expires: number }[]; failures: number };
 
 const codeKey = (code: string) => pbkdf2Sync(code, `${SCHEME}|code`, ITERATIONS, 32, 'sha256').toString('hex');
-
-export function normalCode(input: string) {
-  const code = input.toUpperCase().replace(/[\s-]/g, '').replace(/[IL]/g, '1').replace(/O/g, '0');
-  return new RegExp(`^[${CROCKFORD}]{8}$`).test(code) ? code : undefined;
-}
 
 export function mintCode(now = Date.now()): string {
   const code = Array.from(randomBytes(8), (b) => CROCKFORD[b & 31]).join('');
@@ -116,85 +120,142 @@ const same = (a: Buffer, hex: unknown) => {
 
 const sessionKey = (key: string, secret: Buffer, a: string, b: string, pubA: string, pubB: string) => hmac(Buffer.from(key, 'hex'), secret, a, b, pubA, pubB);
 
-/** The lines of a handshake, with a cap on what a stranger can send. */
-function lines(sock: Socket, on: (m: Record<string, unknown>) => void) {
-  let buf = '';
-  const data = (d: Buffer) => {
-    buf += d.toString('utf8');
-    if (buf.length > MAX_HANDSHAKE_BYTES) return sock.destroy();
-    let at: number;
-    while ((at = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, at);
-      buf = buf.slice(at + 1);
-      let m: Record<string, unknown>;
-      try {
-        m = JSON.parse(line);
-      } catch {
-        return sock.destroy();
-      }
-      on(m);
+/** Loopback is the end of an SSH tunnel, and Tailscale encrypts. On anything else what passes can be read, so stored secrets stay here. */
+const throughTunnel = (address: string) => {
+  if (address === '127.0.0.1' || address === 'localhost' || address === '::1' || address.endsWith('.ts.net')) return true;
+  const [a, b] = address.split('.').map(Number);
+  return a === 100 && b >= 64 && b <= 127;
+};
+
+// ---------- listening ----------
+
+/** Runs until its settings go away or change. Started on its own by ensureListener, so it outlives any one agent. */
+export async function runListener(): Promise<void> {
+  const want = listenConfig();
+  if (!want) throw new Error('Nothing is set up to listen.');
+  const log = (t: string) => {
+    try {
+      writeFileSync(file('listener.log'), `${new Date().toISOString()} ${t}\n`, { flag: 'a', mode: 0o600 });
+    } catch {
+      // Logging must never break the link.
     }
   };
-  sock.on('data', data);
-  return () => sock.off('data', data);
-}
-
-const say = (sock: Socket, m: unknown) => sock.write(`${JSON.stringify(m)}\n`);
-
-// ---------- the host's side ----------
-
-export interface RemoteHost {
-  /** Starts or stops listening to match what is configured. */
-  sync(): Promise<ListenConfig | undefined>;
-  /** Drops the connections of a client whose key was just revoked. */
-  drop(id: string): void;
-  close(): void;
-}
-
-export function remoteHost(o: { attach: (s: Socket) => void; me: () => { browser: string; profile?: string; email?: string } | undefined; log: (t: string) => void; listening: (l: ListenConfig | undefined) => void }): RemoteHost {
-  let server: Server | undefined;
-  let on: ListenConfig | undefined;
+  const live = new Map<string, { ws: WebSocket; child: ChildProcess; name: string; since: number }>();
   let strangers = 0;
-  const open = new Map<string, Set<Socket>>();
 
-  const welcome = (sock: Socket, id: string) => {
-    const me = o.me();
-    let set = open.get(id);
-    if (!set) open.set(id, (set = new Set()));
-    set.add(sock);
-    sock.once('close', () => set.delete(sock));
-    say(sock, { t: 'ok', browser: me?.browser, profile: me?.profile, email: me?.email });
-    o.attach(sock);
+  const server = await new Promise<WebSocketServer>((resolve, reject) => {
+    let tries = 0;
+    const attempt = () => {
+      const s = new WebSocketServer({
+        host: want.address,
+        port: want.port,
+        maxPayload: MAX_MESSAGE,
+        perMessageDeflate: false,
+        // A website can open a WebSocket to any address this computer reaches. Only an extension page is let in.
+        verifyClient: ({ origin }: { origin?: string }) => /^(chrome-extension|moz-extension):\/\//.test(origin ?? ''),
+      });
+      s.once('listening', () => resolve(s));
+      s.once('error', (e: NodeJS.ErrnoException) => {
+        // The one this replaces takes a moment to notice.
+        if (e.code === 'EADDRINUSE' && ++tries < 8) setTimeout(attempt, 1000);
+        else reject(e);
+      });
+    };
+    attempt();
+  }).catch((e) => {
+    writeJson('listener-error.json', { message: `Could not listen on ${want.address}:${want.port}: ${(e as Error).message}` });
+    throw e;
+  });
+  rmSync(file('listener-error.json'), { force: true });
+
+  const mark = () => writeJson('listener.json', { ...want, at: Date.now(), connected: [...live].map(([id, l]) => ({ id, name: l.name, since: l.since })) });
+
+  const attach = (ws: WebSocket, id: string, name: string) => {
+    live.get(id)?.ws.terminate();
+    // An ordinary host, which cannot tell this from a browser on this machine.
+    const child = spawn(process.execPath, [...process.execArgv, process.argv[1], 'host'], { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, AGENTIC_ROUTINES_LINK: throughTunnel(want.address) ? 'private' : 'plain' } });
+    const entry = { ws, child, name, since: Date.now() };
+    live.set(id, entry);
+    mark();
+    child.stdout!.on(
+      'data',
+      nativeReader((m) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+      }),
+    );
+    child.stdin!.on('error', () => {});
+    let alive = true;
+    ws.on('pong', () => (alive = true));
+    const beat = setInterval(() => {
+      if (!alive) return ws.terminate();
+      alive = false;
+      ws.ping();
+    }, 30_000);
+    ws.on('message', (data: Buffer) => {
+      let m: (Message & { t?: string }) | undefined;
+      try {
+        m = JSON.parse(data.toString('utf8'));
+      } catch {
+        return ws.terminate();
+      }
+      if (m?.t === 'ping') return ws.send('{"t":"pong"}');
+      // The person took it off the browser, so this key has no more use.
+      if (m?.t === 'forget') {
+        revokeBrowser(id);
+        return ws.close();
+      }
+      if (child.stdin!.writable) child.stdin!.write(nativeFrame(m!));
+    });
+    ws.on('close', () => {
+      clearInterval(beat);
+      child.stdin!.end();
+      setTimeout(() => child.kill(), 2000).unref();
+      if (live.get(id) === entry) live.delete(id);
+      mark();
+      log(`disconnected ${id}`);
+    });
+    child.on('close', () => ws.close());
+    log(`connected ${id} (${name})`);
   };
 
-  const handle = (sock: Socket) => {
-    if (strangers >= MAX_STRANGERS || !o.me()) return void sock.destroy();
+  server.on('connection', (ws: WebSocket, req: { socket: { remoteAddress?: string } }) => {
+    ws.on('error', () => ws.terminate());
+    if (strangers >= MAX_STRANGERS) return ws.terminate();
     strangers++;
-    let known = true;
+    let waiting = true;
     const settled = () => {
-      if (known) strangers--;
-      known = false;
+      if (waiting) strangers--;
+      waiting = false;
       clearTimeout(timer);
     };
-    const timer = setTimeout(() => sock.destroy(), HANDSHAKE_MS);
-    sock.once('close', settled);
-    sock.on('error', () => sock.destroy());
-    sock.setNoDelay(true);
-    let state: { kind: 'key'; id: string; key: string; nc: string; nh: string } | { kind: 'code'; secret: Buffer; nc: string; nh: string; pc: string; ph: string; name: string } | undefined;
-    const stop = lines(sock, (m) => {
+    const timer = setTimeout(() => ws.terminate(), HANDSHAKE_MS);
+    ws.once('close', settled);
+    const say = (m: unknown) => ws.send(JSON.stringify(m));
+    type Known = { kind: 'key'; id: string; key: string; nc: string; nh: string };
+    type Coded = { kind: 'code'; secret: Buffer; nc: string; nh: string; pc: string; ph: string; name: string };
+    let state: Known | Coded | undefined;
+    const heard = (data: Buffer, binary: boolean) => {
+      if (binary || data.length > MAX_HANDSHAKE_BYTES) return ws.terminate();
+      let m: Record<string, unknown>;
+      try {
+        m = JSON.parse(data.toString('utf8'));
+      } catch {
+        return ws.terminate();
+      }
       if (!state && m.t === 'hello') {
         const id = String(m.id);
-        const client = Object.hasOwn(pairedClients(), id) ? pairedClients()[id] : undefined;
+        const known = pairedBrowsers();
+        const browser = Object.hasOwn(known, id) ? known[id] : undefined;
         const nc = String(m.nonce);
-        // A key belongs to one browser profile. And nothing tells a stranger which ids exist.
-        if (!client || client.profile !== o.me()?.profile || nc.length !== 64) return void sock.destroy();
+        // Nothing tells a stranger which ids exist.
+        if (!browser || !/^[0-9a-f]{64}$/.test(nc)) return ws.terminate();
         const nh = randomBytes(32).toString('hex');
-        state = { kind: 'key', id, key: client.key, nc, nh };
-        say(sock, { t: 'challenge', nonce: nh, proof: hmac(Buffer.from(client.key, 'hex'), 'host', nc, nh).toString('hex') });
+        state = { kind: 'key', id, key: browser.key, nc, nh };
+        say({ t: 'challenge', nonce: nh, proof: hmac(Buffer.from(browser.key, 'hex'), 'listener', nc, nh).toString('hex') });
       } else if (!state && m.t === 'pair') {
         const pc = String(m.ecdh);
         const nc = String(m.nonce);
-        if (!/^[0-9a-f]{130}$/.test(pc) || nc.length !== 64) return void sock.destroy();
+        if (!/^[0-9a-f]{130}$/.test(pc) || !/^[0-9a-f]{64}$/.test(nc)) return ws.terminate();
         const ecdh = createECDH('prime256v1');
         const ph = ecdh.generateKeys('hex');
         const nh = randomBytes(32).toString('hex');
@@ -202,175 +263,126 @@ export function remoteHost(o: { attach: (s: Socket) => void; me: () => { browser
         try {
           secret = ecdh.computeSecret(Buffer.from(pc, 'hex'));
         } catch {
-          return void sock.destroy();
+          return ws.terminate();
         }
-        state = { kind: 'code', secret, nc, nh, pc, ph, name: String(m.name ?? 'agent').slice(0, 80) };
-        say(sock, { t: 'challenge', nonce: nh, ecdh: ph });
+        state = { kind: 'code', secret, nc, nh, pc, ph, name: String(m.name ?? 'browser').slice(0, 80) };
+        say({ t: 'challenge', nonce: nh, ecdh: ph });
       } else if (state?.kind === 'key' && m.t === 'proof') {
-        if (!same(hmac(Buffer.from(state.key, 'hex'), 'client', state.nc, state.nh), m.proof)) return void sock.destroy();
-        stop();
+        if (!same(hmac(Buffer.from(state.key, 'hex'), 'browser', state.nc, state.nh), m.proof)) return ws.terminate();
+        ws.off('message', heard);
         settled();
-        welcome(sock, state.id);
+        say({ t: 'ok', computer: hostname() });
+        attach(ws, state.id, pairedBrowsers()[state.id]?.name ?? 'browser');
       } else if (state?.kind === 'code' && m.t === 'proof') {
         const pending = readJson<Pending>('codes.json', { codes: [], failures: 0 });
         const now = Date.now();
         const s = state;
-        const live = pending.codes.filter((c) => c.expires > now);
-        const hit = live.find((c) => same(hmac(sessionKey(c.key, s.secret, s.nc, s.nh, s.pc, s.ph), 'client'), m.proof));
+        const codes = pending.codes.filter((c) => c.expires > now);
+        const hit = codes.find((c) => same(hmac(sessionKey(c.key, s.secret, s.nc, s.nh, s.pc, s.ph), 'browser'), m.proof));
         if (!hit) {
           const failures = pending.failures + 1;
-          writeJson('codes.json', failures >= MAX_FAILURES ? { codes: [], failures: 0 } : { codes: live, failures });
-          o.log(`remote: a wrong pairing code from ${sock.remoteAddress}`);
-          return void sock.destroy();
+          writeJson('codes.json', failures >= MAX_FAILURES ? { codes: [], failures: 0 } : { codes, failures });
+          log(`a wrong pairing code from ${req.socket.remoteAddress}`);
+          return ws.terminate();
         }
-        writeJson('codes.json', { codes: live.filter((c) => c !== hit), failures: 0 });
+        writeJson('codes.json', { codes: codes.filter((c) => c !== hit), failures: 0 });
         const session = sessionKey(hit.key, s.secret, s.nc, s.nh, s.pc, s.ph);
         const id = randomBytes(8).toString('hex');
         const key = randomBytes(32);
-        const clients = pairedClients();
-        clients[id] = { key: key.toString('hex'), name: s.name, profile: o.me()?.profile, pairedAt: now };
-        setPairedClients(clients);
-        const mask = hmac(session, 'wrap');
-        const me = o.me();
-        o.log(`remote: paired ${s.name} from ${sock.remoteAddress}`);
-        say(sock, { t: 'key', id, proof: hmac(session, 'host').toString('hex'), wrapped: Buffer.from(key.map((b, i) => b ^ mask[i])).toString('hex'), browser: me?.browser, profile: me?.profile });
-        sock.end();
-      } else sock.destroy();
-    });
-  };
-
-  const stopListening = () =>
-    new Promise<void>((res) => {
-      if (!server) return res();
-      server.close(() => res());
-      server = undefined;
-      on = undefined;
-      for (const set of open.values()) for (const s of set) s.destroy();
-    });
-
-  return {
-    async sync() {
-      const want = listenConfig();
-      if (on && want && on.address === want.address && on.port >= want.port && on.port < want.port + 10) return on;
-      await stopListening();
-      if (want) {
-        // Each browser profile has a host of its own, and takes the next free port.
-        for (let port = want.port; port < want.port + 10 && !server; port++) {
-          const candidate = createServer(handle);
-          const ok = await new Promise<boolean>((res) => {
-            candidate.once('error', () => res(false));
-            candidate.listen(port, want.address, () => res(true));
-          });
-          if (ok) {
-            candidate.on('error', (e) => o.log(`remote: ${(e as Error).message}`));
-            server = candidate;
-            on = { address: want.address, port };
-          }
-        }
-        if (!server) o.log(`remote: could not listen on ${want.address}:${want.port}`);
-      }
-      o.listening(on);
-      return on;
-    },
-    drop(id) {
-      for (const s of open.get(id) ?? []) s.destroy();
-    },
-    close() {
-      void stopListening();
-    },
-  };
-}
-
-// ---------- the agent's side ----------
-
-function reach(address: string, port: number) {
-  return new Promise<Socket>((res, rej) => {
-    const sock = connect({ host: address, port });
-    const timer = setTimeout(() => {
-      sock.destroy();
-      rej(new Error(`Nothing answered at ${address}:${port}.`));
-    }, HANDSHAKE_MS);
-    sock.once('connect', () => {
-      clearTimeout(timer);
-      sock.setNoDelay(true);
-      res(sock);
-    });
-    sock.once('error', () => {
-      clearTimeout(timer);
-      rej(new Error(`Nothing answered at ${address}:${port}.`));
-    });
-  });
-}
-
-/** `name` is what the browser is called here, and `from` what this machine is called over there. */
-export async function pair(address: string, port: number, typed: string, name: string, from: string): Promise<RemoteBrowser> {
-  const code = normalCode(typed);
-  if (!code) throw new Error('A pairing code has 8 characters, like ABCD-1234.');
-  const sock = await reach(address, port);
-  return new Promise((resolve, reject) => {
-    const ecdh = createECDH('prime256v1');
-    const pc = ecdh.generateKeys('hex');
-    const nc = randomBytes(32).toString('hex');
-    let session: Buffer | undefined;
-    let done = false;
-    const stop = (e: Error) => {
-      done = true;
-      sock.destroy();
-      reject(e);
+        setPairedBrowsers({ ...pairedBrowsers(), [id]: { key: key.toString('hex'), name: s.name, pairedAt: now } });
+        const wrap = hmac(session, 'wrap');
+        log(`paired ${s.name} from ${req.socket.remoteAddress}`);
+        say({ t: 'key', id, proof: hmac(session, 'listener').toString('hex'), wrapped: Buffer.from(key.map((b, i) => b ^ wrap[i])).toString('hex'), computer: hostname() });
+        ws.close();
+      } else ws.terminate();
     };
-    sock.once('close', () => done || reject(new Error('The browser turned that down. The code may be wrong, used or too old: make a new one with `agentic-routines remote pair`.')));
-    lines(sock, (m) => {
-      if (m.t === 'challenge' && !session) {
-        const ph = String(m.ecdh);
-        try {
-          session = sessionKey(codeKey(code), ecdh.computeSecret(Buffer.from(ph, 'hex')), nc, String(m.nonce), pc, ph);
-        } catch {
-          return stop(new Error('That is not an Agentic Routines host.'));
-        }
-        say(sock, { t: 'proof', proof: hmac(session, 'client').toString('hex') });
-      } else if (m.t === 'key' && session) {
-        if (!same(hmac(session, 'host'), m.proof)) return stop(new Error('The other side does not know the code, so it is not the browser you paired with.'));
-        const mask = hmac(session, 'wrap');
-        const key = Buffer.from(String(m.wrapped), 'hex').map((b, i) => b ^ mask[i]);
-        done = true;
-        sock.destroy();
-        const b: RemoteBrowser = { name, address, port, id: String(m.id), key: Buffer.from(key).toString('hex'), browser: String(m.browser ?? 'browser'), profile: typeof m.profile === 'string' ? m.profile : undefined };
-        setRemoteBrowsers([...remoteBrowsers().filter((x) => x.name !== name), b]);
-        resolve(b);
-      } else stop(new Error('That is not an Agentic Routines host.'));
-    });
-    say(sock, { t: 'pair', nonce: nc, ecdh: pc, name: from });
+    ws.on('message', heard);
   });
+  server.on('error', (e: Error) => log(e.message));
+
+  const stop = () => {
+    for (const l of live.values()) l.ws.terminate();
+    server.close();
+    rmSync(file('listener.json'), { force: true });
+    process.exit(0);
+  };
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, stop);
+  mark();
+  setInterval(() => {
+    const now = listenConfig();
+    if (!now || now.address !== want.address || now.port !== want.port) return stop();
+    const known = pairedBrowsers();
+    for (const [id, l] of live) if (!Object.hasOwn(known, id)) l.ws.terminate();
+    mark();
+  }, BEAT_MS);
 }
 
-/** A proved connection, ready for the usual lines. */
-export async function connectRemote(b: Pick<RemoteBrowser, 'address' | 'port' | 'id' | 'key'>): Promise<Socket> {
-  const sock = await reach(b.address, b.port);
-  return new Promise((resolve, reject) => {
-    const nc = randomBytes(32).toString('hex');
-    const key = Buffer.from(b.key, 'hex');
-    const fail = (e: Error) => {
-      clearTimeout(timer);
-      sock.destroy();
-      reject(e);
-    };
-    const timer = setTimeout(() => fail(new Error(`${b.address}:${b.port} did not finish proving who it is.`)), HANDSHAKE_MS);
-    const closed = () => fail(new Error(`The browser at ${b.address}:${b.port} turned this connection down. It may have been revoked, so pair again.`));
-    sock.once('close', closed);
-    let nh = '';
-    const stop = lines(sock, (m) => {
-      if (m.t === 'challenge' && !nh) {
-        nh = String(m.nonce);
-        // The host goes first: nothing talks to one that cannot prove it holds the key.
-        if (!same(hmac(key, 'host', nc, nh), m.proof)) return fail(new Error(`What answered at ${b.address}:${b.port} does not hold the key, so it is not the browser you paired with.`));
-        say(sock, { t: 'proof', proof: hmac(key, 'client', nc, nh).toString('hex') });
-      } else if (m.t === 'ok' && nh) {
-        stop();
-        clearTimeout(timer);
-        sock.off('close', closed);
-        resolve(sock);
-      } else fail(new Error('That is not an Agentic Routines host.'));
-    });
-    say(sock, { t: 'hello', id: b.id, nonce: nc });
-  });
+/** Starts what listens, unless it is already there. It stays after this process ends. */
+export async function ensureListener(): Promise<ListenerState> {
+  const want = listenConfig();
+  if (!want) throw new Error('Nothing is set up to listen.');
+  const on = listenerState();
+  if (on && on.address === want.address && on.port === want.port) return on;
+  rmSync(file('listener-error.json'), { force: true });
+  const { AGENTIC_ROUTINES_SESSION: _, ...env } = process.env;
+  spawn(process.execPath, [...process.execArgv, process.argv[1], 'remote', 'serve'], { detached: true, stdio: 'ignore', env }).unref();
+  for (let i = 0; i < 100; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    const now = listenerState();
+    if (now && now.address === want.address && now.port === want.port) return now;
+    const failed = readJson<{ message: string } | null>('listener-error.json', null);
+    if (failed) throw new Error(failed.message);
+  }
+  throw new Error(`Could not start listening on ${want.address}:${want.port}.`);
+}
+
+// ---------- pairing ----------
+
+/** This machine's Tailscale address, the usual private network. CGNAT space, which little else uses. */
+function tailscaleAddress(): string | undefined {
+  for (const list of Object.values(networkInterfaces())) {
+    for (const i of list ?? []) {
+      if (i.family !== 'IPv4') continue;
+      const [a, b] = i.address.split('.').map(Number);
+      if (a === 100 && b >= 64 && b <= 127) return i.address;
+    }
+  }
+  return undefined;
+}
+
+function firstAddress(): string | undefined {
+  for (const list of Object.values(networkInterfaces())) for (const i of list ?? []) if (i.family === 'IPv4' && !i.internal) return i.address;
+  return undefined;
+}
+
+function parseAddress(s: string): ListenConfig {
+  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(s.trim());
+  const port = Number(m?.[2] ?? DEFAULT_PORT);
+  if (!m || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`“${s}” is not an address. Give one like 100.64.0.2, or 100.64.0.2:47931.`);
+  return { address: m[1].replace(/^\[|\]$/g, ''), port };
+}
+
+const shown = (address: string, port: number) => `${address.includes(':') ? `[${address}]` : address}:${port}`;
+
+/**
+ * Listens if it is not yet, and makes a code. The person's typing the two into the browser is what connects it, so handing them
+ * out needs no more care than this. With no address given: what it listens on already, else Tailscale, else this machine only.
+ */
+export async function startPairing(asked?: string): Promise<{ address: string; code: string; text: string }> {
+  const config = asked ? parseAddress(asked) : (listenConfig() ?? { address: tailscaleAddress() ?? '127.0.0.1', port: DEFAULT_PORT });
+  setListenConfig(config);
+  await ensureListener();
+  const code = mintCode();
+  const loopback = config.address === '127.0.0.1' || config.address === 'localhost' || config.address === '::1';
+  const everywhere = config.address === '0.0.0.0' || config.address === '::';
+  const address = shown(everywhere ? (firstAddress() ?? config.address) : config.address, config.port);
+  const lines = [
+    `On the computer with the browser, open the Agentic Routines side panel, then Settings, and under Another computer enter:`,
+    `  Address: ${address}`,
+    `  Code: ${code}`,
+    `The code works once, for 10 minutes. That computer only needs the browser and the extension. Once connected, agents here can use that browser with its sign-ins, so enter these only on a browser of your own.`,
+  ];
+  if (loopback) lines.push(`This computer listens only to itself, as it has no private network address that could be used. To connect over SSH, run this on the computer with the browser and leave it running: ssh -N -L ${config.port}:127.0.0.1:${config.port} ${hostname()}`, `Or use another address, such as a VPN's: agentic-routines remote pair <address>`);
+  else lines.push(`The link is not encrypted by us, so keep this address on Tailscale, WireGuard, an SSH tunnel or a network you trust.`);
+  return { address, code, text: lines.join('\n') };
 }

@@ -8,6 +8,8 @@ import type { GitCard } from '../remote/git';
 export interface PanelState {
   account?: Account;
   connected: boolean;
+  /** A link to an agent on another computer, when the person made one. */
+  link?: { address: string; computer: string; connected: boolean; error?: string };
   agents: string[];
   routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; stats?: Metered; lastRun?: number; changed?: number[]; draftedBy?: string; published?: { as: string; version: number }; origin?: { kind: 'directory' | 'github' | 'folder'; source: string; ref?: string }; blocked?: string; hooks?: { count: number; state: HookState; reason?: string } }[];
   runs: { id: string; source: string; startedAt: number; updatedAt: number; events: RecordedEvent[] }[];
@@ -50,6 +52,8 @@ export type PanelCommand =
   | { t: 'publish'; id: string }
   | { t: 'publishDecide'; approve: boolean; handle?: string }
   | { t: 'takeBack'; tabId: number }
+  | { t: 'linkPair'; address: string; code: string; acceptOpen?: boolean }
+  | { t: 'linkForget' }
   | { t: 'setting'; change: Partial<Settings> }
   | { t: 'sources' }
   | { t: 'sourceAdd'; address: string }

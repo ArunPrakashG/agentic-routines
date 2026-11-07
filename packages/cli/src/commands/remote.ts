@@ -1,113 +1,41 @@
-import { connect } from 'node:net';
-import { DEFAULT_PORT, listenConfig, mintCode, pair, pairedClients, remoteBrowsers, revokeClient, setListenConfig, setRemoteBrowsers } from '../host/remote.ts';
-import { hosts, type HostInfo } from '../mcp/bridge.ts';
-import { hostname } from 'node:os';
+import { ensureListener, listenConfig, listenerState, pairedBrowsers, revokeBrowser, runListener, setListenConfig, startPairing } from '../host/remote.ts';
 
-// `remote` is a browser on one machine and an agent on another. Opening the browser to a network is a person's call, so it asks
-// in the terminal, where an agent's shell is not.
-
-const USAGE = `Usage, on the machine with the browser:
-  agentic-routines remote listen <address> [--port n]   Listen on that address, such as a Tailscale one, or 0.0.0.0 for all
-  agentic-routines remote pair                          Make a one-time code
-  agentic-routines remote status                        What is listening, and who is paired
-  agentic-routines remote revoke <id>                   Take a key back, and drop its connections
-  agentic-routines remote stop                          Stop listening
-
-On the machine with the agent:
-  agentic-routines remote connect <address[:port]> <code> [--name name]
-  agentic-routines remote forget <name>`;
-
-const NOT_ENCRYPTED = 'The link is not encrypted: both sides prove who they are, then anyone on the path can read and change what passes, passwords included. Use Tailscale, WireGuard or a network you trust.';
-
-function askHost(h: HostInfo, method: string, params: unknown) {
-  return new Promise<unknown>((resolve, reject) => {
-    const s = connect(h.socket);
-    let buf = '';
-    s.on('connect', () => s.write(`${JSON.stringify({ id: 1, method, params })}\n`));
-    s.on('data', (d) => {
-      buf += d;
-      if (!buf.includes('\n')) return;
-      const m = JSON.parse(buf.slice(0, buf.indexOf('\n')));
-      s.destroy();
-      if (m.error) reject(new Error(m.error));
-      else resolve(m.result);
-    });
-    s.on('error', reject);
-  });
-}
-
-const tellHosts = async (params: unknown) => {
-  const open = await hosts();
-  return Promise.all(open.map((h) => askHost(h, 'host.remote', params).catch(() => null))) as Promise<({ address: string; port: number } | null)[]>;
-};
-
-const inTerminal = () => {
-  if (!process.stdin.isTTY) throw new Error('Run this yourself in a terminal, so that an agent cannot open your browser to a network.');
-};
+const USAGE = `Usage:
+  agentic-routines remote pair [address[:port]]  Listen, and make a code for a browser on another computer to enter
+  agentic-routines remote start                  Listen again, as set up before
+  agentic-routines remote status                 What is listening, and the browsers paired with this computer
+  agentic-routines remote revoke <id>            Take a browser's key back and close its connection
+  agentic-routines remote stop                   Stop listening. Paired browsers try again until you start it again`;
 
 export async function runRemote(args: string[]): Promise<void> {
-  const [what, ...rest] = args;
-  const flag = (name: string) => {
-    const at = rest.indexOf(`--${name}`);
-    return at >= 0 ? rest[at + 1] : undefined;
-  };
+  const [what, arg] = args;
   switch (what) {
-    case 'listen': {
-      inTerminal();
-      const address = rest[0];
-      if (!address || address.startsWith('--')) throw new Error(USAGE);
-      const port = Number(flag('port') ?? DEFAULT_PORT);
-      if (!Number.isInteger(port) || port < 1 || port > 65525) throw new Error('A port is a number up to 65525.');
-      setListenConfig({ address, port });
-      const on = (await tellHosts({ op: 'sync' })).filter(Boolean);
-      console.log(on.length ? on.map((l) => `Listening on ${l!.address}:${l!.port}`).join('\n') : `Saved. It starts listening on ${address}:${port} when a browser with the extension opens.`);
-      console.log(`DevTools and everything else stay on 127.0.0.1.\n${NOT_ENCRYPTED}\nNext: agentic-routines remote pair`);
+    case 'serve':
+      return runListener();
+    case 'pair':
+      console.log((await startPairing(arg)).text);
       return;
-    }
-    case 'stop':
-      setListenConfig(null);
-      await tellHosts({ op: 'sync' });
-      return console.log('Not listening any more.');
-    case 'pair': {
-      inTerminal();
-      if (!listenConfig()) throw new Error('Nothing is listening. Start with: agentic-routines remote listen <address>');
-      console.log(`${mintCode()}\n\nIt works once, for 10 minutes. On the machine with the agent:\n  agentic-routines remote connect <this machine's address> <code>`);
-      return;
-    }
     case 'status': {
       const config = listenConfig();
-      console.log(config ? `Set to listen on ${config.address}:${config.port}.` : 'Not listening.');
-      for (const h of await hosts()) if (h.listening) console.log(`  ${h.browser}${h.profile ? ` ${h.profile.slice(0, 4)}` : ''} on ${h.listening.address}:${h.listening.port}`);
-      const clients = Object.entries(pairedClients());
-      if (clients.length) console.log(`Paired here:\n${clients.map(([id, c]) => `  ${id}  ${c.name}  since ${new Date(c.pairedAt).toISOString().slice(0, 10)}`).join('\n')}`);
-      const far = remoteBrowsers();
-      if (far.length) console.log(`Browsers on other machines:\n${far.map((b) => `  ${b.name}  ${b.browser} at ${b.address}:${b.port}`).join('\n')}`);
+      const on = listenerState();
+      console.log(on ? `Listening on ${on.address}:${on.port}.` : config ? `Set to listen on ${config.address}:${config.port}, but nothing is listening. It starts with the next agent, or with "remote pair".` : 'Not listening.');
+      const paired = Object.entries(pairedBrowsers());
+      for (const [id, b] of paired) console.log(`  ${id}  ${b.name}, paired ${new Date(b.pairedAt).toISOString().slice(0, 10)}${on?.connected.some((c) => c.id === id) ? ', connected' : ''}`);
+      if (!paired.length) console.log('No browser is paired.');
       return;
     }
-    case 'revoke': {
-      const id = rest[0];
-      if (!id) throw new Error(USAGE);
-      if (!revokeClient(id)) throw new Error(`Nothing is paired as ${id}.`);
-      await tellHosts({ op: 'revoke', id });
-      return console.log('Revoked. Its connections are closed.');
-    }
-    case 'connect': {
-      const [where, code] = rest;
-      if (!where || !code) throw new Error(USAGE);
-      const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(where);
-      if (!m) throw new Error(USAGE);
-      const address = m[1].replace(/[[\]]/g, '');
-      const name = flag('name') ?? address;
-      const b = await pair(address, Number(m[2] ?? DEFAULT_PORT), code, name, hostname());
-      console.log(`Paired with ${b.browser} at ${b.address}:${b.port}, as “${name}”. A key is kept in this machine's Agentic Routines folder.\n${NOT_ENCRYPTED}`);
+    case 'revoke':
+      if (!arg) throw new Error(USAGE);
+      if (!revokeBrowser(arg)) throw new Error(`No browser is paired with the id ${arg}. "remote status" lists them.`);
+      console.log('Taken back. Its connection closes within a few seconds.');
       return;
-    }
-    case 'forget': {
-      const name = rest[0];
-      if (!name) throw new Error(USAGE);
-      setRemoteBrowsers(remoteBrowsers().filter((b) => b.name !== name));
-      return console.log(`Forgot ${name}. The other machine still lists it until you revoke it there.`);
-    }
+    case 'stop':
+      setListenConfig(null);
+      console.log('It stops within a few seconds.');
+      return;
+    case 'start':
+      await ensureListener();
+      return;
     default:
       throw new Error(USAGE);
   }

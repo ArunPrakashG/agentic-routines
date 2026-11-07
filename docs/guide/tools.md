@@ -29,6 +29,8 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `form_input` | Bring a field to a value: a checkbox, switch or radio (`true` or `false`), a select, a slider, a date, a time, a colour, or text. What is ticked already stays ticked. |
 | `find` | Look for words on the page, with no model. Gives refs, controls first, including things a page made clickable without saying so. |
 | `get_page_text` | The words of the page as a person reads them, for an article or a long result. |
+| `download` | See what the browser has downloaded since the agent started, and get a file's path. See [A browser on another computer](remote.md) for what happens when the browser is there. |
+| `remote_pair` | Give the person an address and a one-time code, to connect a browser on [another computer](remote.md). |
 | `upload` | Attach files from this machine. Pass the `ref` of the file input, or of the button, label or drop zone in front of it, and an absolute `path` (or `paths` for several). See below. |
 | `press` | Press keys in the focused element: Enter, Escape, ArrowDown, `ctrl+a`. Several, separated by spaces, go one after another; `repeat` presses it that many times. |
 | `screenshot` | The area around the last element, or the whole tab with `full: true`, or part of the last picture enlarged with `region`. `read_page` costs less. |

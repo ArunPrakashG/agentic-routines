@@ -5,7 +5,7 @@ import { BROWSERS, type OS } from '@agentic-routines/browsers';
 import { agentStatus } from './agents.ts';
 import { clientStatus } from './clients.ts';
 import { debugOn } from '../debug.ts';
-import { connectRemote, listenConfig, pairedClients, remoteBrowsers } from '../host/remote.ts';
+import { listenConfig, listenerState, pairedBrowsers } from '../host/remote.ts';
 import { hosts, profileLabel } from '../mcp/bridge.ts';
 import { autoOn, hasKey, launcher, updateState, version } from '../update.ts';
 import { connected } from './tool.ts';
@@ -64,13 +64,9 @@ export async function runDoctor() {
 
   const listen = listenConfig();
   if (listen) {
-    const on = open.filter((h) => h.listening);
-    (on.length || !open.length ? ok : no)('Listening', `${on.length ? on.map((h) => `${h.listening!.address}:${h.listening!.port}`).join(', ') : `set to ${listen.address}:${listen.port}, once a browser opens`}. Not encrypted, so keep it on Tailscale, WireGuard or a network you trust. ${Object.keys(pairedClients()).length} paired`);
-  }
-  for (const b of remoteBrowsers()) {
-    const up = await connectRemote(b).then((s) => (s.destroy(), true), () => false);
-    // Not a failure: a laptop that is closed is just closed.
-    lines.push(`${up ? '✓' : '·'} ${`Remote: ${b.name}`.padEnd(22)} ${b.browser} at ${b.address}:${b.port}${up ? ' answers and holds the key' : ' does not answer now'}`);
+    const on = listenerState();
+    const paired = Object.keys(pairedBrowsers()).length;
+    (on ? ok : no)('Another computer', on ? `listening on ${on.address}:${on.port}, not encrypted, so keep it on Tailscale, an SSH tunnel or a network you trust. ${paired} paired, ${on.connected.length} connected` : `set to listen on ${listen.address}:${listen.port}, but nothing is. It starts with the next agent, or with: agentic-routines remote start`);
   }
 
   try {

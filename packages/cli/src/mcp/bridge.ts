@@ -3,7 +3,6 @@ import { readdir, readFile, rm } from 'node:fs/promises';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import { current, debugOn, record, redact } from '../debug.ts';
-import { connectRemote, remoteBrowsers, type ListenConfig, type RemoteBrowser } from '../host/remote.ts';
 import { marksOn } from '../marks.ts';
 import { paths } from '../paths.ts';
 import * as profileNames from '../store/profiles.ts';
@@ -19,6 +18,8 @@ export class NotConnected extends Error {
 }
 
 export interface HostInfo {
+  /** The browser is on another computer, connected over the link. */
+  onLink?: boolean;
   pid: number;
   socket: string;
   browser: string;
@@ -29,10 +30,6 @@ export interface HostInfo {
   startedAt: number;
   /** When the person last used a window of that profile. */
   focusedAt?: number;
-  /** The network address its host listens on, when it does. */
-  listening?: ListenConfig;
-  /** A browser on another machine, paired with `remote connect`. */
-  remote?: RemoteBrowser;
 }
 
 export interface BrowserProfile {
@@ -73,17 +70,11 @@ export async function hosts(): Promise<HostInfo[]> {
   return out.sort((a, b) => b.startedAt - a.startedAt);
 }
 
-/** Browsers here, then those paired on other machines. Whether one of those is open shows when it is tried. */
-async function everyHost(): Promise<HostInfo[]> {
-  const far = remoteBrowsers().map((b): HostInfo => ({ pid: 0, socket: '', browser: b.browser, profile: `remote:${b.name}`, startedAt: 0, remote: b }));
-  return [...(await hosts()), ...far];
-}
-
 /** What a person would call a profile: the name they gave it, the account it is signed in with, else the browser and the start of its id. */
 export async function profileLabel(h: HostInfo): Promise<string> {
-  if (h.remote) return h.remote.name;
   const given = h.profile ? (await profileNames.names())[h.profile] : undefined;
-  return given ?? h.email ?? `${h.browser}${h.profile ? ` ${h.profile.slice(0, 4)}` : ''}`;
+  const label = given ?? h.email ?? `${h.browser}${h.profile ? ` ${h.profile.slice(0, 4)}` : ''}`;
+  return h.onLink ? `${label} on another computer` : label;
 }
 
 export class Bridge {
@@ -110,14 +101,9 @@ export class Bridge {
     return this.host?.browser;
   }
 
-  /** The browser is on another machine, so what it saves and writes stays there. */
-  get remote(): boolean {
-    return !!this.host?.remote;
-  }
-
   /** Every browser profile with the extension that is open now. */
   async profiles(): Promise<BrowserProfile[]> {
-    const all = await everyHost();
+    const all = await hosts();
     // Before the first action nothing is connected yet: the one that would be used is the current one.
     const live = this.sock && !this.sock.destroyed ? this.host : undefined;
     const target = live ?? (all.length ? await this.pick(all).catch(() => undefined) : undefined);
@@ -185,7 +171,7 @@ export class Bridge {
 
   private async open(): Promise<Socket> {
     if (this.sock && !this.sock.destroyed) return this.sock;
-    const all = await everyHost();
+    const all = await hosts();
     if (!all.length) throw new NotConnected();
     const h = await this.pick(all);
     if (all.length > 1 && !this.told) {
@@ -193,17 +179,13 @@ export class Bridge {
       const labels = (await Promise.all(all.map(profileLabel))).join(', ');
       this.note = `Working in ${await profileLabel(h)}. ${all.length} browser profiles are open (${labels}), and this is the one the person used last. To use another, call browser_profile with use; it stays for this session.`;
     }
-    let sock: Socket;
-    if (h.remote) sock = await connectRemote(h.remote);
-    else {
-      sock = connect(h.socket);
-      await new Promise<void>((res, rej) => {
-        sock.once('connect', res);
-        sock.once('error', rej);
-      }).catch(() => {
-        throw new NotConnected();
-      });
-    }
+    const sock = connect(h.socket);
+    await new Promise<void>((res, rej) => {
+      sock.once('connect', res);
+      sock.once('error', rej);
+    }).catch(() => {
+      throw new NotConnected();
+    });
     sock.on(
       'data',
       lineReader((m) => {

@@ -146,7 +146,7 @@ Issues and pull requests are welcome. Open an issue first for anything large, so
 
 ## Security
 
-Routines and recordings stay on your computer. Nothing is sent unless you sign in and choose to publish. See [docs/privacy.md](docs/privacy.md). A routine fetched from outside is checked again on your machine before it is installed, and an edit cannot remove a pause that was detected.
+Routines and recordings stay on your computer. Nothing is sent unless you sign in and choose to publish, or connect your browser to an agent on another computer of yours. See [docs/privacy.md](docs/privacy.md). A routine fetched from outside is checked again on your machine before it is installed, and an edit cannot remove a pause that was detected.
 
 Please do not report a vulnerability in a public issue. Use the repository's private vulnerability report on the Security tab.
 

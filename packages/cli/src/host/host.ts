@@ -3,8 +3,7 @@ import { appendFile, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { cdpRelay } from './cdp.ts';
-import { remoteHost, type ListenConfig } from './remote.ts';
-import { checkUpload, MAX_STREAM, mb } from './files.ts';
+import { checkUpload, MAX_STREAM, MAX_UPLOAD, mb } from './files.ts';
 import { valueFor } from '../store/secrets.ts';
 import { paths, socketPath } from '../paths.ts';
 import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from '../protocol.ts';
@@ -18,6 +17,9 @@ import * as store from '../store/routines.ts';
 // A multiple of three, so the pieces of a file join as base64 without re-encoding.
 const CHUNK = 639 * 1024;
 
+/** Set when this host serves a browser on another computer: 'private' when the way there is a tunnel, 'plain' when anyone on it can read it. */
+const LINK = process.env.AGENTIC_ROUTINES_LINK;
+
 function log(...a: unknown[]) {
   try {
     appendFileSync(paths.log(), `${new Date().toISOString()} [${process.pid}] ${a.map(String).join(' ')}\n`);
@@ -28,9 +30,6 @@ function log(...a: unknown[]) {
 
 // What an agent may ask of the host over the socket. Changing sources and installing from them is only
 // ever done from the browser, after the person clicked.
-/** What an agent on another machine can ask for. Not the files here, nor the DevTools address that stays on this machine. */
-const OVER_A_LINK = /^(browser|draft|replay|runs)\.|^agent\.hello$|^store\.read$|^host\.info$/;
-
 const AGENT_MAY = new Set(['store.list', 'store.read', 'store.write', 'store.remove', 'store.setEnabled', 'sources.list', 'sources.entries', 'sources.preview']);
 
 export async function handleStore(method: string, p: any, fromBrowser = true): Promise<unknown> {
@@ -77,19 +76,33 @@ async function appendCapture(p: { name: string; data: string; base64: boolean })
   return { path, bytes: (await stat(path)).size };
 }
 
+const DOWNLOAD_NAME = /^[\w.-]{1,160}$/;
+
+/** A file a browser on another computer downloaded, coming here in pieces. The name is checked, so nothing lands outside its folder. */
+async function appendDownload(p: { name: string; data: string }) {
+  if (!DOWNLOAD_NAME.test(p.name) || p.name.includes('..')) throw new Error('Not a name for a download');
+  const dir = paths.downloads();
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, p.name);
+  if (((await stat(path).catch(() => undefined))?.size ?? 0) > MAX_UPLOAD) throw new Error('That download is over the 2 GB limit.');
+  await appendFile(path, Buffer.from(p.data, 'base64'), { mode: 0o600 });
+  return { path, bytes: (await stat(path)).size };
+}
+
 async function removeCapture(p: { path: string }) {
   if (dirname(p.path) !== paths.captures() || !CAPTURE_NAME.test(basename(p.path))) throw new Error('Not a capture');
   await rm(p.path, { force: true });
   return true;
 }
 
-/** Captures can hold whatever was on the page. They do not stay for ever. */
+/** Captures and downloads can hold whatever was on the page. They do not stay for ever. */
 async function pruneCaptures() {
-  const dir = paths.captures();
-  for (const f of await readdir(dir).catch(() => [] as string[])) {
-    const path = join(dir, f);
-    const s = await stat(path).catch(() => undefined);
-    if (s && Date.now() - s.mtimeMs > CAPTURE_DAYS * 86_400_000) await rm(path, { force: true }).catch(() => {});
+  for (const dir of [paths.captures(), paths.downloads()]) {
+    for (const f of await readdir(dir).catch(() => [] as string[])) {
+      const path = join(dir, f);
+      const s = await stat(path).catch(() => undefined);
+      if (s && Date.now() - s.mtimeMs > CAPTURE_DAYS * 86_400_000) await rm(path, { force: true }).catch(() => {});
+    }
   }
 }
 
@@ -108,10 +121,9 @@ export function runHost(): void {
   // Which profile of that browser, as it says in hello. The file is rewritten when any of it changes.
   let profile: string | undefined;
   let email: string | undefined;
-  let listening: ListenConfig | undefined;
   const startedAt = Date.now();
   let focusedAt = startedAt;
-  const writeInfo = () => writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, profile, email, listening, startedAt, focusedAt }), { mode: 0o600 });
+  const writeInfo = () => writeFileSync(info, JSON.stringify({ pid: process.pid, socket: sock, browser, profile, email, startedAt, onLink: !!LINK || undefined, focusedAt }), { mode: 0o600 });
   // Files an agent asked to upload. The extension can read only these.
   const allowed = new Map<string, number>();
 
@@ -171,16 +183,12 @@ export function runHost(): void {
     rmSync(info, { force: true });
   };
 
-  const serve = (client: Socket, fromAfar = false) => {
+  const server = createServer((client) => {
     clients.add(client);
     client.on(
       'data',
       lineReader(async (m) => {
         if (!isRequest(m)) return;
-        if (fromAfar && !OVER_A_LINK.test(m.method)) {
-          toClient(client, { id: m.id, error: `${m.method} is not available over a remote link: it would reach this machine's files or its local DevTools address.` });
-          return;
-        }
         const session = (m.params as { session?: string } | undefined)?.session;
         // A named session outlives its connection. It ends when it is told to.
         if (session && !session.startsWith('named:')) sessions.set(client, (sessions.get(client) ?? new Set()).add(session));
@@ -194,15 +202,6 @@ export function runHost(): void {
             toBrowser({ event: 'routines.changed' });
             for (const c of clients) if (c !== client) toClient(c, { event: 'routines.changed' });
           }
-          return;
-        }
-        if (m.method === 'host.remote') {
-          const q = (m.params ?? {}) as { op?: string; id?: string };
-          if (q.op === 'revoke' && q.id) remote.drop(q.id);
-          remote.sync().then(
-            (result) => toClient(client, { id: m.id, result: result ?? null }),
-            (e) => toClient(client, { id: m.id, error: (e as Error).message }),
-          );
           return;
         }
         if (m.method === 'host.info') {
@@ -239,16 +238,6 @@ export function runHost(): void {
     };
     client.on('close', drop);
     client.on('error', drop);
-  };
-  const server = createServer((client) => serve(client));
-  const remote = remoteHost({
-    attach: (s) => serve(s, true),
-    me: () => (browser === 'unknown' ? undefined : { browser, profile, email }),
-    log: (t) => log(t),
-    listening: (l) => {
-      listening = l;
-      writeInfo();
-    },
   });
 
   process.stdin.on(
@@ -274,7 +263,6 @@ export function runHost(): void {
           profile = typeof hello.profile === 'string' ? hello.profile : undefined;
           email = typeof hello.email === 'string' ? hello.email : undefined;
           writeInfo();
-          void remote.sync();
           toBrowser({ id: req.id, result: { pid: process.pid, version: process.env.npm_package_version ?? '0.1.0' } });
           return;
         }
@@ -289,6 +277,10 @@ export function runHost(): void {
         // Only the browser can ask: this branch hears nothing from an agent's connection. It names the site, and gets nothing for any other.
         if (req.method === 'host.secret') {
           const q = req.params as { name: string; origin: string };
+          if (LINK === 'plain') {
+            toBrowser({ id: req.id, error: `The secret ${q.name} stays on this computer: the browser is connected over a plain link, where anyone on the way could read it. Connect it through Tailscale or an SSH tunnel, or let the person type it there.` });
+            return;
+          }
           valueFor(String(q.name), String(q.origin)).then(
             (result) => toBrowser({ id: req.id, result }),
             (e) => toBrowser({ id: req.id, error: (e as Error).message }),
@@ -303,7 +295,19 @@ export function runHost(): void {
           );
           return;
         }
+        if (req.method === 'fs.download') {
+          appendDownload(req.params as { name: string; data: string }).then(
+            (result) => toBrowser({ id: req.id, result }),
+            (e) => toBrowser({ id: req.id, error: (e as Error).message }),
+          );
+          return;
+        }
         if (req.method === 'host.allowFiles') {
+          // Over a link, the files here are only for what an agent here named.
+          if (LINK) {
+            toBrowser({ id: req.id, error: 'The browser is on another computer, so it cannot name files on this one. Ask the agent to do it, or copy the file over.' });
+            return;
+          }
           allowFiles((req.params as { paths: string[] }).paths).then(
             (result) => toBrowser({ id: req.id, result }),
             (e) => toBrowser({ id: req.id, error: (e as Error).message }),

@@ -32,7 +32,7 @@ export default defineConfig({
     description: "A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.",
     homepage_url: 'https://agenticroutines.arunprakashg.com',
     ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
-    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', 'webNavigation', 'webRequest', 'declarativeNetRequestWithHostAccess', 'notifications', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', 'offscreen', 'tabGroups'])],
+    permissions: ['nativeMessaging', 'alarms', 'downloads', 'tabs', 'scripting', 'storage', 'identity', 'webNavigation', 'webRequest', 'declarativeNetRequestWithHostAccess', 'notifications', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', 'offscreen', 'tabGroups'])],
     // Hook code runs in the sandbox page, which can reach nothing: no network, no extension API. Chromium only.
     ...(browser === 'firefox' || STORE
       ? {}
@@ -48,8 +48,8 @@ export default defineConfig({
             gecko: {
               id: 'agentic-routines@agentic-routines.dev',
               strict_min_version: '128.0',
-              // Nothing leaves the browser except a Google sign-in, which is optional.
-              data_collection_permissions: { required: ['none'], optional: ['authenticationInfo', 'personallyIdentifyingInfo'] },
+              // Nothing leaves the browser except a Google sign-in and a link to the person's own computer, both optional.
+              data_collection_permissions: { required: ['none'], optional: ['authenticationInfo', 'personallyIdentifyingInfo', 'websiteContent', 'websiteActivity'] },
             },
           },
         }

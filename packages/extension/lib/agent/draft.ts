@@ -52,7 +52,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const meta = { name: String(p.name), description: String(p.description), doNotUse: p.do_not_use_for as string | undefined };
       let d: Draft;
       if (p.from_routine) {
-        const r = await native.call<Routine & { owner: string }>('store.read', { id: p.from_routine });
+        const r = await native.call<Routine & { owner: string }>('store.read', { id: p.from_routine }, { session: p.session });
         d = draftFromRoutine(r, { name: p.name ? meta.name : undefined, description: p.description ? meta.description : undefined, doNotUse: meta.doNotUse });
       } else {
         const run = await runs.get(p.run_id, p.session);
@@ -107,7 +107,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       if (problems.length) throw new Error(`Not saved. ${problems.join(' ')}`);
       // A routine that is already saved is only replaced after the new steps ran well.
       if (d.base && !(d.tested?.ok && d.tested.rev === d.rev)) throw new Error(`Not saved. This replaces ${d.base.name} v${d.base.version}, so test the latest edit first with routine_test${d.tested && d.tested.rev === d.rev ? `. The last test did not pass: ${d.tested.summary}` : ''}.`);
-      const saved = await native.call<Routine>('store.write', { routine });
+      const saved = await native.call<Routine>('store.write', { routine }, { session: p.session });
       // Only when it came from a run: refining a saved routine does not change what it replaced.
       const run = d.runId ? await runs.get(d.runId).catch(() => undefined) : undefined;
       const by_hand = run && byHandOf(d.steps.map((x) => x.ts), run, Date.now());

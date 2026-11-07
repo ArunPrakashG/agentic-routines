@@ -6,6 +6,7 @@ import * as draft from '../lib/agent/draft';
 import * as git from '../lib/remote/git';
 import * as hooks from '../lib/replay/hooks';
 import * as native from '../lib/agent/native';
+import { onPrivateNetwork } from '../lib/agent/link';
 import { platform } from '../lib/platform';
 import * as replay from '../lib/replay/replay';
 import * as runs from '../lib/agent/runs';
@@ -255,6 +256,7 @@ export default defineBackground(() => {
     return {
       account: await auth.account(),
       connected: native.connected(),
+      link: await native.linkStatus(),
       agents: [...new Set(agents.values())],
       routines: await Promise.all(
         routines.map(async (x) => {
@@ -379,6 +381,13 @@ export default defineBackground(() => {
       case 'setting':
         await changeSettings(c.change);
         return;
+      case 'linkPair':
+        if (!onPrivateNetwork(c.address) && !c.acceptOpen) throw new Error('This address is not on a private network, so it needs your say-so.');
+        await native.pair(c.address, c.code);
+        return void push();
+      case 'linkForget':
+        await native.forget();
+        return void push();
       case 'takeBack':
         await giveBack(c.tabId);
         return;
@@ -476,7 +485,8 @@ export default defineBackground(() => {
   }
 
   browser.runtime.onConnect.addListener((port) => {
-    if (port.name !== 'panel') return;
+    // Only the extension's own pages. A content script has the page's address, and must not reach what these commands can do.
+    if (port.name !== 'panel' || !port.sender?.url?.startsWith(browser.runtime.getURL(''))) return;
     panels.add(port);
     port.onDisconnect.addListener(() => panels.delete(port));
     auth.check();
@@ -531,6 +541,11 @@ export default defineBackground(() => {
 
   // The session stays out of reach of content scripts.
   (browser.storage.local as any).setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
+
+  // A link to another computer is only a socket, so a service worker that went to sleep comes back for it this way.
+  browser.alarms.onAlarm.addListener((a) => {
+    if (a.name === 'link') void native.connectLink();
+  });
 
   // Chrome only wakes a service worker for an event, and agents need the host up.
   browser.runtime.onStartup.addListener(() => {});

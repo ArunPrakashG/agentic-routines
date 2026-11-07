@@ -97,7 +97,7 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
   stats               What the routines on this computer have saved, this week and per routine
   profiles            List the browser profiles that are open; "profiles name <number> <name>" names one
   secrets             Keep a password or one-time code seed for one site, for routines to use: "secrets add <name> --origin <origin>" [--totp]. Agents get the name only
-  remote              A browser on another machine: "remote listen", "remote pair" there, "remote connect" here
+  remote              A browser on another computer: "remote pair" makes an address and code to enter in its side panel
   session             List named sessions; "session allow <name> <site>" and "session write <name>" widen one
   marks [on|off]      Annotate screenshots: a numbered box and label on what the agent clicked or typed into
   debug [on|off]      Record every tool call an agent makes, with arguments, time and result (typed text and secrets left out)

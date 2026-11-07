@@ -8,7 +8,7 @@ const spent = new Map<string, string>();
 const inTab = new Map<number, string>();
 
 /** Fetch the value for this field, or refuse. The field is masked first, so nothing that looks at the page afterwards can read it. */
-export async function secretForField(tabId: number, ref: string, name: string): Promise<string> {
+export async function secretForField(tabId: number, ref: string, name: string, session?: string): Promise<string> {
   const frame = await browser.webNavigation.getFrame({ tabId, frameId: frameOf(ref) });
   let origin = 'null';
   try {
@@ -16,7 +16,7 @@ export async function secretForField(tabId: number, ref: string, name: string): 
   } catch {
     // Reads as no origin, which no secret is kept for.
   }
-  const value = await native.call<string>('host.secret', { name, origin });
+  const value = await native.call<string>('host.secret', { name, origin }, { session });
   // The page may have moved on since the frame was read. The page itself is asked, last thing.
   await ask(tabId, { t: 'secretField', ref, origin });
   if (value.length >= 4) spent.set(value, name);
