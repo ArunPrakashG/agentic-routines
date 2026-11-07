@@ -28,7 +28,7 @@ It is made for agents, not people. You do not record or manage anything: your ag
 - Install routines other people maintain, so your agent skips the recording.
 - Checks the page before each step. If a step clearly changed, your agent fixes just that step.
 - Pauses before steps that cannot be undone, such as submit, publish, pay or delete.
-- Never stores secrets. Recordings stay on your computer.
+- Keeps no secrets unless you save one yourself, on your computer, for a single site. Agents only see its name. Recordings stay on your computer.
 - Free and open source.
 
 Needs one free command to connect your browser and your agent: `npx agentic-routines setup`.

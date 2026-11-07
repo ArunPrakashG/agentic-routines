@@ -35,6 +35,15 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
 
+### Secrets
+
+| Tool | What it does |
+|---|---|
+| `secrets_list` | The secrets the person keeps: names and the one site each works on |
+| `type_secret` | Type one into a field by name. It goes in only on the site it was kept for, and the value never comes back |
+
+See [Secrets you keep for a site](safety.md#secrets-you-keep-for-a-site).
+
 ### Settings and status
 
 | Tool | What it does |

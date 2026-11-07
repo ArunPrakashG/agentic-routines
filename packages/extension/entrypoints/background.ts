@@ -13,6 +13,7 @@ import { watchDialogs } from '../lib/page/dialogs';
 import { watchLogs } from '../lib/page/logs';
 import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
 import { policyOf } from '../lib/page/policy';
+import { scrub, scrubText, watchSecrets } from '../lib/page/secrets';
 import { changeSettings, onSettingsChanged, settings } from '../lib/page/settings';
 import { ask, heldBy, isLent, lend, lentTabs, releaseSession, takeBack, tellAll, watchTabs } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
@@ -27,7 +28,15 @@ export default defineBackground(() => {
   watchLogs();
 
   // ---------- requests from the MCP server, through the host ----------
+  // Whatever goes back to an agent, with any stored secret that has been used taken out of it.
   native.onRequest(async (method, p) => {
+    try {
+      return scrub(await answer(method, p));
+    } catch (e) {
+      throw new Error(scrubText((e as Error).message));
+    }
+  });
+  const answer = async (method: string, p: any) => {
     if (method.startsWith('browser.') || method === 'runs.get' || method === 'runs.repeat') return agent.handle(method, p);
     if (method.startsWith('draft.')) return draft.handle(method, p);
     if (method === 'runs.markSaved') return runs.markSaved(p.run_id);
@@ -47,7 +56,7 @@ export default defineBackground(() => {
       return true;
     }
     throw new Error(`Unknown method ${method}`);
-  });
+  };
 
   /** Written by someone else: from the directory, a Git source or a folder. The list says so, not the routine. */
   function isForeign(r: Routine): boolean {
@@ -56,6 +65,7 @@ export default defineBackground(() => {
   }
 
   onSettingsChanged(() => push());
+  watchSecrets();
   browser.notifications?.onClicked.addListener((id) => {
     const tabId = Number(/^handoff-(\d+)$/.exec(id)?.[1]);
     if (!tabId) return;

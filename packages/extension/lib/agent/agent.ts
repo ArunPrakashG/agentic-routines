@@ -12,6 +12,7 @@ import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
+import { refuseScript, secretForField } from '../page/secrets';
 import { changeSettings, settings } from '../page/settings';
 import { adopt, agentTabId, ask, cleanUp, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, lentTabs, nameSession, noteSession, onItsSites, openTab, releaseSession, sessionTabs, settle, takePopupRefused, takeSpawned, waitLoaded } from '../page/tabs';
 import { listed, notListed, policyOf, setPolicy, takeRefused } from '../page/policy';
@@ -189,7 +190,11 @@ async function act(source: string, session: string | undefined, tabId: number, r
   let note: string | undefined;
   if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!);
   else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
-  else note = await perform(tabId, ref, action, value, how);
+  else {
+    // Asked for at the last moment, for this field, and kept nowhere. What is recorded is the name.
+    const stored = /^\{\{secret:([a-z0-9_]+)\}\}$/.exec(value ?? '')?.[1];
+    note = await perform(tabId, ref, action, stored ? await secretForField(tabId, ref, stored) : value, how);
+  }
   const after = await settle(tabId, before);
   // A click on a tick is kept as what it came to, or a replay would untick what is already ticked.
   if (action === 'click' && d.state !== undefined && after === before && !how?.button && !how?.count) {
@@ -211,8 +216,8 @@ async function act(source: string, session: string | undefined, tabId: number, r
     target: d.loc,
     field: d.field,
     fieldLabel: d.label,
-    // A password the agent typed is never kept.
-    value: d.field === 'password' ? undefined : value,
+    // A password the agent typed is never kept. A stored secret is kept as its name.
+    value: d.field === 'password' && !value?.startsWith('{{secret:') ? undefined : value,
     page: d.page,
     crop,
     view: d.view,
@@ -409,6 +414,12 @@ export async function handle(method: string, p: any): Promise<unknown> {
       if (p.submit) await act(source, p?.session, tabId, p.ref, 'press', 'Enter');
       return `Typed into “${d.label || d.loc.name || d.loc.tag}”.${dialogNote(tabId)}`;
     }
+    case 'browser.type_secret': {
+      const tabId = await working(p?.session, p.tab_id);
+      const { d } = await act(source, p?.session, tabId, p.ref, 'type', `{{secret:${p.name}}}`);
+      if (p.submit) await act(source, p?.session, tabId, p.ref, 'press', 'Enter');
+      return { typed_into: d.label, url: (await browser.tabs.get(tabId)).url };
+    }
     case 'browser.select': {
       const tabId = await working(p?.session, p.tab_id);
       const { d } = await act(source, p?.session, tabId, p.ref, 'select', p.value, {}, { on: !!p.mark, note: p.note });
@@ -441,6 +452,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.javascript': {
       const tabId = await working(p?.session, p.tab_id);
+      refuseScript(tabId);
       const { url } = await browser.tabs.get(tabId);
       if (!/^https?:/.test(url ?? '')) throw new Error('A script can only run on a website.');
       await mayRunScript(new URL(url!).host, p.code, source);

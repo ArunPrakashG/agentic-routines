@@ -120,7 +120,13 @@ export function stepBuilder(opts: Pick<CompileOptions, 'params' | 'fixed'>) {
       // A crop of the recorded row says nothing about the row that is first next time.
       delete step.crop;
     }
-    if (e.field === 'password') {
+    if (/^\{\{secret:[a-z0-9_]+\}\}$/.test(e.value ?? '')) {
+      // A secret the person stored, typed by its name: the name is what is recorded.
+      const name = /secret:([a-z0-9_]+)/.exec(e.value!)![1];
+      if (!secrets.includes(name)) secrets.push(name);
+      step.value = e.value;
+      delete step.crop;
+    } else if (e.field === 'password') {
       const name = uniq(snake(e.fieldLabel || 'password'), secrets);
       secrets.push(name);
       step.value = `{{secret:${name}}}`;

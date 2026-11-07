@@ -1,3 +1,4 @@
+import { secretForField } from '../page/secrets';
 import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { challengeOn, uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
@@ -216,6 +217,8 @@ async function stayOnSite(s: ReplayState) {
 function pauseFor(s: ReplayState, step: Step): 'asked' | 'forced' | undefined {
   if (step.pause) return 'asked';
   if (s.foreign && isIrreversible({ action: step.action, target: step.target })) return 'forced';
+  // Someone else's routine does not get to use what the person saved without them seeing the step.
+  if (s.foreign && step.value?.includes('{{secret:') && !s.secrets[/secret:([a-z0-9_]+)/.exec(step.value)?.[1] ?? '']) return 'forced';
   return undefined;
 }
 
@@ -447,7 +450,10 @@ async function hook(s: ReplayState, event: HookEvent, step?: Step, o: { targetRe
 }
 
 async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {}): Promise<'next' | 'stop'> {
-  let value = ov.value ?? fill(step.value, s.params, s.secrets);
+  // A secret the person stored is fetched at the field it goes in, and only there.
+  const stored = ov.value === undefined && step.action === 'type' ? /^\{\{secret:([a-z0-9_]+)\}\}$/.exec(step.value ?? '')?.[1] : undefined;
+  const fromStore = stored !== undefined && s.secrets[stored] === undefined ? stored : undefined;
+  let value = fromStore ? undefined : (ov.value ?? fill(step.value, s.params, s.secrets));
   const kind = step.action;
   const hooked = ['click', 'type', 'select', 'upload', 'navigate', 'press', 'read'].includes(kind);
   const urlOf = async () => (await browser.tabs.get(s.tabId)).url ?? '';
@@ -545,7 +551,10 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     if (end.kind !== 'found') throw new Error(`Stopped: step ${step.n} drags to something that is not on the page`);
     await input(s.tabId, ref, kind, undefined, { ...step.pointer, toRef: end.ref });
   }
-  else await input(s.tabId, ref, kind, value, step.pointer);
+  else {
+    if (fromStore) value = await secretForField(s.tabId, ref, fromStore);
+    await input(s.tabId, ref, kind, value, step.pointer);
+  }
   await settle(s.tabId, before);
   await after(before, ref);
   return 'next';

@@ -516,7 +516,7 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
     }
     let extra = '';
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-      if (el.type === 'password') extra = el.value ? ' (filled)' : '';
+      if (el.type === 'password' || masked.has(el)) extra = el.value ? ' (filled)' : '';
       else if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) extra = el.checked ? ' checked' : '';
       else if (el.type === 'file') extra = `${(el as HTMLInputElement).multiple ? ' (file, multiple)' : ' (file)'}${el.getAttribute('accept') ? ` accepts ${clean(el.getAttribute('accept'), 40)}` : ''}`;
       else if (el.value) extra = ` value="${clean(el.value, 60)}"`;
@@ -878,6 +878,15 @@ export function press(keys: string) {
     el.dispatchEvent(new KeyboardEvent('keyup', init));
     if (down && key === 'Enter' && el instanceof HTMLInputElement && el.form) el.form.requestSubmit();
   }
+}
+
+// A field that holds a stored secret reads as filled, and shows dots, whatever kind of field it is.
+const masked = new WeakSet<Element>();
+export function maskField(el: Element) {
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el as HTMLElement).isContentEditable)) throw new Error('A secret can only go in a field you can type in.');
+  if (fieldKind(el) === 'file' || fieldKind(el) === 'select') throw new Error('A secret can only go in a field you can type in.');
+  masked.add(el);
+  (el as HTMLElement).style.setProperty('-webkit-text-security', 'disc', 'important');
 }
 
 export function fieldKind(el: Element): 'text' | 'password' | 'file' | 'select' | 'other' {
