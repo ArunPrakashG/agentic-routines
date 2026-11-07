@@ -12,7 +12,7 @@
 - A routine broken by a site change is fixed once and the fix is useful to everyone who runs the same routine. That shared upkeep is the part a single user or a model company won't do for long-tail sites.
 
 ## Product
-Same architecture as Claude in Chrome: a custom MCP server plus a Chrome extension.
+A custom MCP server plus a Chrome extension.
 1. **MCP server (stdio, works with Claude Code and Codex):** basic browser tools, all recorded, plus `routines_list`, `routine_run(name, params)`, `routine_propose` / `routine_edit` / `routine_save`.
 2. **Chrome extension (MV3):** actions through `chrome.debugger`, a11y snapshots, one tab group per agent session, native messaging to the server.
 3. **Compile on save:** drop navigation that a direct URL load reproduces (checked against the recorded snapshot), turn changing values into params, add pre/post checks per step.
