@@ -60,6 +60,50 @@ async function addByHand(item) {
   await call('click', { ref: refFor(page, /button.*(Add item|Put on)/i) });
 }
 
+// ---------- nudge on repeats ----------
+{
+  console.log('\n# Nudge on repeats');
+  await session();
+  const NUDGE = /repeat ones you already did/;
+  // Everything the task says back: the nudge can only be in these.
+  const pass = async (one, two) => {
+    const out = [];
+    await call('navigate', { url: CHORES });
+    const page = await read();
+    const item = refFor(page, /textbox.*Item/i);
+    const add = refFor(page, /button.*Add item/i);
+    out.push((await call('type', { ref: item, text: one })).text);
+    out.push((await call('click', { ref: add })).text);
+    out.push((await call('type', { ref: item, text: two })).text);
+    out.push((await call('click', { ref: add })).text);
+    out.push((await call('click', { ref: refFor(page, /button.*Publish/i) })).text);
+    return out;
+  };
+  const count = (texts) => texts.filter((t) => NUDGE.test(t)).length;
+
+  check(count(await pass('Soap', 'Salt')) === 0, 'the first time, nothing');
+  const second = await pass('Rice', 'Tea');
+  check(count(second) === 1, 'the second time, once, with other values');
+  const said = second.find((t) => NUDGE.test(t));
+  check(/routine_propose/.test(said) && /remove everything before step \d+/.test(said), `it says what to do: ${said?.slice(-200)}`);
+  check(count(await pass('Oil', 'Eggs')) === 0, 'not again for the same task');
+
+  await session();
+  const later = await pass('Jam', 'Ham');
+  check(count(later) === 1, 'a later session sees the earlier one');
+  check(!/remove everything/.test(later.find((t) => NUDGE.test(t)) ?? ''), 'and has no earlier pass of its own to remove');
+
+  const d = await call('routine_propose', { name: 'list-chores', description: 'Adds two items to the chores list and publishes it. Use when someone wants the list published.' });
+  await call('routine_save', { draft_id: draftOf(d.text) });
+  await session();
+  check(count(await pass('Figs', 'Nuts')) === 0, 'silent once a routine covers it');
+
+  await session();
+  await call('navigate', { url: CHORES });
+  const short = await read();
+  check(!NUDGE.test((await call('click', { ref: refFor(short, /button.*Publish/i) })).text), 'silent for something short');
+}
+
 // ---------- self-tidying ----------
 {
   console.log('\n# Self-tidying');

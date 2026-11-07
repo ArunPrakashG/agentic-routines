@@ -12,6 +12,8 @@ After a task, your agent decides whether it is worth keeping, without asking you
 - **Typed values become choices.** Each value typed can become a parameter that the routine asks for each run, such as a version name or release notes. Everything else stays as recorded.
 - **Risky steps get a pause.** Steps that publish, pay, delete, submit or confirm are marked, so a replay stops before them. The extension does not let an edit remove one.
 
+When the agent does the same steps a second time, the result of the step that completes the repeat says so, in one line, and the agent takes that as its cue to save. Steps count as the same by site, kind of step and the field or kind of element they touch, so different values still match; a retry does not break a match. It needs at least five steps, two of them more than just opening a page. It says nothing if a routine you have on that site already covers more than half of those steps. It compares runs recorded on your computer, up to the last 20, and nothing else. A pass that took a really different path, or that works on pages whose addresses differ by more than an id, is not noticed.
+
 The agent also writes a description: what the routine does, and when to use it, in the words you would say. That description is how an agent decides to use it.
 
 ## Replay
