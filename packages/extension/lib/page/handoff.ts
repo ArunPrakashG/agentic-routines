@@ -1,3 +1,4 @@
+import { settings } from './settings';
 import { ask } from './tabs';
 
 // A tab handed to the person for a login, a code, a payment or a bot check. While it is theirs no tool and no replay can
@@ -54,6 +55,9 @@ export function handOver(tabId: number, o: { reason: string; by: string; session
     waiting.set(tabId, w);
     changed(tabId, w.reason);
     void show(w);
+    if (settings().handoffNotifications) {
+      void browser.notifications?.create(`handoff-${tabId}`, { type: 'basic', iconUrl: browser.runtime.getURL('/icon/128.png'), title: `${w.by} needs you`, message: w.reason }).catch(() => {});
+    }
     // They have to be able to see it. A flash, not a stolen window: they may be busy somewhere else.
     void browser.tabs.update(tabId, { active: true }).then((t) => t && browser.windows.update(t.windowId, { drawAttention: true })).catch(() => {});
   }

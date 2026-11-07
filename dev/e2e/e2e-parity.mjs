@@ -223,6 +223,41 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check(/No named sessions/.test((await call('session_list')).text), 'session_delete forgets them');
 }
 
+// ---------- settings, status, cleanup ----------
+{
+  await session();
+  const read0 = JSON.parse((await call('settings')).text);
+  check(read0.grouping === 'session' && read0.idleMinutes === 30, 'settings reads the defaults');
+  const changed = JSON.parse((await call('settings', { idle_close_minutes: 10, agent_cursor: false })).text);
+  check(changed.idleMinutes === 10 && changed.agentCursor === false, 'settings changes them');
+  const wrote = await inExtension(`chrome.storage.local.get('settings').then((s) => s.settings.idleMinutes)`);
+  check(wrote === 10, 'and the browser has the change');
+  const bad = await client.callTool({ name: 'settings', arguments: { update_channel: 'off' } }).catch((e) => ({ isError: true, content: [{ text: e.message }] }));
+  check(!(await inExtension(`chrome.storage.local.get('settings').then((s) => 'update_channel' in s.settings)`)), 'a setting it does not know goes nowhere');
+  await call('settings', { idle_close_minutes: 30, agent_cursor: true });
+
+  await call('navigate', { url: CHORES });
+  await call('navigate', { url: `${CHORES}?second`, new_tab: true });
+  const stat = await call('status');
+  check(/Tabs lent by the person: 0/.test(stat.text) && /\?second \(working here\)/.test(stat.text), 'status says what the session has open and where it is working');
+  const cleaned = await call('tabs_cleanup');
+  check(/Closed 1 tab/.test(cleaned.text), 'tabs_cleanup closes the tab it left');
+  check(!!(await pageOf('?second')), 'and keeps the one it is in');
+
+  await call('settings', { grouping: 'none' });
+  await session();
+  await call('navigate', { url: `${CHORES}?grouped` });
+  const groupId = await inExtension(`chrome.tabs.query({}).then((ts) => ts.find((t) => (t.url ?? '').includes('?grouped')).groupId)`);
+  check(groupId === -1, 'grouping none leaves the tab out of any group');
+  await call('settings', { grouping: 'session', tabs_where: 'separate' });
+  await session();
+  const windowsBefore = await inExtension(`chrome.windows.getAll().then((w) => w.length)`);
+  await call('navigate', { url: `${CHORES}?apart` });
+  check((await inExtension(`chrome.windows.getAll().then((w) => w.length)`)) === windowsBefore + 1, 'a separate window opens for agent tabs');
+  await call('settings', { tabs_where: 'auto' });
+  await session();
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

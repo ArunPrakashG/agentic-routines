@@ -35,6 +35,16 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
 
+### Settings and status
+
+| Tool | What it does |
+|---|---|
+| `settings` | Read or change where agent tabs open, how they are grouped, when an untouched one closes, the agent's cursor and hand-over notifications. An agent changes these only when the person asks. The tool has no way to reach security settings or updates |
+| `status` | The browsers connected, the session and its limits, its tabs and the settings in force |
+| `tabs_cleanup` | Close the tabs this session opened and no longer needs |
+
+The person has the same settings in the panel, under their account menu. A change from either side shows in the panel at once. A tab an agent opened and left closes by itself after 30 minutes, unless that is turned off, it is the tab the person is looking at, a hand-over is waiting on it or a run is paused there. A tab the person opened or lent is never closed.
+
 ### Named sessions
 
 An agent's tabs normally belong to its server, and close when it stops. A named session keeps them until it is told otherwise, and can be limited.

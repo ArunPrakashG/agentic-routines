@@ -129,6 +129,14 @@ export function glow(next: GlowMode | 'off', ttl = 8000) {
   expiry = setTimeout(() => glow('off'), ttl);
 }
 
+// The person can turn the cursor and outline off. The glow stays: it says the page is being driven.
+let cursorOff = false;
+const readCursor = (s?: { agentCursor?: boolean }) => void (cursorOff = s?.agentCursor === false);
+void browser.storage?.local.get('settings').then((s) => readCursor(s.settings as { agentCursor?: boolean } | undefined), () => {});
+browser.storage?.onChanged.addListener((c) => {
+  if (c.settings) readCursor(c.settings.newValue as { agentCursor?: boolean } | undefined);
+});
+
 /** Hide everything while the browser takes a picture of the page. */
 export function veil(on: boolean) {
   veiled = on;
@@ -137,7 +145,7 @@ export function veil(on: boolean) {
 
 /** Move the cursor onto an element and outline it. Resolves when the cursor has arrived, so the action lands with it. */
 export async function aim(el: Element, action: string, quick = false, spot?: { x: number; y: number }) {
-  if (mode !== 'run') return;
+  if (mode !== 'run' || cursorOff) return;
   // A point on the page is already on screen, and is only right if the page stays where it is.
   if (!spot) (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
   const r = el.getBoundingClientRect();

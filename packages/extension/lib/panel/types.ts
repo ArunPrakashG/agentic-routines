@@ -1,3 +1,4 @@
+import type { Settings } from '../page/settings';
 import type { RecordedEvent } from '@agentic-routines/core';
 import type { Account } from '../remote/auth';
 import type { PublishCard } from '../remote/directory';
@@ -17,6 +18,7 @@ export interface PanelState {
   script?: { site: string; code: string; by: string };
   /** Sites where it may, until the person says otherwise. */
   scriptSites: string[];
+  settings: Settings;
   /** Tabs the person has lent with the toolbar button, and who is working in them. */
   lent: { id: number; title: string; site: string; by?: string }[];
   /** Hook code the person is reading to decide whether it may run. */
@@ -48,6 +50,7 @@ export type PanelCommand =
   | { t: 'publish'; id: string }
   | { t: 'publishDecide'; approve: boolean; handle?: string }
   | { t: 'takeBack'; tabId: number }
+  | { t: 'setting'; change: Partial<Settings> }
   | { t: 'sources' }
   | { t: 'sourceAdd'; address: string }
   | { t: 'sourceRemove'; id: string }
