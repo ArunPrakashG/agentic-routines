@@ -1,6 +1,6 @@
-# The site's own Caddy (container agenticroutines-site on ovh-arun). The main Caddy terminates TLS, adds the
+# The site's own Caddy (container agenticroutines-site). The main Caddy terminates TLS, adds the
 # shared security headers and proxies everything but /api/* and /healthz here. deploy.sh copies this file to
-# ~/infra/apps/agenticroutines/site/conf/ and restarts the container when it changes (the admin API is off).
+# the deploy folder's site/conf/ and restarts the container when it changes (the admin API is off).
 {
 	admin off
 	auto_https off

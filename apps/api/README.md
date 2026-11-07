@@ -60,6 +60,7 @@ Environment variables. The service refuses to start without the first five.
 |---|---|
 | `DATABASE_URL` | Postgres connection string |
 | `REDIS_URL` | Redis connection string |
+| `TRUSTED_PROXY` | Host name of the proxy whose `X-Client-IP` is believed. Empty believes nobody and uses the connection's address |
 | `GOOGLE_CLIENT_ID` | Public, same value as in the extension |
 | `GOOGLE_CLIENT_SECRET` | From the Google client JSON in `.keys/` |
 | `SESSION_SECRET` | At least 32 characters, signs access tokens |
@@ -84,14 +85,14 @@ apps/api/deploy/deploy.sh
 
 Builds the image here, ships it over ssh, restarts the container and waits for it to be healthy. The tag is the date and commit, and the three newest images stay. It refuses to run with uncommitted changes under `apps/api`.
 
-The website is deployed separately with `apps/site/deploy/deploy.sh`: it builds the static site, ships it to `~/infra/apps/agenticroutines/site/www/releases/<tag>`, moves the `current` symlink, keeps the three newest releases and purges the edge cache. It runs in its own 32 MB Caddy container next to the API.
+The website is deployed separately with `apps/site/deploy/deploy.sh`: it builds the static site, ships it to `the deploy folder's site/www/releases/<tag>`, moves the `current` symlink, keeps the three newest releases and purges the edge cache. It runs in its own 32 MB Caddy container next to the API.
 
 ## First-time server setup
 
 The deploy script assumes these exist. They are done once.
 
 1. A database and a role named `browserroutines` in the shared Postgres (the name from before the project was renamed; nothing depends on it matching).
-2. `~/infra/apps/agenticroutines/.env` on the server, mode 600, with the names in the config table.
+2. `the deploy folder's .env` on the server, mode 600, with the names in the config table.
 3. A block in the main Caddy config for `agenticroutines.arunprakashg.com`: the security headers snippet, compression, a 32 KB request body limit on `/api/*`, a reverse proxy to the container for `/api/*` and `/healthz` with `X-Client-IP` set from Caddy's client address, and a reverse proxy to `agenticroutines-site:8080` (the website, see `apps/site`) for everything else.
 4. A proxied DNS record for the name in Cloudflare.
 5. Three Cloudflare cache rules for that host, in this order, after the zone's catch-all "cache everything" rule (later rules win): respect origin cache headers for the host; no caching for `/api/*` and `/healthz`; respect origin for `/api/v1/blocklist` (public, five minutes). The website sets its own headers: built files under `/_astro/` are immutable for a year, pages revalidate in the browser and stay five minutes on the edge, and `apps/site/deploy/deploy.sh` purges the host after a release.
