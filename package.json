@@ -10,6 +10,7 @@
     "dev:up": "dev/env/up.sh",
     "dev:down": "dev/env/down.sh",
     "e2e": "dev/e2e/e2e.sh",
+    "test:all": "dev/test-all.sh",
     "e2e:api": "node dev/e2e/e2e-api.mjs",
     "e2e:sources": "node dev/e2e/e2e-sources.mjs",
     "e2e:agents": "node dev/e2e/e2e-agents.mjs",
