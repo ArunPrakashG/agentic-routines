@@ -2,6 +2,8 @@ import { compareViewport, CROP_DRIFT, fill, hashDistance, isIrreversible, onSite
 import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
+import { perform as input } from '../page/input';
+import { platform } from '../platform';
 import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from '../page/tabs';
 
 // Replays compiled steps with no model. Before each step: page structure,
@@ -337,7 +339,8 @@ async function perform(s: ReplayState, event: HookEvent, ds: Directive[], step?:
           break;
         case 'click':
         case 'type':
-          await ask(s.tabId, { t: 'hookact', ref: d.ref, action: d.do, value: d.do === 'type' ? d.text : undefined });
+          await ask(s.tabId, { t: 'hookmay', ref: d.ref, action: d.do });
+          await input(s.tabId, d.ref, d.do, d.do === 'type' ? d.text : undefined);
           await sleep(150);
           entry.done.push(`${d.do} ${d.ref}`);
           break;
@@ -417,7 +420,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     const before = await urlOf();
     const a = await hook(s, 'action.press.before', step);
     if (a.skip) return 'next';
-    await ask(s.tabId, { t: 'act', action: 'press', value: a.value ?? value });
+    await input(s.tabId, undefined, 'press', a.value ?? value);
     await settle(s.tabId, before);
     await after(before);
     return 'next';
@@ -451,7 +454,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     await uploadFile(s.tabId, ref, fill(step.value, s.params)!);
   }
   else if (kind === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
-  else await ask(s.tabId, { t: 'act', ref, action: kind, value });
+  else await input(s.tabId, ref, kind, value);
   await settle(s.tabId, before);
   await after(before, ref);
   return 'next';
@@ -635,6 +638,8 @@ export async function start(p: { routine: Routine; params: Record<string, string
     forcedPauses: [],
     fitWindow: p.fit,
   };
+  // Attached before the first step, so the bar this puts up has already moved the page before anything is measured.
+  await platform.cdp?.(s.tabId, async () => {}).catch(() => {});
   live.set(s.id, s);
   await fitWindow(s);
   return loop(s);

@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>Real input</title>
+<style>#cover-wrap{position:relative;display:inline-block}#cover{position:absolute;inset:0;background:#fff;opacity:.9}</style>
+<h1>Real input</h1>
+<p id="count">clicks 0</p>
+<button id="real">Count me</button>
+<p id="keys">keys none</p>
+<input id="name" aria-label="Name"><p id="name-out">name untouched</p>
+<div id="rich" contenteditable="true" role="textbox" aria-label="Rich" style="border:1px solid #888;min-height:2em"></div><p id="rich-out">rich untouched</p>
+<form id="f"><input id="q" aria-label="Search"><button>Go</button></form><p id="form-out">not sent</p>
+<label for="c1"><span>Agree</span></label><input type="checkbox" id="c1" style="position:absolute;opacity:0;width:1px;height:1px"><p id="c1-out">unticked</p>
+<span id="cover-wrap"><button id="under">Under</button><span id="cover" aria-label="Sheet"></span></span><p id="under-out">under not clicked</p>
+<script>
+// A page that only believes the browser: synthetic events change nothing here.
+const $ = (id) => document.getElementById(id);
+let n = 0;
+$('real').addEventListener('click', (e) => { if (e.isTrusted) $('count').textContent = `clicks ${++n}`; });
+addEventListener('keydown', (e) => { if (e.isTrusted && !['Shift','Control','Alt','Meta'].includes(e.key)) $('keys').textContent = `keys ${(e.ctrlKey ? 'ctrl+' : '') + e.key}`; });
+$('name').addEventListener('input', (e) => { $('name-out').textContent = e.isTrusted ? `name ${e.target.value}` : 'name fake'; });
+$('rich').addEventListener('input', (e) => { $('rich-out').textContent = e.isTrusted ? `rich ${e.target.innerText.trim()}` : 'rich fake'; });
+$('f').addEventListener('submit', (e) => { e.preventDefault(); $('form-out').textContent = `sent ${$('q').value}`; });
+$('c1').addEventListener('change', (e) => { $('c1-out').textContent = e.target.checked ? 'ticked' : 'unticked'; });
+$('under').addEventListener('click', () => { $('under-out').textContent = 'under clicked'; });
+</script>

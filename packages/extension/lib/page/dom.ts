@@ -47,7 +47,14 @@ export function visible(el: Element): boolean {
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return el instanceof HTMLInputElement && el.type === 'file';
   const s = getComputedStyle(el);
-  return s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) > 0.05;
+  if (s.visibility === 'hidden' || s.display === 'none') return false;
+  if (Number(s.opacity) > 0.05) return true;
+  return drawnByLabel(el);
+}
+
+/** A custom checkbox: the real input is see-through and what is drawn is its label. */
+function drawnByLabel(el: Element) {
+  return el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio') && Array.from(el.labels ?? []).some((l) => !hiddenWhy(l));
 }
 
 export function role(el: Element): string {
@@ -281,7 +288,7 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
         continue;
       }
       const why = hiddenWhy(el);
-      if (why) {
+      if (why && !drawnByLabel(el)) {
         omit(why);
         continue;
       }
@@ -348,6 +355,82 @@ export function click(el: Element) {
   el.dispatchEvent(new PointerEvent('pointerup', opts));
   el.dispatchEvent(new MouseEvent('mouseup', opts));
   (el as HTMLElement).click();
+}
+
+/** Whether a click on `top` is a click on `el`: a span inside a button, a label over its hidden input, a wrapper drawn around it. */
+function partOf(el: Element, top: Element | null) {
+  if (!top) return false;
+  if (top === el || el.contains(top)) return true;
+  if (top.closest('label')?.control === el) return true;
+  if (!top.contains(el)) return false;
+  // Everything sits inside something: only a wrapper about its own size counts, not the page around it.
+  const [a, b] = [top.getBoundingClientRect(), el.getBoundingClientRect()];
+  return a.width * a.height <= b.width * b.height * 4;
+}
+
+const point = (r: DOMRect, fx: number, fy: number) => ({ x: r.x + r.width * fx, y: r.y + r.height * fy });
+
+/** Where a person would click this element, and whether that reaches it. Scrolls it into view first. */
+export function aimAt(el: Element): { x: number; y: number; hit: boolean; over?: string } {
+  (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
+  const r = el.getBoundingClientRect();
+  const centre = point(r, 0.5, 0.5);
+  if (r.width < 1 || r.height < 1) return { ...centre, hit: false };
+  // The middle first; a badge or an icon can sit on that and leave the rest of it open.
+  for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
+    const p = point(r, fx, fy);
+    if (p.x < 0 || p.y < 0 || p.x >= innerWidth || p.y >= innerHeight) continue;
+    if (partOf(el, document.elementFromPoint(p.x, p.y))) return { ...p, hit: true };
+  }
+  const top = document.elementFromPoint(centre.x, centre.y);
+  return { ...centre, hit: false, over: top && top !== document.documentElement && top !== document.body ? accessibleName(top) || top.tagName.toLowerCase() : undefined };
+}
+
+// Whether the input sent since the last watch reached the element. Only the browser can make an event that isTrusted.
+let watching: { el: Element; landed: boolean; stop: () => void } | undefined;
+export function watchLanding(el: Element) {
+  watching?.stop();
+  const on = (e: Event) => {
+    const at = e.composedPath()[0];
+    if (e.isTrusted && watching && at instanceof Element && partOf(el, at)) watching.landed = true;
+  };
+  for (const t of ['pointerdown', 'mousedown', 'click']) window.addEventListener(t, on, true);
+  watching = { el, landed: false, stop: () => { for (const t of ['pointerdown', 'mousedown', 'click']) window.removeEventListener(t, on, true); } };
+}
+export function landed() {
+  const out = !!watching?.landed;
+  if (out) {
+    watching?.stop();
+    watching = undefined;
+  }
+  return out;
+}
+
+/** Focus a field and select what is in it, ready for real keys. False if it takes no text. */
+export function readyToType(el: Element, keep = false): boolean {
+  (el as HTMLElement).scrollIntoView({ block: 'center' });
+  (el as HTMLElement).focus?.();
+  if (keep) return true;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    if (document.activeElement !== el) return false;
+    el.select();
+    return true;
+  }
+  if ((el as HTMLElement).isContentEditable) {
+    getSelection()?.selectAllChildren(el);
+    return true;
+  }
+  return false;
+}
+
+/** After real typing: the field took it, and the page hears it as finished. A field can reformat what it is given, so only nothing at all counts as not taking it. */
+export function typedInto(el: Element, text: string): boolean {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    if (text && !el.value) return false;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+  return !text || !!(el as HTMLElement).innerText?.trim();
 }
 
 export function type(el: Element, text: string) {

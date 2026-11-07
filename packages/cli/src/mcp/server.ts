@@ -909,5 +909,10 @@ export async function runMcp(): Promise<void> {
     // Lets the side panel show this agent as connected.
     bridge.call('agent.hello', {}, 5_000).catch(() => {});
   };
+  // The agent went away while something was still being answered. That is the end of the session, not an error.
+  process.stdout.on('error', (e: NodeJS.ErrnoException) => {
+    if (e.code === 'EPIPE') process.exit(0);
+    throw e;
+  });
   await server.connect(new StdioServerTransport());
 }

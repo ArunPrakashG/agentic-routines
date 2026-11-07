@@ -39,17 +39,8 @@ async function browserCdp() {
   const send = (method, params = {}) => new Promise((res) => ((wait.set(++id, res), ws.send(JSON.stringify({ id, method, params })))));
   return { send, close: () => ws.close() };
 }
-const visibility = async () => {
-  const t = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'page' && x.url.startsWith(SITE));
-  const ws = new WebSocket(t.webSocketDebuggerUrl);
-  await new Promise((r) => (ws.onopen = r));
-  const out = await new Promise((res) => {
-    ws.onmessage = (e) => res(JSON.parse(e.data));
-    ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: 'document.visibilityState', returnByValue: true } }));
-  });
-  ws.close();
-  return out.result.result.value;
-};
+// A tab being driven reports itself visible to the page, so whether it is in front is the browser's to say.
+const visibility = async () => (JSON.parse((await call('tabs')).text.match(/\[[\s\S]*\]/)[0]).find((t) => t.url.startsWith(SITE) && !t.url.includes('docs.html')).active ? 'visible' : 'hidden');
 
 // The person is on a page of their own when the agent starts: it must open a tab of its own, not take theirs.
 {

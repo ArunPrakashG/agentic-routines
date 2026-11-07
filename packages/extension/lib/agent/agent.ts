@@ -1,6 +1,7 @@
 import type { Locator, PageFingerprint, RecordedEvent, Viewport } from '@agentic-routines/core';
 import { areaBase64, cropHash, markedPng, pngBase64, type Rect } from '../replay/crop';
 import { MAX_MARKS, type Mark } from '../replay/annotate';
+import { perform } from '../page/input';
 import * as llm from '../page/llm';
 import * as native from './native';
 import { platform } from '../platform';
@@ -24,6 +25,8 @@ const WORKING_MS = 6000;
 async function working(session: string | undefined, requested?: number) {
   const tabId = await agentTabId(session, requested);
   await glow(tabId, 'run', WORKING_MS);
+  // Attached from the first call, so the bar this puts up has already moved the page before anything is measured.
+  await platform.cdp?.(tabId, async () => {}).catch(() => {});
   return tabId;
 }
 
@@ -135,9 +138,10 @@ async function act(source: string, session: string | undefined, tabId: number, r
   const before = (await browser.tabs.get(tabId)).url ?? '';
   if (mk?.on && d.field !== 'password') addMark(session, tabId, before, d, mk.note, false);
   let uploaded: Awaited<ReturnType<typeof uploadFile>> | undefined;
+  let note: string | undefined;
   if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!);
   else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
-  else await ask(tabId, { t: 'act', ref, action, value });
+  else note = await perform(tabId, ref, action, value);
   const after = await settle(tabId, before);
   // A new address can reuse refs for other elements.
   if (after === before) lastActed.set(session ?? 'user', { tabId, ref });
@@ -157,7 +161,7 @@ async function act(source: string, session: string | undefined, tabId: number, r
     navigatedTo: after !== before ? after : undefined,
     ...extra,
   }, session);
-  return { d, after, changed: after !== before, uploaded };
+  return { d, after, changed: after !== before, uploaded, note };
 }
 
 export async function handle(method: string, p: any): Promise<unknown> {
@@ -204,8 +208,8 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.click': {
       const tabId = await working(p?.session, p.tab_id);
-      const { d, after, changed } = await act(source, p?.session, tabId, p.ref, 'click', undefined, {}, { on: !!p.mark, note: p.note });
-      return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}`;
+      const { d, after, changed, note } = await act(source, p?.session, tabId, p.ref, 'click', undefined, {}, { on: !!p.mark, note: p.note });
+      return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}${note ? ` ${note}` : ''}`;
     }
     case 'browser.type': {
       const tabId = await working(p?.session, p.tab_id);
@@ -227,7 +231,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
     case 'browser.press': {
       const tabId = await working(p?.session, p.tab_id);
       const before = (await browser.tabs.get(tabId)).url ?? '';
-      await ask(tabId, { t: 'act', action: 'press', value: p.key });
+      await perform(tabId, undefined, 'press', p.key);
       const after = await settle(tabId, before);
       await runs.record(source, { action: 'press', url: before, value: p.key, ts: Date.now(), navigatedTo: after !== before ? after : undefined }, p?.session);
       return `Pressed ${p.key}.`;

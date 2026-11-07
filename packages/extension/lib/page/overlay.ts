@@ -136,7 +136,7 @@ export function veil(on: boolean) {
 }
 
 /** Move the cursor onto an element and outline it. Resolves when the cursor has arrived, so the action lands with it. */
-export async function aim(el: Element, action: string) {
+export async function aim(el: Element, action: string, quick = false) {
   if (mode !== 'run') return;
   (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
   const r = el.getBoundingClientRect();
@@ -158,7 +158,8 @@ export async function aim(el: Element, action: string) {
   const ms = reduced() ? 0 : Math.min(600, Math.max(250, 220 + dist * 0.35));
   p.cur.classList.add('on');
   // Nobody sees a page that is behind another tab, and its timers run slowly: place the cursor and go.
-  if (document.hidden) {
+  // A page in a DevTools session reports itself visible there, so the background script says so too.
+  if (quick || document.hidden) {
     at = { x, y };
     p.cur.style.transform = `translate(${x}px, ${y}px)`;
     return;

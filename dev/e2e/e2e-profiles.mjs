@@ -12,7 +12,7 @@ const { StdioClientTransport } = await import(`${SDK}/client/stdio.js`);
 const STORE = process.env.AGENTIC_ROUTINES_HOME;
 const DEV = process.env.DEV_DIR;
 const A = { cdp: 'http://127.0.0.1:9333', site: 'http://127.0.0.1:8765' };
-const B = { cdp: 'http://127.0.0.1:9334', site: 'http://127.0.0.1:8766' };
+const B = { cdp: 'http://127.0.0.1:9334', site: 'http://127.0.0.1:8769' };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
