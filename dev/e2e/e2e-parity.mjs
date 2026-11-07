@@ -536,6 +536,32 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check(/Not listening/.test(cli(['remote', 'status'])), 'it can stop listening');
 }
 
+// ---------- input at a person's pace ----------
+{
+  await session();
+  const before = JSON.parse((await call('settings', {})).text);
+  check(before.humanInput === false, "input at a person's pace is off by default");
+  let page = await call('navigate', { url: `${SITE}/chores.html` });
+  page = await call('read_page', {});
+  const t0 = Date.now();
+  await call('type', { ref: refFor(page.text, /textbox.*Item/i), text: 'fast' });
+  const quick = Date.now() - t0;
+  await call('settings', { human_input: true });
+  check(JSON.parse((await call('settings', {})).text).humanInput === true, 'a setting turns it on');
+  page = await call('read_page', {});
+  const t1 = Date.now();
+  await call('type', { ref: refFor(page.text, /textbox.*Item/i), text: 'slowly by hand' });
+  const slow = Date.now() - t1;
+  check(slow > quick, `typing takes longer (${quick} ms, then ${slow} ms)`);
+  await evalIn('chores.html', `window.moves = 0; addEventListener('mousemove', () => window.moves++); 1`);
+  page = await call('read_page', {});
+  await call('click', { ref: refFor(page.text, /Publish list/) });
+  await call('click', { ref: refFor(page.text, /Add item/) });
+  check((await evalIn('chores.html', 'window.moves')) > 3, 'the pointer moves on its way, rather than jumping');
+  check(/slowly by hand/.test((await call('read_page', {})).text), 'and the input still lands');
+  await call('settings', { human_input: false });
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

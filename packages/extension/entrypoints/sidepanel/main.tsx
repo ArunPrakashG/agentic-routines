@@ -282,6 +282,7 @@ function SettingsView({ s, back }: { s: PanelState; back: () => void }) {
         <Choice label="Close tabs an agent has left after" value={c.idleMinutes} set={(idleMinutes) => set({ idleMinutes })} options={[[10, '10 minutes'], [30, '30 minutes'], [60, '1 hour'], [0, 'Never']]} />
         <Toggle label="Show the agent's cursor on the page" on={c.agentCursor} set={(agentCursor) => set({ agentCursor })} />
         <Toggle label="Notify me when an agent hands me a tab" on={c.handoffNotifications} set={(handoffNotifications) => set({ handoffNotifications })} />
+        <Toggle label="Move and type at a person's pace" on={c.humanInput} set={(humanInput) => set({ humanInput })} />
       </main>
     </div>
   );

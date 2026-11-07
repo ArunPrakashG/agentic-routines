@@ -83,6 +83,14 @@ An agent's tabs normally belong to its server, and close when it stops. A named 
 
 A session stays in the browser profile it started in. If that profile is closed the agent is told, and nothing moves to another one. Start a server in a session with `AGENTIC_ROUTINES_SESSION=<name>`.
 
+### At a person's pace
+
+`settings` with `human_input: true`, or the switch in the side panel, makes input go at a person's pace in that browser. The pointer moves along a curve instead of jumping, a button stays down for a moment, keys come one at a time and scrolling glides. It is off by default, and slows every step down.
+
+It is for pages that react to movement, such as a menu that opens on the way past or a canvas that follows the pointer, and for following along. Through `execute` or `cdp_endpoint` only the pointer's moves change.
+
+It does not get you past a bot check, and that is not its job. It does not change what a page can read about the browser, and leaves the debugging bar at the top of the window, which a page cannot see but the person can. A site can still tell from how the session goes that it is not a person. When a check comes up the agent hands the tab to the person, with this on as with it off.
+
 ### Playwright code on the page
 
 | Tool | What it does |

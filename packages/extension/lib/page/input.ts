@@ -2,6 +2,7 @@ import { platform } from '../platform';
 import type { Send } from '../platform/types';
 import type { FieldState, How, Point } from './dom';
 import { toTab } from './frames';
+import { glideTo, glideWheel, MAX_PACED_TYPING, paced, pause } from './paced';
 import { ask, draw, frameOf, sleep } from './tabs';
 
 // Real input. Through a DevTools session a click, a key and typed text reach the page the way a person's do, so a site
@@ -31,9 +32,12 @@ export async function mouseClick(tabId: number, send: Send, x: number, y: number
   const button = o.button ?? 'left';
   const buttons = button === 'left' ? 1 : button === 'right' ? 2 : 4;
   const base = { x, y, modifiers: o.modifiers ?? 0 };
+  await glideTo(tabId, send, x, y, base.modifiers);
   await sendInput(tabId, send, 'Input.dispatchMouseEvent', { ...base, type: 'mouseMoved', button: 'none', buttons: 0 });
+  await pause(30, 90);
   for (let clickCount = 1; clickCount <= (o.count ?? 1); clickCount++) {
     await sendInput(tabId, send, 'Input.dispatchMouseEvent', { ...base, type: 'mousePressed', button, buttons, clickCount });
+    await pause(50, 120);
     await sendInput(tabId, send, 'Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', button, buttons: 0, clickCount });
   }
 }
@@ -145,6 +149,7 @@ async function realHover(tabId: number, ref: string, how: How) {
   if (!a.hit) return false;
   return platform.cdp!(tabId, async (send) => {
     const before = (await browser.tabs.get(tabId)).url;
+    await glideTo(tabId, send, a.x, a.y);
     await sendInput(tabId, send, 'Input.dispatchMouseEvent', { x: a.x, y: a.y, type: 'mouseMoved', button: 'none', buttons: 0 });
     const done = await arrived(tabId, before, ref);
     draw(tabId, send);
@@ -188,7 +193,7 @@ async function realScroll(tabId: number, p: Point, by: Point, ref?: string) {
   const moved = async () => (await pos()).key !== start.key;
   const wheel = async () => {
     if (!platform.cdp) return;
-    await platform.cdp(tabId, (send) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: onTab.x, y: onTab.y, deltaX: by.x, deltaY: by.y, button: 'none', buttons: 0 })).catch(() => {});
+    await platform.cdp(tabId, (send) => glideWheel((deltaX, deltaY) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: onTab.x, y: onTab.y, deltaX, deltaY, button: 'none', buttons: 0 }), by)).catch(() => {});
     for (const end = Date.now() + SCROLL_MS; Date.now() < end; await sleep(50)) if (await moved()) break;
   };
   // A tab behind another aims the wheel with what it last drew, which may be from before the page moved. There the
@@ -234,7 +239,12 @@ async function realType(tabId: number, ref: string, text: string): Promise<boole
     const lines = text.split('\n');
     for (const [i, line] of lines.entries()) {
       if (i) await pressKey(tabId, send, 'Enter');
-      if (line) await sendInput(tabId, send, 'Input.insertText', { text: line });
+      if (paced() && line.length <= MAX_PACED_TYPING) {
+        for (const ch of line) {
+          await sendInput(tabId, send, 'Input.insertText', { text: ch });
+          await pause(30, 110);
+        }
+      } else if (line) await sendInput(tabId, send, 'Input.insertText', { text: line });
     }
   });
   for (const end = Date.now() + LAND_MS; Date.now() < end; await sleep(50)) if (await ask<boolean>(tabId, { t: 'typed', ref, value: text })) return true;
