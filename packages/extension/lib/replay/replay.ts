@@ -1,4 +1,4 @@
-import { compareViewport, CROP_DRIFT, fill, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
+import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
@@ -20,6 +20,8 @@ interface Found {
   score?: number;
   rect?: Rect;
   view?: Viewport;
+  /** first: how many elements are like it. */
+  count?: number;
   candidates?: (Candidate & { rect: Rect })[];
 }
 
@@ -77,9 +79,29 @@ export interface ReplayState {
   prepared?: { n: number; ov: { skip?: boolean; value?: string } };
   /** The step whose hook-made pause the agent approved. */
   hookApproved?: number;
+  /** The loop going on now. There is at most one: a routine cannot put one inside another. */
+  loop?: Loop;
+  /** Where to go instead when reaching a step: the end of a branch that ran skips the other one. */
+  jumps: Record<number, number>;
+  loops: NonNullable<RunResult['loops']>;
+  branches: NonNullable<RunResult['branches']>;
   /** How the finished run compared with what the routine expects. */
   outcome?: RunResult['outcome'];
   stepMs: Record<number, number>;
+}
+
+interface Loop {
+  /** Indexes of the steps that repeat: [first, end). */
+  first: number;
+  end: number;
+  step: Step;
+  pass: number;
+  /** The values left, for a loop over a parameter. */
+  values?: string[];
+  /** Which element this pass is on, for a loop over elements, and how many there were. */
+  index: number;
+  seen: number;
+  record: NonNullable<RunResult['loops']>[number];
 }
 
 /** A hook asked for the run to stop. */
@@ -135,6 +157,8 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     viewport_note: s.viewportNote,
     hidden_note: s.hiddenNote,
+    loops: s.loops.length ? s.loops : undefined,
+    branches: s.branches.length ? s.branches : undefined,
     forced_pauses: s.forcedPauses.length ? s.forcedPauses : undefined,
     outcome: s.outcome,
     step_ms: s.stepMs,
@@ -281,7 +305,7 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   let res: Found = { kind: 'missing' };
   while (Date.now() < end) {
     const fix = s.fixes[step.n];
-    res = await resolveInTab<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target!, wide: !!step.pointer?.spot || step.action === 'hover' || step.action === 'drag' || step.action === 'scroll' });
+    res = await resolveInTab<Found>(s.tabId, step.pick === 'each' ? { t: 'first', target: fix ?? step.target!, index: s.loop?.index ?? 0 } : step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target!, wide: !!step.pointer?.spot || step.action === 'hover' || step.action === 'drag' || step.action === 'scroll' });
     noteViewport(s, res.view);
     // A button can stay disabled for a moment after the step before it, and a click on it does nothing.
     if (res.kind === 'found' && !res.disabled) break;
@@ -481,8 +505,10 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
       return 'stop';
     }
     ref = found.ref!;
+    // Whichever row this pass is on was not the one recorded, so the pause decided from the recording does not speak for it.
+    if (step.pick === 'each' && soundsIrreversible(found.name ?? '') && !s.approved.has(step.n)) throw new Error(`Stopped: step ${step.n} would use “${found.name}” on this pass, which looks irreversible and is not what was recorded`);
     // Element agrees; refresh a drifted crop quietly. A page of another size would give a hash for another layout.
-    if (step.crop && found.rect && !s.relaxCrop) {
+    if (step.crop && found.rect && !s.relaxCrop && step.pick !== 'each') {
       const img = await screenshot(s.tabId);
       const h = img && hashAt(img, found.rect);
       if (h && hashDistance(h, step.crop) > CROP_DRIFT) s.crops[step.n] = h;
@@ -500,7 +526,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     if (!param || s.routine.meta.params[param]?.type !== 'file') throw new Error(`Stopped: step ${step.n} uploads a file the routine picks`);
     await uploadFile(s.tabId, ref, fill(step.value, s.params)!);
   }
-  else if (kind === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
+  else if (kind === 'read') s.read[s.loop ? `${step.label} (${s.loop.pass})` : step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
   else if (kind === 'drag') {
     const end = await findElement(s, { ...step, target: step.pointer?.to?.target, crop: undefined, pointer: { spot: step.pointer?.to?.spot } });
     if (end.kind !== 'found') throw new Error(`Stopped: step ${step.n} drags to something that is not on the page`);
@@ -534,6 +560,115 @@ async function checkOutcome(s: ReplayState) {
   }
 }
 
+// ---------- loops and branches ----------
+
+const CONDITION_WAIT_MS = 1500;
+const plainText = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** Is it on the page? A notice can take a moment to show, so a no is looked at again for a moment. */
+async function holds(s: ReplayState, when: NonNullable<Step['when']>): Promise<boolean> {
+  const text = when.text && plainText(fill(when.text, s.params)!);
+  const end = Date.now() + CONDITION_WAIT_MS;
+  while (true) {
+    const yes = await (async () => {
+      if (text) return plainText((await textOfTab(s.tabId)).text).includes(text);
+      const r = await resolveInTab<Found>(s.tabId, { t: 'resolve', target: when.has! });
+      return r.kind === 'found' || r.kind === 'ambiguous';
+    })().catch(() => false);
+    if (yes || Date.now() > end) return when.not ? !yes : yes;
+    await sleep(250);
+  }
+}
+
+async function countLike(s: ReplayState, target: Locator): Promise<number> {
+  const end = Date.now() + CONDITION_WAIT_MS;
+  while (true) {
+    const n = await resolveInTab<Found>(s.tabId, { t: 'first', target }).then((r) => r.count ?? 0, () => 0);
+    if (n || Date.now() > end) return n;
+    await sleep(250);
+  }
+}
+
+/** Each pass asks again what a pause asked: yes last time is not yes this time. */
+function forgetPass(s: ReplayState, l: Loop) {
+  for (const st of s.routine.steps.slice(l.first, l.end)) {
+    s.approved.delete(st.n);
+    if (s.hookApproved === st.n) s.hookApproved = undefined;
+    if (s.prepared?.n === st.n) s.prepared = undefined;
+    if (s.chosenAt === st.n) s.chosenAt = undefined;
+  }
+}
+
+/** Starts the next pass of the loop, or ends it. Says where the run goes next. */
+async function nextPass(s: ReplayState, l: Loop): Promise<number> {
+  forgetPass(s, l);
+  const e = l.step.each!;
+  let more = true;
+  if (l.values) {
+    more = l.values.length > 0;
+    if (more) s.params[e.param!] = l.values.shift()!;
+  } else if (l.pass >= e.limit) {
+    const left = await countLike(s, e.matching!);
+    if (left > l.index + 1) l.record.note = `It stopped at its limit of ${e.limit}. There may be more on the page.`;
+    more = false;
+  } else {
+    // A pass that took its row off the list leaves the next row where this one was.
+    const now = await countLike(s, e.matching!);
+    if (l.pass > 0 && now >= l.seen) l.index++;
+    l.seen = now;
+    more = l.index < now;
+  }
+  if (!more) {
+    // The parameter stays on its last value, which is what a check on the finished run wants to see.
+    s.loop = undefined;
+    return l.end;
+  }
+  l.pass++;
+  l.record.passes = l.pass;
+  if (s.test) s.trace.push(`${l.step.n}. pass ${l.pass}${e.param ? `: ${s.params[e.param]}` : ''}`);
+  return l.first;
+}
+
+/** Goes to a step, unless that means the end of one way of a branch or of a pass. A loop that ends can be the end of a branch too. */
+async function goTo(s: ReplayState, step: number) {
+  let next = step;
+  while (true) {
+    while (s.jumps[next] !== undefined) {
+      const to = s.jumps[next];
+      delete s.jumps[next];
+      next = to;
+    }
+    if (!s.loop || next < s.loop.end) break;
+    next = await nextPass(s, s.loop);
+  }
+  s.i = next;
+}
+
+const advance = (s: ReplayState) => goTo(s, s.i + 1);
+
+/** Runs a step that only decides where to go. */
+async function runBlock(s: ReplayState, step: Step) {
+  await stayOnSite(s);
+  const [first, end] = spanOf(step, s.i);
+  if (step.each) {
+    const e = step.each;
+    const values = e.param ? loopValues(s.params[e.param] ?? '') : undefined;
+    if (values && values.length > e.limit) throw new Error(`Stopped: step ${step.n} was given ${values.length} values, and its limit is ${e.limit}. Nothing in it ran.`);
+    const record = { n: step.n, passes: 0 };
+    s.loops.push(record);
+    s.loop = { first, end, step, pass: 0, values, index: 0, seen: 0, record };
+    await goTo(s, await nextPass(s, s.loop));
+    return;
+  }
+  const w = step.when!;
+  const yes = await holds(s, w);
+  const record = s.branches.find((b) => b.n === step.n) ?? s.branches[s.branches.push({ n: step.n, took: [] }) - 1];
+  record.took.push(yes ? 'then' : 'else');
+  if (s.test) s.trace.push(`${step.n}. “${step.label}”: ${yes ? `yes, ${w.then ? 'runs the steps for yes' : 'nothing to run'}` : `no, ${w.else ? 'runs the steps for no' : 'skips what follows'}`}`);
+  if (yes && w.else) s.jumps[first + w.then] = end;
+  await goTo(s, yes ? first : first + w.then);
+}
+
 // The page glows for as long as the replay is driving it, amber while it waits for a person.
 const DRIVING_MS = 8000;
 const DIALOG_WAIT_MS = 5000;
@@ -565,12 +700,17 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
     }
     while (s.i < s.routine.steps.length) {
       const step = s.routine.steps[s.i];
+      if (step.action === 'each' || step.action === 'if') {
+        await runBlock(s, step);
+        notify(s);
+        continue;
+      }
       if (s.test && pauseFor(s, step)) {
         // A test never performs a step that pauses, and never approves one. What follows is still checked.
         if (step.action === 'dialog' && dialogOn(s.tabId)) await answerDialog(s.tabId, false);
-        s.skipped.push(step.n);
+        if (!s.skipped.includes(step.n)) s.skipped.push(step.n);
         s.trace.push(`${step.n}. skipped “${step.label}”, it pauses in a real run`);
-        s.i++;
+        await advance(s);
         notify(s);
         continue;
       }
@@ -579,7 +719,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
       const ov = s.prepared.ov;
       if (ov.skip) {
         s.trace.push(`${step.n}. skipped by a hook`);
-        s.i++;
+        await advance(s);
         notify(s);
         continue;
       }
@@ -655,7 +795,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
         s.finalUrl = url;
       }
       await hook(s, 'step.after', step);
-      s.i++;
+      await advance(s);
       notify(s);
     }
     await checkOutcome(s).catch(() => {});
@@ -717,6 +857,9 @@ export async function start(p: { routine: Routine; params: Record<string, string
     hooks: await hooks.forRoutine(p.routine),
     foreign: !!p.foreign,
     forcedPauses: [],
+    jumps: {},
+    loops: [],
+    branches: [],
     fitWindow: p.fit,
     stepMs: {},
   };

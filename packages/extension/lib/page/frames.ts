@@ -191,7 +191,7 @@ function inTab<T extends Result>(res: T, frameId: number, box: Seen['box']): T {
 }
 
 /** Look for a recorded element where it was recorded: in the page, or in the frame it was in. */
-export async function resolveInTab<T extends Result>(tabId: number, msg: { t: 'resolve'; target: Locator; wide?: boolean } | { t: 'first'; target: Locator }): Promise<T> {
+export async function resolveInTab<T extends Result>(tabId: number, msg: { t: 'resolve'; target: Locator; wide?: boolean } | { t: 'first'; target: Locator; index?: number }): Promise<T> {
   const want = msg.target.frame;
   if (!want) return ask<T>(tabId, msg);
   const frames = (await seenFrames(tabId)).map((f) => ({ f, like: likeness(f.url, want) })).filter((x) => x.like).sort((a, b) => b.like - a.like);

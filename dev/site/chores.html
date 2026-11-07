@@ -12,18 +12,47 @@
 <ul id="list"></ul>
 <p id="status"></p>
 <script>
-  // What a test changes between runs lives in localStorage: chores.add renames the button, chores.lose makes adding do nothing, chores.banner shows the notice.
+  // What a test changes between runs lives in localStorage: chores.add renames the button, chores.lose makes adding do nothing, chores.banner shows the notice,
+  // chores.seed fills the list the next time a page loads, a row starting with ! has a Delete where its Star would be. chores.log says what was done, in any tab.
   const $ = (id) => document.getElementById(id);
   const flag = (k) => localStorage.getItem(`chores.${k}`);
+  const log = (what) => localStorage.setItem('chores.log', JSON.stringify([...JSON.parse(flag('log') ?? '[]'), what]));
+  if (flag('seed') !== null) {
+    sessionStorage.setItem('items', JSON.stringify(flag('seed').split(',').filter(Boolean)));
+    sessionStorage.removeItem('stars');
+    localStorage.removeItem('chores.seed');
+  }
   const label = flag('add') ?? 'Add item';
   const add = $('add');
   add.textContent = label;
   add.id = label === 'Add item' ? 'add' : `add-${label.length}`;
   add.className = label === 'Add item' ? '' : 'renamed';
   $('banner').hidden = !flag('banner');
-  $('dismiss').onclick = () => ($('banner').hidden = true);
+  $('dismiss').onclick = () => {
+    $('banner').hidden = true;
+    log('dismiss');
+  };
   const shown = () => {
-    $('list').replaceChildren(...JSON.parse(sessionStorage.getItem('items') ?? '[]').map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+    const items = JSON.parse(sessionStorage.getItem('items') ?? '[]');
+    const stars = JSON.parse(sessionStorage.getItem('stars') ?? '{}');
+    $('list').replaceChildren(...items.map((t) => {
+      const li = Object.assign(document.createElement('li'), { textContent: `${t} `, className: 'row' });
+      const star = Object.assign(document.createElement('button'), { textContent: t.startsWith('!') ? 'Delete' : 'Star', className: 'star' });
+      star.onclick = () => {
+        log(`star:${t}`);
+        sessionStorage.setItem('stars', JSON.stringify({ ...JSON.parse(sessionStorage.getItem('stars') ?? '{}'), [t]: 1 }));
+        shown();
+      };
+      const tick = Object.assign(document.createElement('button'), { textContent: 'Tick off', className: 'tick' });
+      tick.onclick = () => {
+        log(`tick:${t}`);
+        sessionStorage.setItem('items', JSON.stringify(JSON.parse(sessionStorage.getItem('items') ?? '[]').filter((x) => x !== t)));
+        shown();
+      };
+      li.dataset.starred = stars[t] ? 'yes' : 'no';
+      li.append(star, tick);
+      return li;
+    }));
   };
   shown();
   add.onclick = () => {
@@ -33,7 +62,11 @@
     sessionStorage.setItem('items', JSON.stringify([...JSON.parse(sessionStorage.getItem('items') ?? '[]'), v]));
     shown();
     $('status').textContent = `Added ${v}`;
+    log(`add:${v}`);
     $('item').value = '';
   };
-  $('publish').onclick = () => ($('status').textContent = `Published ${$('list').children.length} items`);
+  $('publish').onclick = () => {
+    $('status').textContent = `Published ${$('list').children.length} items`;
+    log('publish');
+  };
 </script>

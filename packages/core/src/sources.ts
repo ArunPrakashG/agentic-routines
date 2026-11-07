@@ -1,3 +1,4 @@
+import { blockProblems } from './blocks.ts';
 import { CONFIG_FILE, ConfigError, MAX_CONFIG, formatProblem, isRepoPath, parseConfigRoutine, siteListed, type RepoConfig, type RepoRoutine } from './config-routine.ts';
 import { lintForPublish, parseRoutineMd, stringifyRoutineMd } from './routine-md.ts';
 import type { Action, Pointer, Routine, Spot, Step } from './types.ts';
@@ -69,7 +70,7 @@ export interface Source {
 
 const MAX_FILE = 256 * 1024;
 const MAX_STEPS = 200;
-const ACTIONS: Action[] = ['navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read', 'hover', 'drag', 'scroll', 'set', 'dialog'];
+const ACTIONS: Action[] = ['each', 'if', 'navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read', 'hover', 'drag', 'scroll', 'set', 'dialog'];
 const STEPS_BLOCK = /\n```steps\r?\n([\s\S]*?)\r?\n```\s*$/;
 export const FILE_PATH = /^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/;
 /** A routine on its own in the root of a repository. */
@@ -116,6 +117,7 @@ export function checkFetched(r: Routine): string[] {
   }
   for (const i of lintForPublish(r.meta, urls)) out.push(i.message);
   out.push(...checkPlaceholders(r));
+  out.push(...blockProblems(r.steps, r.meta.params ?? {}));
   for (const p of r.meta.pauses) if (!Number.isInteger(p) || p < 1 || p > r.steps.length) out.push('A pause points at a step that is not there.');
   return [...new Set(out)].slice(0, 8);
 }
@@ -149,7 +151,8 @@ function checkPlaceholders(r: Routine): string[] {
       if (!name || params[name]?.type !== 'file') out.push(`Step ${s.n} uploads a file the routine picks. An upload has to take its file from a file the person gives.`);
     }
     if (s.url?.includes('{{secret:')) out.push(`Step ${s.n} puts a secret in an address.`);
-    for (const text of [s.url, s.value]) {
+    if (s.when?.text?.includes('{{secret:')) out.push(`Step ${s.n} looks for a secret on the page.`);
+    for (const text of [s.url, s.value, s.when?.text]) {
       for (const m of (text ?? '').matchAll(PLACEHOLDER)) {
         if (m[1] ? !secrets.includes(m[2]) : !params[m[2]] || (params[m[2]].type === 'file' && s.action !== 'upload')) out.push(`Step ${s.n} uses {{${m[1] ?? ''}${m[2]}}}, which the routine does not declare for that.`);
       }
