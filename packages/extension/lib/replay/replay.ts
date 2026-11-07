@@ -1,6 +1,6 @@
 import { flightOn, saveFlight, startFlight, stopFlight } from '../page/capture';
 import { secretForField } from '../page/secrets';
-import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
+import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type FastFrom, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { challengeOn, uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
@@ -95,6 +95,8 @@ export interface ReplayState {
   /** How the finished run compared with what the routine expects. */
   outcome?: RunResult['outcome'];
   stepMs: Record<number, number>;
+  /** What a fast run did before this took over. */
+  fast?: RunResult['fast'];
 }
 
 interface Loop {
@@ -146,6 +148,7 @@ const FORCED_WAIT_MS = 10 * 60_000;
 function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; crops: Record<number, string> } {
   const step = s.routine.steps[s.i];
   return {
+    ...(s.fast ? { fast: s.fast } : {}),
     run_id: s.id,
     status: s.status === 'running' ? 'failed' : s.status,
     routine: s.routine.meta.name,
@@ -887,7 +890,30 @@ async function waitForRoutine(r: Routine, session?: string): Promise<string | un
   return undefined;
 }
 
-export async function start(p: { routine: Routine; params: Record<string, string>; secrets: Record<string, string>; flight?: boolean; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
+/** A fast run got this far. The replay picks it up here: inside a loop or one way of a branch too. */
+function takeOver(s: ReplayState, from: FastFrom) {
+  s.fast = { steps_run: from.steps_run, ms: from.ms, ...(from.n ? { stopped_at: from.n } : {}), ...(from.why ? { why: from.why } : {}) };
+  s.params = from.params;
+  s.read = from.read;
+  const steps = s.routine.steps;
+  const i = from.n ? steps.findIndex((x) => x.n === from.n) : steps.length;
+  if (i < 0) throw new Error(`There is no step ${from.n}.`);
+  s.i = i;
+  steps.forEach((h, j) => {
+    if (h.action !== 'if' || !h.when?.else) return;
+    const [first, end] = spanOf(h, j);
+    const mid = first + h.when.then;
+    if (i >= first && i < mid) s.jumps[mid] = end;
+  });
+  if (!from.loop) return;
+  const j = steps.findIndex((x) => x.n === from.loop!.n);
+  const [first, end] = spanOf(steps[j], j);
+  const record = { n: steps[j].n, passes: from.loop.pass };
+  s.loops.push(record);
+  s.loop = { first, end, step: steps[j], pass: from.loop.pass, values: from.loop.values, index: from.loop.index, seen: from.loop.seen, record };
+}
+
+export async function start(p: { from?: FastFrom; routine: Routine; params: Record<string, string>; secrets: Record<string, string>; flight?: boolean; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
   if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
     return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const busy = await waitForRoutine(p.routine, p.session);
@@ -932,6 +958,7 @@ export async function start(p: { routine: Routine; params: Record<string, string
   } else s.flightForRun = false;
   // Attached before the first step, so the bar this puts up has already moved the page before anything is measured.
   await platform.cdp?.(s.tabId, async () => {}).catch(() => {});
+  if (p.from) takeOver(s, p.from);
   live.set(s.id, s);
   await fitWindow(s);
   return loop(s);

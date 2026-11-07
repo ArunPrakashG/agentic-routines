@@ -15,6 +15,8 @@ To use one, ask your agent to search the directory, or open its page and install
 
 You need to sign in with Google to publish. Installing needs no account.
 
+The publisher's extension sends the routine's Playwright code with it. The directory shows it and the reviewer sees it. It is only for reading. Nothing ever runs the uploaded copy, and an install does not keep it: a fast run compiles its own from the steps installed on that machine. Running code from an upload would mean running someone else's code in a signed-in browser, past review, and the steps are what is reviewed. Nothing checks that the uploaded code matches the steps either, so the steps are what to judge a routine by.
+
 ## A GitHub repository
 
 Put routines in a repository and describe them in a `config.routine` file in its root, or as single files under `routines/`. See [Routine repositories](/docs/repositories) for the file and a full example. Anyone can add it with `npx agentic-routines sources add github.com/owner/repository` and install from it in the side panel.

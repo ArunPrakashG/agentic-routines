@@ -24,4 +24,6 @@ export interface Detail extends Summary {
   meta: { params?: Record<string, { type: string; description?: string }>; pauses?: number[]; secrets?: string[]; returns?: string };
   body: string;
   steps: Step[];
+  /** The steps compiled to Playwright, to read. Nothing runs it. */
+  playwright?: string;
 }

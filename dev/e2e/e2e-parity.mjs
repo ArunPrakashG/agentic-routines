@@ -416,6 +416,45 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check((await raw(`http://127.0.0.1:${u.port}/json/version?token=${u.searchParams.get('token')}`)) === 0, 'when the agent goes, nothing is listening');
 }
 
+// ---------- routines as Playwright code, and fast runs ----------
+{
+  await session();
+  const { execFileSync } = await import('node:child_process');
+  const name = `fast_${Date.now()}`;
+  await call('navigate', { url: `${SITE}/chores.html` });
+  await evalIn('chores.html', `localStorage.clear(); sessionStorage.clear(); 1`);
+  const item = await refFor('Item');
+  await call('type', { ref: item, text: 'first' });
+  await call('click', { ref: await refFor('Add item') });
+  await call('click', { ref: await refFor('Publish list') });
+  const proposed = await call('routine_propose', { name, description: 'Add a chore and publish the list. Use when a chore needs adding.' });
+  const draft = draftOf(proposed.text);
+  await call('routine_edit', { draft_id: draft, ops: [{ op: 'param', name: 'item', value: 'first' }] });
+  await call('routine_save', { draft_id: draft });
+
+  const code = (await call('routine_playwright', { name })).text;
+  check(/getBy|locator/.test(code) && /param\(params, "item"\)/.test(code), 'routine_playwright gives a script with its parameters');
+  const out = execFileSync(process.execPath, [`${CLI}/dist/index.js`, 'export', name, '--playwright'], { encoding: 'utf8' });
+  check(/No model wrote it/.test(out), 'and so does the CLI');
+  check(out === execFileSync(process.execPath, [`${CLI}/dist/index.js`, 'export', name, '--playwright'], { encoding: 'utf8' }), 'the same each time');
+
+  // Publish pauses: a fast run does the rest, stops there, and the replay asks.
+  const paused = await call('routine_run', { name, params: { item: 'fast one' }, fast: true });
+  check(/Fast run: \d+ step/.test(paused.text), 'a fast run says what it ran');
+  check(/paused|waits/i.test(paused.text), 'and stops at the pause');
+  check((await evalIn('chores.html', `document.querySelector('#status').textContent`)) !== 'Published 2 items', 'with the step behind the pause not done');
+  const run = /rp-[0-9a-f]+/.exec(paused.text)?.[0];
+  await call('routine_resume', { run_id: run, approve: false });
+
+  // A button that has gone: it carries on step by step from there, which asks for a choice as any replay would.
+  await evalIn('chores.html', `localStorage.setItem('chores.add', 'Add a chore'); 1`);
+  const broke = await call('routine_run', { name, params: { item: 'broken' }, fast: true });
+  check(/Step by step from step/.test(broke.text), 'on a failure it carries on step by step from that step');
+  const rid = /rp-[0-9a-f]+/.exec(broke.text)?.[0];
+  if (rid) await call('routine_resume', { run_id: rid, approve: false });
+  await evalIn('chores.html', `localStorage.removeItem('chores.add'); 1`);
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

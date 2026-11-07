@@ -4,13 +4,14 @@ import { isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, urlScore, wrapAuthored, wrapUntrusted, type ByHand, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, toPlaywright, urlScore, wrapAuthored, wrapUntrusted, type ByHand, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { current, debugOn, logged } from '../debug.ts';
 import { Bridge, NotConnected } from './bridge.ts';
 import { policyOf, sessionIn } from './sessions.ts';
 import * as locks from '../store/locks.ts';
 import * as secrets from '../store/secrets.ts';
 import * as sessions from '../store/sessions.ts';
+import { fastRun } from './fast.ts';
 import { checkUpload, splitPaths } from '../host/files.ts';
 import { paths } from '../paths.ts';
 import * as sources from '../store/sources.ts';
@@ -247,6 +248,11 @@ function describeTest(r: RunResult): string {
 }
 
 export function describeResult(r: RunResult & { tidy?: string }): string {
+  if (r.fast) {
+    const how = `Fast run: ${r.fast.steps_run} step${r.fast.steps_run === 1 ? '' : 's'} through compiled code in ${(r.fast.ms / 1000).toFixed(1)}s.`;
+    const rest = r.fast.stopped_at ? ` ${r.fast.why ?? ''} Step by step from step ${r.fast.stopped_at}, with the usual checks.` : '';
+    return `${describeResult({ ...r, fast: undefined })}\n${how}${rest}`;
+  }
   if (r.flight_recording) return `${describeResult({ ...r, flight_recording: undefined })}\nThe last minute of the tab is in ${r.flight_recording}.`;
   if (r.test) return describeTest(r);
   const calls = `${r.model_calls} model call${r.model_calls === 1 ? '' : 's'}`;
@@ -377,7 +383,7 @@ export async function runMcp(): Promise<void> {
     return result;
   }
 
-  async function run(id: string, params: Record<string, string>, fit?: boolean, flight?: boolean) {
+  async function run(id: string, params: Record<string, string>, fit?: boolean, flight?: boolean, fast?: boolean) {
     const r = await store.read(id);
     if (r.meta.surface && r.meta.surface !== 'browser') return fail(`${r.meta.name} acts on the ${r.meta.surface}, which this version cannot control. Only browser routines run.`);
     const missing = missingParams(r, params);
@@ -400,7 +406,14 @@ export async function runMcp(): Promise<void> {
     if ('heldBy' in lock) return fail(`${r.meta.name} is already running for ${lock.heldBy}. Only one run of a routine goes at a time. Try again when it has finished.`);
     let result: RunResult;
     try {
-      result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r), fit, flight, foreign: !!origin }, 15 * 60_000);
+      // Time, not tokens: a replay calls no model either way. Whatever this does not finish, the replay carries on from there.
+      const from = fast
+        ? await fastRun(r, filled, !!origin, async () => {
+            const status = await bridge.call<{ tabs: { url?: string; current: boolean }[] }>('browser.status');
+            return { ...(await bridge.call<{ endpoint: string }>('cdp.endpoint', {})), url: status.tabs.find((t) => t.current)?.url };
+          })
+        : undefined;
+      result = await bridge.call<RunResult>('replay.start', { routine: r, params: filled, secrets: secretsFor(r), fit, flight, foreign: !!origin, from }, 15 * 60_000);
     } catch (e) {
       await lock.release();
       throw e;
@@ -1016,9 +1029,23 @@ export async function runMcp(): Promise<void> {
     {
       description:
         'Replay a saved routine without the model. Same as its rt_ tool. A routine only works on its own site, and a step that looks irreversible in a routine from someone else waits for the user in the side panel. match_viewport: true resizes the browser window to the size the routine was recorded at and puts it back afterwards; otherwise a window of a very different size is reported in the result and the picture check is relaxed.',
-      inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional(), match_viewport: z.boolean().optional(), flight_recorder: z.boolean().optional().describe('Keep the last minute of the tab, and save it as a video if the run fails') },
+      inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional(), match_viewport: z.boolean().optional(), flight_recorder: z.boolean().optional(), fast: z.boolean().optional().describe('Keep the last minute of the tab, and save it as a video if the run fails') },
     },
-    async ({ name, params, match_viewport, flight_recorder }) => run(name, params ?? {}, match_viewport, flight_recorder),
+    async ({ name, params, match_viewport, flight_recorder, fast }) => run(name, params ?? {}, match_viewport, flight_recorder, fast),
+  );
+
+  server.registerTool(
+    'routine_playwright',
+    {
+      description:
+        "A routine's steps as a Playwright script, with its parameters, loops and branches. Worked out from the steps, with no model, so it costs nothing and cannot drift. Secrets stay placeholders, read from the environment when the script runs. It stops at every step that waits for a person. To run a routine this way yourself, use routine_run with fast: true: it saves time and not tokens, since a normal replay calls no model either.",
+      inputSchema: { name: z.string() },
+    },
+    async ({ name }) =>
+      guarded(async () => {
+        const w = block(toPlaywright(await store.read(name)), `Playwright code compiled from the steps of ${name}`);
+        return text(w.text + warn(w));
+      }),
   );
 
   server.registerTool(

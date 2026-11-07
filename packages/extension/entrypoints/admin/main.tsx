@@ -20,6 +20,7 @@ interface Row {
 }
 interface Step { n: number; action: string; label: string; url?: string; value?: string; pause?: string; instructions?: string }
 interface Detail extends Omit<Row, 'steps' | 'tags'> {
+  playwright?: string;
   steps: Step[]; meta: { pauses: number[]; hooks?: Record<string, string>; instructions?: string }; checks: Check[];
   live: { version: number; steps: Step[]; meta?: { hooks?: Record<string, string> } } | null;
   publisher: { handle: string; joined: string; live: number; approved: number; rejected: number; blocked: boolean };
@@ -235,6 +236,12 @@ function Review({ onCount }: { onCount: (n: number) => void }) {
                 {detail.meta.instructions && <pre class="code">{detail.meta.instructions}</pre>}
                 {detail.steps.filter((s) => s.instructions).map((s) => <pre class="code" key={s.n}>{`Step ${s.n}: ${s.instructions}`}</pre>)}
               </div>
+            </div>
+          )}
+          {detail.playwright && (
+            <div class="ad-sec">
+              <h3 class="h3">As Playwright code · sent by the publisher's extension, to read. Nothing runs it, and the steps above are what counts</h3>
+              <div class="codes"><pre class="code">{detail.playwright}</pre></div>
             </div>
           )}
           {detail.meta.hooks && Object.keys(detail.meta.hooks).length > 0 && (

@@ -61,6 +61,11 @@ async function refusal(session: string, tabId: number, method: string, params: a
     const hosts = policyOf(session)?.hosts;
     if (hosts && !listed(hosts, url)) return notListed(url, hosts);
   }
+  // The host checks a path the same way for this as for the upload tool. One it will not hand over does not get to the page.
+  if (method === 'DOM.setFileInputFiles') {
+    const refused = await native.call('host.allowFiles', { paths: params?.files ?? [] }).then(() => undefined, (e: Error) => e.message);
+    if (refused) return refused;
+  }
   if (method === 'Page.close' && !isOwnTab(session, tabId)) return 'This tab is the person\'s, so it stays open.';
   if (method === 'Network.getCookies') {
     const hosts = (await pages(session)).map((t) => hostOf(t.url));

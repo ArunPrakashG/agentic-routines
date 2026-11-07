@@ -169,6 +169,7 @@ The wording is fixed so that agents and skills can rely on it: `Routine <tool na
 | `routines_list` | Saved routines, what each is for and how the agent's runs of it have gone. Text from routines someone else wrote is shown as [untrusted data](/docs/safety). |
 | `routine_describe` | The full notes: when to use it, when not to, the pages it applies to, how its runs have gone, values it asks for, where it pauses. |
 | `run_steps` | The recorded steps of a run, numbered, as they happened. Labels come from pages, so the list is [untrusted data](/docs/safety). |
+| `routine_playwright` | The routine's steps as a Playwright script. See [Routine format](routines.md). |
 | `routine_propose` | After a task, the agent decides whether it is worth keeping. This turns the run into a draft: every step numbered, with its page, what it did and what happened after it, plus hints at what could go. Changes nothing. |
 | `routine_edit` | Refine a draft: remove steps, replace clicks and dialogs with a direct address, make values parameters, add pauses and notes, undo, reset. The extension refuses unsafe edits. |
 | `routine_test` | Replay the draft on the live site. Steps that pause are skipped, never performed. |

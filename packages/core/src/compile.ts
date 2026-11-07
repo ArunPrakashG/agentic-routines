@@ -2,7 +2,7 @@ import { urlPattern } from './match.ts';
 import { deriveUrls } from './urls.ts';
 import type { Locator, ParamSpec, RecordedEvent, Routine, Run, Step } from './types.ts';
 
-const IRREVERSIBLE =
+export const IRREVERSIBLE =
   /\b(start rollout|roll ?out|publish|submit|send|pay|purchase|buy|place order|checkout|delete|remove|destroy|revoke|transfer|withdraw|confirm|deploy|go live|refund)\b/i;
 const CLICKABLE_ROLES = new Set(['button', 'link', 'menuitem', 'tab', 'option']);
 
