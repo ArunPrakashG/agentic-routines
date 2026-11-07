@@ -92,5 +92,12 @@ check(!r.error && r.ms < LIMIT, `a picture of the tab is taken (${r.ms} ms)`);
 
 check((await visibility()) === 'hidden', 'and after clicks, typing and a picture it is still behind');
 await client.close();
+// The session is over: the tab the agent opened is closed, and the person's own tab is still there.
+await new Promise((r) => setTimeout(r, 2500));
+{
+  const pages = (await (await fetch(`${CDP}/json/list`)).json()).filter((x) => x.type === 'page').map((x) => x.url);
+  const mine = pages.filter((u) => u.startsWith(SITE) && !u.startsWith(`${SITE}/docs.html`) && u !== `${SITE}/`);
+  check(pages.some((u) => u.startsWith(`${SITE}/docs.html`)) && mine.length === 0, `when the agent is done, the tab it opened is closed and the person's tab stays${mine.length ? ` (left: ${mine})` : ''}`);
+}
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);
