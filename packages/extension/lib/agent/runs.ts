@@ -32,7 +32,7 @@ async function persist() {
 
 const newId = () => 'run-' + crypto.randomUUID().slice(0, 4);
 
-export async function record(source: string, event: RecordedEvent, session?: string): Promise<StoredRun> {
+async function going(source: string, session?: string): Promise<StoredRun> {
   const runs = await load();
   let cur = runs.find((r) => r.source === source && !r.saved);
   if (!cur || cur.session !== session || Date.now() - cur.updatedAt > IDLE_MS) {
@@ -40,10 +40,23 @@ export async function record(source: string, event: RecordedEvent, session?: str
     runs.unshift(cur);
     if (runs.length > KEEP) runs.length = KEEP;
   }
+  return cur;
+}
+
+export async function record(source: string, event: RecordedEvent, session?: string): Promise<StoredRun> {
+  const cur = await going(source, session);
   cur.events.push(event);
   cur.updatedAt = Date.now();
   await persist();
   return cur;
+}
+
+/** What went through execute. It stays with the run, and is not a step of it. */
+export async function noteOutside(source: string, did: string[], url: string | undefined, session?: string) {
+  const cur = await going(source, session);
+  (cur.outside ??= []).push({ ts: Date.now(), url, did });
+  cur.updatedAt = Date.now();
+  await persist();
 }
 
 /** Mark the last event of the current run as having caused a navigation. */
@@ -60,6 +73,7 @@ export async function markNavigated(source: string, url: string) {
 export async function get(id?: string, session?: string): Promise<StoredRun> {
   const runs = await load();
   const r = id ? runs.find((x) => x.id === id) : runs.find((x) => !x.saved && x.events.length && (!session || x.session === session));
+  if (!r && !id && runs.some((x) => !x.saved && x.outside?.length && (!session || x.session === session))) throw new Error('Everything in this run went through execute, which cannot become a routine. Do the task with the step tools to keep it.');
   if (!r) throw new Error(id ? `No run ${id}` : 'No recorded run. Do the task with the browser tools first.');
   return r;
 }
@@ -72,7 +86,7 @@ export async function repeat(session?: string): Promise<Repeat | null> {
 }
 
 export async function list(): Promise<StoredRun[]> {
-  return load();
+  return (await load()).filter((r) => r.events.length);
 }
 
 export async function markSaved(id: string) {

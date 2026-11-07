@@ -43,6 +43,7 @@ export default defineBackground(() => {
     if (method.startsWith('draft.')) return draft.handle(method, p);
     if (method.startsWith('cdp.')) return handleRelay(method, p);
     if (method === 'runs.markSaved') return runs.markSaved(p.run_id);
+    if (method === 'runs.outside') return runs.noteOutside(agent.agentName(p.agent), p.did, p.url, p.session);
     // A rebuilt unpacked extension only runs after a reload. Waits so the answer gets out first.
     if (method === 'extension.reload') return void setTimeout(() => browser.runtime.reload(), 100);
     if (method === 'directory.publish') return askToPublish(p.id, agent.agentName(p.agent));

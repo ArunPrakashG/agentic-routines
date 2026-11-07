@@ -455,6 +455,38 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await evalIn('chores.html', `localStorage.removeItem('chores.add'); 1`);
 }
 
+// ---------- execute: Playwright code on the session's page ----------
+{
+  await session();
+  await call('navigate', { url: `${SITE}/chores.html` });
+  const title = await call('execute', { code: `console.log('hello'); return { title: await page.title(), n: await page.locator('button').count() };` });
+  check(/"title":"Chores"/.test(title.text) && /hello/.test(title.text), 'code runs on the page, and says what it returned and logged');
+
+  const bare = await call('execute', { code: `return [typeof process, typeof require, typeof fetch, typeof Buffer].join();` });
+  check(/undefined,undefined,undefined,undefined/.test(bare.text), 'it has no Node');
+  const imported = await call('execute', { code: `return await import('node:fs').catch((e) => { try { return typeof e.constructor.constructor('return process')(); } catch { return 'shut'; } });` });
+  check(/shut/.test(imported.text), 'import gives nothing to climb out with');
+  const shot = await call('execute', { code: `await page.screenshot({ path: '/tmp/agentic-routines-should-not-exist.png' });` });
+  check(/with a path is not available/.test(shot.text), 'a path to a file is refused');
+  const browserRoute = await call('execute', { code: `await context.browser();` });
+  check(/not available/.test(browserRoute.text), 'the browser itself stays out of reach');
+  const written = await call('execute', { code: `return files.write('../../note.txt', 'hi');` });
+  check(/agentic-routines-execute-[^/]+\/_?\.?\.?_?\.?\.?_?note\.txt/.test(written.text), 'files.write stays in a folder of its own');
+
+  const looped = await call('execute', { code: `while (true) {}` });
+  check(/without yielding/.test(looped.text), 'code that does not yield is stopped');
+  const after = await call('read_page', {});
+  check(/Chores/.test(after.text), 'and the server carries on');
+
+  await call('type', { ref: refFor(after.text, /Item/), text: 'stepped' });
+  await call('click', { ref: refFor(after.text, /Add item/) });
+  const acted = await call('execute', { code: `await page.locator('#item').fill('by code'); await page.locator('#add').click(); return 1;` });
+  check(/Did, in order/.test(acted.text) && /fill\(\)/.test(acted.text) && !/by code/.test(acted.text.split('Did, in order')[1]), 'what it did is listed, without the values');
+  check(/cannot become a routine/.test(acted.text), 'the agent is told it cannot become a routine');
+  const proposed = await call('routine_propose', { name: 'pr-execute-kept', description: 'Add a chore. Use when a chore needs adding.' });
+  check(/Not in these steps: the run also used execute/.test(proposed.text), 'proposing the run says what is missing from it');
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

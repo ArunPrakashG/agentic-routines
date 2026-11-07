@@ -1,5 +1,6 @@
 import { mkdirSync, watch, writeFileSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -11,6 +12,7 @@ import { policyOf, sessionIn } from './sessions.ts';
 import * as locks from '../store/locks.ts';
 import * as secrets from '../store/secrets.ts';
 import * as sessions from '../store/sessions.ts';
+import { executeWorker, watched } from './execute.ts';
 import { fastRun } from './fast.ts';
 import { checkUpload, splitPaths } from '../host/files.ts';
 import { paths } from '../paths.ts';
@@ -875,6 +877,31 @@ export async function runMcp(): Promise<void> {
             `What is done through it is not recorded, so it cannot become a routine.`,
           ].join('\n'),
         );
+      }),
+  );
+
+  server.registerTool(
+    'execute',
+    {
+      description:
+        "Run Playwright code against this session's page: `page` and `context` are there, with console, timers and files.write. Use `return` for what you want back. Prefer the step tools on a page you have not seen, since you cannot write code for a page you have not read and every look costs a call anyway; this is for many small actions on a page you already know, such as reading a long table. It has no Node, no network modules, no import and no file access but files.write, and code that holds on for 2 seconds without yielding is stopped. That keeps honest code honest and is not a security boundary. What it does is recorded, but it cannot become a routine.",
+      inputSchema: { code: z.string().max(256 * 1024), timeout_seconds: z.number().int().min(1).max(300).optional().describe('Default 30.') },
+    },
+    async (a) =>
+      guarded(async () => {
+        const status = await bridge.call<{ tabs: { url?: string; current: boolean }[] }>('browser.status');
+        const url = status.tabs.find((t) => t.current)?.url;
+        const { endpoint } = await bridge.call<{ endpoint: string }>('cdp.endpoint', {});
+        const dir = await mkdtemp(join(tmpdir(), 'agentic-routines-execute-'));
+        const r = await watched(executeWorker(), { code: a.code, endpoint, url, dir }, (a.timeout_seconds ?? 30) * 1000);
+        if (r.did.length) await bridge.call('runs.outside', { did: r.did, url });
+        const page = [r.error && `It failed: ${r.error}`, r.value !== undefined && `Returned: ${r.value}`, r.logs.length && `Console:\n${r.logs.join('\n')}`].filter(Boolean).join('\n\n');
+        const w = block(page || 'It returned nothing.', 'execute');
+        const lines = [w.text + warn(w)];
+        if (r.did.length) lines.push(`Did, in order:\n${r.did.map((d) => `- ${d}`).join('\n')}`);
+        if (r.files.length) lines.push(`Files, in a folder of this run's own:\n${r.files.join('\n')}`);
+        lines.push('This cannot become a routine: a replay has no steps for it. To keep this task, do it with the step tools.');
+        return { ...text(lines.join('\n\n')), isError: r.error ? true : undefined };
       }),
   );
 
