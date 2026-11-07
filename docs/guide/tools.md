@@ -13,6 +13,7 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `javascript` | Run a script in the page. The person says yes per site in the side panel. Never recorded. |
 | `read_console_messages` | What the page said to its console, and uncaught errors. |
 | `read_network_requests` | What the page sent since the first call on that tab: method, address, status, type. |
+| `session_adopt` | Work in a tab the person lent with the toolbar button, by id or address. It cannot be closed, and they can take it back at any moment. Recorded like any other work. |
 | `handoff` | Give the tab to the person for a login, a one-time code, a payment or a bot check. A card on the page says who asks, why and on which site, and the toolbar button says WAIT. Only their click on the card or the button gives it back. The call waits with no model calls, and no tool can touch that tab meanwhile. What they type never reaches the agent. Recorded as a step. |
 | `close_tab` | Close a tab you opened, or that a page opened because of what you did. Any other tab stays open. Not recorded. |
 | `navigate` | Open an address in the agent tab. Pass `force` to leave a page that asks first. If an installed routine handles the page, it adds a hint line (see [Finding a routine first](#finding-a-routine-first)). |

@@ -12,7 +12,7 @@ import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
-import { agentTabId, ask, closeOwnTab, frameOf, glow, heldBy, isOwnTab, noteSession, openTab, settle, takeSpawned, waitLoaded } from '../page/tabs';
+import { adopt, agentTabId, ask, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, noteSession, openTab, settle, takeSpawned, waitLoaded } from '../page/tabs';
 
 // The browser tools agents call. Each call is done and recorded.
 
@@ -246,7 +246,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
         .filter((t) => /^https?:/.test(t.url ?? ''))
         .map((t) => {
           const h = t.id !== undefined ? heldBy(t.id) : undefined;
-          return { id: t.id, title: unmark(t.title ?? ''), url: t.url, active: t.active, ...(h ? { held_by: h.session === p?.session ? 'you' : h.label } : {}), ...(t.id !== undefined && isOwnTab(p?.session, t.id) ? { yours: true } : {}) };
+          return { id: t.id, title: unmark(t.title ?? ''), url: t.url, active: t.active, ...(h ? { held_by: h.session === p?.session ? 'you' : h.label } : {}), ...(t.id !== undefined && isOwnTab(p?.session, t.id) ? { yours: true } : {}), ...(t.id !== undefined && isLent(t.id) ? { lent: true } : {}) };
         });
     }
     case 'browser.navigate': {
@@ -341,6 +341,12 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const { note } = await act(source, p?.session, tabId, aim.ref, 'scroll', undefined, { pointer }, undefined, { ...pointer, at: aim.at });
       if (f?.tabId === tabId) f.moved = true;
       return note;
+    }
+    case 'browser.adopt': {
+      const tabId = await adopt(p?.session, { tabId: p.tab_id, url: p.url });
+      await glow(tabId, 'run', WORKING_MS);
+      const t = await browser.tabs.get(tabId);
+      return { tab_id: tabId, url: t.url, title: unmark(t.title ?? '') };
     }
     case 'browser.handoff': {
       // Asking again while the person still has it picks up the same hand-over.

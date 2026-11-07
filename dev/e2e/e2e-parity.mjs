@@ -143,6 +143,36 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check(!/bot check/.test((await call('read_page')).text), 'once the person is through, it is not reported');
 }
 
+// ---------- lending a tab ----------
+{
+  await session();
+  const before = await (await fetch(`${CDP}/json/new?${encodeURIComponent(`${CHORES}?lent=1`)}`, { method: 'PUT' })).json();
+  await sleep(800);
+  const refused = await call('session_adopt', { url: `${CHORES}?lent=1` });
+  check(refused.error && /not been lent/.test(refused.text), `a tab not lent cannot be adopted: ${refused.text.slice(0, 120)}`);
+  const id = await toolbar('lent=1');
+  await sleep(300);
+  check((await badgeOf(id)) === 'ON', 'the toolbar button lends it, and the badge says ON');
+  check(/"lent": ?true/.test((await call('tabs')).text), 'the tabs tool marks it');
+  const adopted = await call('session_adopt', { url: `${CHORES}?lent=1` });
+  check(!adopted.error && new RegExp(`tab ${id}`).test(adopted.text), `adopted by address: ${adopted.text.slice(0, 120)}`);
+  check((await badgeOf(id)) === 'RUN', 'the badge says RUN');
+  const page = await read();
+  await call('type', { ref: refFor(page, /textbox.*Item/i), text: 'Lent' });
+  await call('click', { ref: refFor(page, /button.*Add item/i) });
+  const proposed = await call('routine_propose', { name: 'from-a-lent-tab', description: 'Use when testing.' });
+  check(/Add item/.test(proposed.text), 'what it did there is recorded');
+  const closing = await call('close_tab', { tab_id: id });
+  check(closing.error && /stays open/.test(closing.text), 'it cannot close it');
+  await toolbar('lent=1');
+  await sleep(300);
+  check(!(await badgeOf(id)), 'clicking again takes it back');
+  const told = await call('read_page');
+  check(told.error && /took tab/.test(told.text), `the agent is told: ${told.text.slice(0, 120)}`);
+  check((await call('session_adopt', { tab_id: id })).error, 'and it cannot adopt it again until it is lent again');
+  await fetch(`${CDP}/json/close/${before.id}`);
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

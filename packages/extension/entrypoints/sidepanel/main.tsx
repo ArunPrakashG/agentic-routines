@@ -594,6 +594,22 @@ function ScriptCard({ card }: { card: NonNullable<PanelState['script']> }) {
   );
 }
 
+function LentTabs({ tabs }: { tabs: PanelState['lent'] }) {
+  return (
+    <section class="stack" aria-label="Tabs you have lent" style={{ gap: '6px' }}>
+      <span class="k">Lent to agents</span>
+      {tabs.map((t) => (
+        <div class="script-site" key={t.id}>
+          <span class="mono">{t.site}{t.by ? ` · ${t.by}` : ''}</span>
+          <button class="btn btn-ghost sm" type="button" aria-label={`Take back ${t.title || t.site}`} onClick={() => send({ t: 'takeBack', tabId: t.id })}>
+            Take back
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function ScriptSites({ sites }: { sites: string[] }) {
   return (
     <section class="stack" aria-label="Sites that allow scripts" style={{ gap: '6px' }}>
@@ -903,6 +919,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
               ))}
             </section>
           )}
+          {s.lent.length > 0 && <LentTabs tabs={s.lent} />}
           {s.scriptSites.length > 0 && <ScriptSites sites={s.scriptSites} />}
         </main>
       )}

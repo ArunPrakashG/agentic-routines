@@ -41,6 +41,8 @@ These hold whatever the agent, the page or a routine says:
 - **Files only go where you said.** The extension can read only the files named in an `upload` call or typed for a routine, never a path a page asked for, and credential locations are refused.
 - **Install and publish are yours.** Installing from Git and publishing need your click in the side panel.
 
+Clicking the toolbar button on a website's tab lends it to agents and opens the panel, and the badge says ON. Clicking again, or Take back in the panel, takes it back, stops a replay on it and ends the debugger session on it; the agent working there is told on its next call. An agent can adopt a lent tab but cannot close it. This lets a person point an agent at a tab; it is not a permission line, as an agent can already pass the `tab_id` of any tab that is not locked.
+
 A tab handed to the person with `handoff` is theirs: no tool or replay can touch it until they click the card or the toolbar button. The card is in a closed shadow root and only a real click counts, so a page can neither fake it nor read it, and an agent's own click is refused. A bot check or refusal page is reported and handed over. Nothing in Agentic Routines tries to solve or get past one.
 
 ## What an agent should do

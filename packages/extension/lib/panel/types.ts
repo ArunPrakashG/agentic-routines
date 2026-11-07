@@ -17,6 +17,8 @@ export interface PanelState {
   script?: { site: string; code: string; by: string };
   /** Sites where it may, until the person says otherwise. */
   scriptSites: string[];
+  /** Tabs the person has lent with the toolbar button, and who is working in them. */
+  lent: { id: number; title: string; site: string; by?: string }[];
   /** Hook code the person is reading to decide whether it may run. */
   hooksReview?: { id: string; name: string; hooks: Hooks; state: HookState; busy?: boolean; error?: string };
   replay?: {
@@ -45,6 +47,7 @@ export type PanelCommand =
   | { t: 'save'; runId: string; name: string; description: string; fixed?: string[]; publish?: boolean }
   | { t: 'publish'; id: string }
   | { t: 'publishDecide'; approve: boolean; handle?: string }
+  | { t: 'takeBack'; tabId: number }
   | { t: 'sources' }
   | { t: 'sourceAdd'; address: string }
   | { t: 'sourceRemove'; id: string }
