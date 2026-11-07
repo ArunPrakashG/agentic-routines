@@ -30,7 +30,7 @@ function contrast(a: Rgba, b: Rgba): number {
 
 /** The colour behind an element's text, or undefined when a picture or gradient could be there. */
 function backdrop(el: Element): Rgba | undefined {
-  for (let e: Element | null = el; e; e = e.parentElement) {
+  for (let e: Element | null = el; e; e = e.parentElement ?? ((e.getRootNode() as ShadowRoot).host as Element | undefined) ?? null) {
     const s = getComputedStyle(e);
     if (s.backgroundImage !== 'none') return undefined;
     const bg = parse(s.backgroundColor);
@@ -52,7 +52,8 @@ export function hiddenWhy(el: Element): string | null {
   const hit = seen.get(el);
   if (hit && now - hit.at < FRESH_MS) return hit.why;
   let why = ownWhy(el);
-  if (!why && el.parentElement && el.parentElement !== document.documentElement) why = hiddenWhy(el.parentElement);
+  const up = el.parentElement ?? ((el.getRootNode() as ShadowRoot).host as Element | undefined);
+  if (!why && up && up !== document.documentElement) why = hiddenWhy(up);
   seen.set(el, { at: now, why });
   return why;
 }

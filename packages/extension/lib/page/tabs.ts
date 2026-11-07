@@ -4,27 +4,40 @@ import type { Send } from '../platform/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function ensureContent(tabId: number) {
+export async function ensureContent(tabId: number, frameId = 0) {
   try {
-    if (await browser.tabs.sendMessage(tabId, { t: 'ping' }, { frameId: 0 })) return;
+    if (await browser.tabs.sendMessage(tabId, { t: 'ping' }, { frameId })) return;
   } catch {
     // Not injected: the tab was open before install, or the page just loaded.
   }
-  await browser.scripting.executeScript({ target: { tabId }, files: ['/content-scripts/content.js'] });
+  await browser.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['/content-scripts/content.js'] });
 }
 
-/** Ask the page to do something. Retries once after injecting the content script. */
-export async function ask<T = unknown>(tabId: number, msg: ContentMsg): Promise<T> {
+// A ref from a frame says which: f12:ref_3. One with no prefix is in the page itself.
+const FRAMED = /^f(\d+):(.+)$/;
+export const inFrame = (frameId: number, ref: string) => (frameId ? `f${frameId}:${ref}` : ref);
+export const frameOf = (ref?: string) => Number(FRAMED.exec(ref ?? '')?.[1] ?? 0);
+
+/** Ask the page to do something. Retries once after injecting the content script. Goes to the frame its ref is in, or the one named. */
+export async function ask<T = unknown>(tabId: number, msg: ContentMsg, frame?: number): Promise<T> {
+  const named = 'ref' in msg && msg.ref ? FRAMED.exec(msg.ref) : null;
+  const frameId = named ? Number(named[1]) : (frame ?? 0);
+  const out = named ? ({ ...msg, ref: named[2] } as ContentMsg) : msg;
   let res: { ok?: T; err?: string } | undefined;
   try {
-    res = await browser.tabs.sendMessage(tabId, msg, { frameId: 0 });
+    res = await browser.tabs.sendMessage(tabId, out, { frameId });
   } catch {
-    await ensureContent(tabId);
-    res = await browser.tabs.sendMessage(tabId, msg, { frameId: 0 });
+    await ensureContent(tabId, frameId);
+    res = await browser.tabs.sendMessage(tabId, out, { frameId });
   }
   if (!res) throw new Error('The page did not answer');
   if (res.err) throw new Error(res.err);
   return res.ok as T;
+}
+
+/** Tell every document in a tab. Those that cannot hear it are not missed. */
+export async function tellAll(tabId: number, msg: ContentMsg) {
+  await browser.tabs.sendMessage(tabId, msg).catch(() => {});
 }
 
 // Tabs a routine or an agent is driving: their pages glow, and the glow comes back after a navigation.

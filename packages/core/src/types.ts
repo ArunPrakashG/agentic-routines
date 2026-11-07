@@ -35,6 +35,8 @@ export interface Locator {
   near?: string;
   /** The dialog the element sat in, by its name, when it sat in one. */
   modal?: string;
+  /** The address of the frame it was in, when it was in one. */
+  frame?: string;
 }
 
 /** A place on an element, as fractions of its box. For what has no finer name: a canvas, a map, a slider's track. */

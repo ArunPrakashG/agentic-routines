@@ -1,11 +1,14 @@
 import { resolve, type Locator, type RecordedEvent, type Spot } from '@agentic-routines/core';
+import { hiddenWhy } from '../lib/page/hidden';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { accessibleName, aimAt, attach, busyWhy, clickedThing, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
+import { accessibleName, aimAt, allShadowRoots, attach, busyWhy, clickedThing, closestDeep, deepAll, deepPoint, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
   | { t: 'read'; filter?: 'interactive' | 'all'; wait?: number }
+  | { t: 'knock'; nonce: string }
+  | { t: 'place'; nonce: string; show?: Point }
   | { t: 'find'; query: string }
   | { t: 'pagetext' }
   | { t: 'fieldstate'; ref: string }
@@ -47,6 +50,9 @@ function b64ToBytes(b64: string) {
 
 let recording = false;
 
+/** What a person really pressed. Out here an event from a shadow root says only its host. */
+const hitBy = (e: MouseEvent) => deepPoint(e.clientX, e.clientY) ?? (e.composedPath()[0] as Element);
+
 function human(event: Omit<RecordedEvent, 'ts' | 'url' | 'page'>) {
   if (!recording) return;
   browser.runtime.sendMessage({ t: 'human', event: { ...event, ts: Date.now(), url: location.href, page: fingerprint(), view: viewport() } }).catch(() => {});
@@ -59,16 +65,17 @@ let dragged = false;
 
 function onPress(e: PointerEvent) {
   dragged = false;
-  if (recording && e.target instanceof Element) pressed = { el: e.target, x: e.clientX, y: e.clientY };
+  listenInShadows();
+  if (recording && e.target instanceof Element) pressed = { el: hitBy(e), x: e.clientX, y: e.clientY };
 }
 
 function onLetGo(e: MouseEvent) {
   const p = pressed;
   pressed = undefined;
   if (!p || Math.hypot(e.clientX - p.x, e.clientY - p.y) < DRAG_PX) return;
-  const made = p.el.closest('canvas,svg,[draggable=true],[role=slider]') || /grab|move/.test(getComputedStyle(p.el).cursor);
+  const made = closestDeep(p.el, 'canvas,svg,[draggable=true],[role=slider]') || /grab|move/.test(getComputedStyle(p.el).cursor);
   if (!made) return;
-  const end = document.elementFromPoint(e.clientX, e.clientY) ?? document.body;
+  const end = deepPoint(e.clientX, e.clientY) ?? document.body;
   dragged = true;
   human({ action: 'drag', target: describe(p.el), pointer: { spot: spotOn(p.el, p.x, p.y), to: { target: describe(end), spot: spotOn(end, e.clientX, e.clientY) } } });
 }
@@ -78,8 +85,8 @@ function onClick(e: MouseEvent) {
     dragged = false;
     return;
   }
-  const top = e.target as Element;
-  const el = top?.closest?.('a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],[role=switch]');
+  const top = hitBy(e);
+  const el = top && closestDeep(top, 'a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],[role=switch]');
   if (!el) {
     const thing = top instanceof Element && recording ? clickedThing(top, e.clientX, e.clientY) : undefined;
     if (thing) human({ action: 'click', target: describe(thing.el), ...(thing.spot ? { pointer: { spot: thing.spot } } : {}) });
@@ -98,11 +105,23 @@ function onClick(e: MouseEvent) {
 
 function onContextMenu(e: MouseEvent) {
   if (!recording || !(e.target instanceof Element)) return;
-  human({ action: 'click', target: describe(e.target), pointer: { button: 'right', spot: spotOn(e.target, e.clientX, e.clientY) } });
+  const at = hitBy(e);
+  human({ action: 'click', target: describe(at), pointer: { button: 'right', spot: spotOn(at, e.clientX, e.clientY) } });
+}
+
+// A change does not leave a shadow root, so whoever wants to hear it has to be in there.
+const listening = new WeakSet<ShadowRoot>();
+function listenInShadows() {
+  if (!recording) return;
+  for (const r of allShadowRoots()) {
+    if (listening.has(r)) continue;
+    listening.add(r);
+    r.addEventListener('change', onChange, true);
+  }
 }
 
 function onChange(e: Event) {
-  const el = e.target as Element;
+  const el = e.composedPath()[0] as Element;
   const kind = fieldKind(el);
   const label = accessibleName(el);
   if (toggleOf(el) !== undefined) return human({ action: 'set', target: describe(el), fieldLabel: label, value: String(toggleOf(el)) });
@@ -120,21 +139,63 @@ function onChange(e: Event) {
 function ownKind(target: Locator): Element[] {
   const out = new Set<Element>();
   try {
-    for (const el of Array.from(document.querySelectorAll(target.css))) out.add(el);
+    for (const el of deepAll(target.css)) out.add(el);
   } catch {
     // Not a selector this page can use.
   }
-  const same = document.getElementsByTagName(target.tag);
-  if (same.length <= 50) for (const el of Array.from(same)) out.add(el);
+  const same = deepAll(target.tag);
+  if (same.length <= 50) for (const el of same) out.add(el);
   return [...out].filter((el) => el.tagName.toLowerCase() === target.tag && visible(el));
+}
+
+// Frames that have said hello, by what they said. The page sees the message too, but it cannot make it come from another frame.
+const knocked = new Map<string, Element>();
+const KNOCK = '__agenticRoutinesKnock';
+
+function onKnock(e: MessageEvent) {
+  const nonce = e.data?.[KNOCK];
+  if (typeof nonce !== 'string' || !e.source || knocked.has(nonce)) return;
+  const frame = deepAll('iframe,frame').find((f) => (f as HTMLIFrameElement).contentWindow === e.source);
+  if (frame) knocked.set(nonce, frame);
+}
+
+/** Where a frame that said hello sits in this document, and what a person sees of it. Brings a point in it on screen when asked. */
+function placeOfFrame(nonce: string, show?: Point) {
+  const f = knocked.get(nonce) as HTMLIFrameElement | undefined;
+  if (!f) return null;
+  knocked.delete(nonce);
+  const box = () => {
+    const r = f.getBoundingClientRect();
+    return { r, sx: f.offsetWidth ? r.width / f.offsetWidth : 1, sy: f.offsetHeight ? r.height / f.offsetHeight : 1 };
+  };
+  let { r, sx, sy } = box();
+  const shown = visible(f) && !hiddenWhy(f) && r.width >= 2 && r.height >= 2;
+  let over: string | undefined;
+  if (show && shown) {
+    const at = () => ({ x: r.x + (f.clientLeft + show.x) * sx, y: r.y + (f.clientTop + show.y) * sy });
+    let p = at();
+    if (p.x < 0 || p.y < 0 || p.x >= innerWidth || p.y >= innerHeight) {
+      window.scrollBy({ left: p.x - innerWidth / 2, top: p.y - innerHeight / 2, behavior: 'instant' as ScrollBehavior });
+      ({ r, sx, sy } = box());
+      p = at();
+    }
+    const top = deepPoint(p.x, p.y);
+    if (top !== f) over = top ? accessibleName(top) || top.tagName.toLowerCase() : undefined;
+  }
+  return { x: r.x + f.clientLeft * sx, y: r.y + f.clientTop * sy, w: f.clientWidth, h: f.clientHeight, sx, sy, shown, over };
 }
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
+  allFrames: true,
+  matchAboutBlank: true,
   main() {
     watchChanges();
-    clearStale();
+    if (window === window.top) clearStale();
+    // A frame that loads while a person is recording has missed being told.
+    browser.runtime.sendMessage({ t: 'recording?' }).then((on) => { if (on) recording = true; }).catch(() => {});
+    window.addEventListener('message', onKnock, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('pointerdown', onPress, true);
@@ -162,6 +223,13 @@ export default defineContentScript({
               if (busy) out.notes.busy = busy;
               send({ ok: out });
             })();
+            break;
+          case 'knock':
+            window.parent.postMessage({ [KNOCK]: msg.nonce }, '*');
+            send({ ok: true });
+            break;
+          case 'place':
+            send({ ok: placeOfFrame(msg.nonce, msg.show) });
             break;
           case 'find':
             send({ ok: findOnPage(msg.query) });
@@ -308,8 +376,10 @@ export default defineContentScript({
           case 'markUpload': {
             const input = fileInputFor(byRef(msg.ref));
             for (const old of Array.from(document.querySelectorAll('[data-br-upload]'))) old.removeAttribute('data-br-upload');
-            if (input) input.setAttribute('data-br-upload', '1');
-            void aim(byRef(msg.ref), 'upload').finally(() => send({ ok: input ? { multiple: input.multiple, accept: input.accept } : false }));
+            // The browser reads the paths itself only for an input it can reach from the page. Others get the file through the host.
+            const reachable = input && window === window.top && input.getRootNode() === document;
+            if (reachable) input.setAttribute('data-br-upload', '1');
+            void aim(byRef(msg.ref), 'upload').finally(() => send({ ok: reachable ? { multiple: input.multiple, accept: input.accept } : false }));
             break;
           }
           case 'unmarkUpload':
@@ -341,6 +411,7 @@ export default defineContentScript({
             break;
           case 'record':
             recording = msg.on;
+            listenInShadows();
             send({ ok: true });
             break;
         }

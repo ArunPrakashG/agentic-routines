@@ -126,3 +126,7 @@ A replay returns one of these:
 - **Failed.** The result says which step and why. A step that would leave the routine's site always fails here.
 
 A routine written by someone else also pauses before any step that looks irreversible, even if its author didn't mark one, and only the person can approve that pause, in the side panel. [Untrusted content](/docs/safety) covers why.
+
+## Frames and shadow roots
+
+A page's outline includes every frame a person can see and whatever is inside shadow roots, open or closed. A ref in a frame says which one, like `f12:ref_3`, and works in `click`, `type`, `form_input` and the rest like any other ref. Frames that are hidden or too small to see are left out, so what they say never reaches you. A coordinate on a screenshot lands in whatever is drawn there, frame or not. Routines remember which frame a step was in by its address, and replay it there.

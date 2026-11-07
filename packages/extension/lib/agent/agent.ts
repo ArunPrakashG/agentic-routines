@@ -2,13 +2,14 @@ import type { Locator, PageFingerprint, Pointer, RecordedEvent, Spot, Viewport }
 import { areaBase64, cropHash, markedPng, pngBase64, pngSize, regionBase64, type Frame, type Rect } from '../replay/crop';
 import { MAX_MARKS, type Mark } from '../replay/annotate';
 import type { How, Point } from '../page/dom';
+import { findInTab, landOn, readTab, textOfTab, toTab } from '../page/frames';
 import { perform } from '../page/input';
 import * as llm from '../page/llm';
 import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
-import { agentTabId, ask, glow, heldBy, noteSession, openTab, settle, waitLoaded } from '../page/tabs';
+import { agentTabId, ask, frameOf, glow, heldBy, noteSession, openTab, settle, waitLoaded } from '../page/tabs';
 
 // The browser tools agents call. Each call is done and recorded.
 
@@ -21,6 +22,14 @@ interface Described {
   label: string;
   page: PageFingerprint;
   view?: Viewport;
+}
+
+/** An element as the rest of this file wants it: where it is in the tab, on the page the tab is on, whichever document it is in. */
+async function describeIn(tabId: number, ref: string): Promise<Described> {
+  const d = await ask<Described>(tabId, { t: 'describe', ref });
+  if (!frameOf(ref)) return d;
+  const at = await toTab(tabId, ref, d.rect);
+  return { ...d, rect: { ...d.rect, x: at.x, y: at.y }, page: await ask<PageFingerprint>(tabId, { t: 'fingerprint' }), view: await ask<Viewport>(tabId, { t: 'viewport' }) };
 }
 
 // The tab an agent is working in glows while it works, and for a few seconds after its last call.
@@ -155,14 +164,13 @@ async function pagePoint(session: string | undefined, tabId: number, x: number, 
 async function aimed(session: string | undefined, tabId: number, ref: string | undefined, x: number | undefined, y: number | undefined): Promise<{ ref: string; spot?: Spot; at?: Point }> {
   if (ref) return { ref };
   if (x === undefined || y === undefined) throw new Error('Pass a ref, or x and y from a screenshot.');
-  const at = await pagePoint(session, tabId, x, y);
-  return { ...(await ask<{ ref: string; spot?: Spot }>(tabId, { t: 'at', ...at })), at };
+  return landOn(tabId, await pagePoint(session, tabId, x, y));
 }
 
 const pressedHow = (p: any): Pointer => ({ ...(p.button && p.button !== 'left' ? { button: p.button } : {}), ...(p.count > 1 ? { count: p.count } : {}), ...(p.modifiers ? { mods: p.modifiers } : {}) });
 
 async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}, mk?: { on: boolean; note?: string }, how?: How) {
-  const d = await ask<Described>(tabId, { t: 'describe', ref });
+  const d = await describeIn(tabId, ref);
   const crop = d.field === 'password' ? undefined : await cropHash(tabId, d.rect);
   const before = (await browser.tabs.get(tabId)).url ?? '';
   if (mk?.on && d.field !== 'password') addMark(session, tabId, before, d, mk.note, false);
@@ -236,7 +244,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const tabId = await working(p?.session, p.tab_id);
       // Text and what was left out of it, so the MCP server can say so. The address lets the CLI point at a routine for this page.
       if (p.ref) return { text: await ask<string>(tabId, { t: 'text', ref: p.ref }), notes: { omitted: {}, longValues: 0 }, url: (await browser.tabs.get(tabId)).url };
-      const out = await ask<{ text: string; notes: unknown }>(tabId, { t: 'read', filter: p.filter, wait: p.wait });
+      const out = await readTab(tabId, p.filter, p.wait);
       const account = await ask<string | undefined>(tabId, { t: 'account' }).catch(() => undefined);
       return { ...out, url: (await browser.tabs.get(tabId)).url, account };
     }
@@ -247,11 +255,11 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.find': {
       const tabId = await working(p?.session, p.tab_id);
-      return { ...(await ask<{ lines: string[]; total: number }>(tabId, { t: 'find', query: p.query })), url: (await browser.tabs.get(tabId)).url };
+      return findInTab(tabId, p.query);
     }
     case 'browser.text': {
       const tabId = await working(p?.session, p.tab_id);
-      return ask(tabId, { t: 'pagetext' });
+      return textOfTab(tabId);
     }
     case 'browser.form_input': {
       const tabId = await working(p?.session, p.tab_id);
@@ -275,7 +283,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const tabId = await working(p?.session, p.tab_id);
       const from = await aimed(p?.session, tabId, p.ref, p.x, p.y);
       const to = await aimed(p?.session, tabId, p.to_ref, p.to_x, p.to_y);
-      const end = await ask<Described>(tabId, { t: 'describe', ref: to.ref });
+      const end = await describeIn(tabId, to.ref);
       const pointer: Pointer = { ...(from.spot ? { spot: from.spot } : {}), to: { target: end.loc, ...(to.spot ? { spot: to.spot } : {}) } };
       const { d, note } = await act(source, p?.session, tabId, from.ref, 'drag', undefined, { pointer }, undefined, { ...pointer, at: from.at, toRef: to.ref, toAt: to.at });
       return `Dragged “${d.label || d.loc.name || d.loc.tag}” to “${end.label || end.loc.name || end.loc.tag}”.${note ? ` ${note}` : ''}`;
@@ -333,7 +341,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const tabId = await working(p?.session, p.tab_id);
       const url = (await browser.tabs.get(tabId)).url ?? '';
       if (p.ref && p.note) {
-        const e = await ask<Described>(tabId, { t: 'describe', ref: p.ref });
+        const e = await describeIn(tabId, p.ref);
         addMark(p?.session, tabId, url, e, p.note, true);
       }
       if (p.region) {
@@ -351,7 +359,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       }
       const last = lastActed.get(p?.session ?? 'user');
       const ref: string | undefined = p.ref ?? (last?.tabId === tabId ? last.ref : undefined);
-      const d = ref ? await ask<Described>(tabId, { t: 'describe', ref }).catch((e) => { if (p.ref) throw e; }) : undefined;
+      const d = ref ? await describeIn(tabId, ref).catch((e) => { if (p.ref) throw e; }) : undefined;
       const { data, area, frame, w, h } = await areaBase64(tabId, d?.rect, marks);
       return { data, note: `${area ? `The area around “${d!.label || d!.loc.name || d!.loc.tag}”. Pass full: true for the whole tab.` : 'The whole tab at half size, as no element was acted on here. Pass full: true for full size.'}${keepPicture(p?.session, tabId, url, frame, w, h)}` };
     }

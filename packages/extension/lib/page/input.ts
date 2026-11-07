@@ -1,7 +1,8 @@
 import { platform } from '../platform';
 import type { Send } from '../platform/types';
 import type { FieldState, How, Point } from './dom';
-import { ask, draw, sleep } from './tabs';
+import { toTab } from './frames';
+import { ask, draw, frameOf, sleep } from './tabs';
 
 // Real input. Through a DevTools session a click, a key and typed text reach the page the way a person's do, so a site
 // cannot tell them apart. Without a session (Firefox), or if the input did not arrive, the page script sends DOM events.
@@ -109,9 +110,9 @@ interface Aim {
 const mouseOpts = (how: How): MouseOpts => ({ button: how.button, count: how.count, modifiers: modifiersOf((how.mods ?? '').split('+').filter(Boolean)) });
 
 /** Whether the input just sent reached what it was aimed at. A page that left, or went away, took it with it. */
-async function arrived(tabId: number, before?: string) {
+async function arrived(tabId: number, before: string | undefined, ref: string) {
   for (const end = Date.now() + LAND_MS; Date.now() < end; await sleep(50)) {
-    if (await ask<boolean>(tabId, { t: 'landed' }).catch(() => true)) return true;
+    if (await ask<boolean>(tabId, { t: 'landed' }, frameOf(ref)).catch(() => true)) return true;
     if ((await browser.tabs.get(tabId)).url !== before) return true;
   }
   return false;
@@ -119,7 +120,10 @@ async function arrived(tabId: number, before?: string) {
 
 /** Aim at an element, with the check that nothing is on top of it. A place on the element is exact or it is nothing. */
 async function aimFor(tabId: number, ref: string, action: string, how: How) {
-  const a = await ask<Aim>(tabId, { t: 'aim', ref, action, spot: how.spot, at: how.at, moving: action === 'hover', quick: await behind(tabId) });
+  const local = await ask<Aim>(tabId, { t: 'aim', ref, action, spot: how.spot, at: how.at, moving: action === 'hover', quick: await behind(tabId) });
+  // The aim is in the element's own document. Input goes to the tab.
+  const tab = await toTab(tabId, ref, local, true);
+  const a: Aim = { ...local, x: tab.x, y: tab.y, ...(tab.over ? { hit: false, over: tab.over } : {}) };
   if (!a.hit && how.spot) throw new Error(`“${a.over ?? 'Something else'}” is drawn over that place, so the ${action} was not made.`);
   return a;
 }
@@ -131,7 +135,7 @@ async function realClick(tabId: number, ref: string, how: How): Promise<{ done: 
   return platform.cdp!(tabId, async (send) => {
     const before = (await browser.tabs.get(tabId)).url;
     await mouseClick(tabId, send, a.x, a.y, mouseOpts(how));
-    return { done: await arrived(tabId, before) };
+    return { done: await arrived(tabId, before, ref) };
   });
 }
 
@@ -142,7 +146,7 @@ async function realHover(tabId: number, ref: string, how: How) {
   return platform.cdp!(tabId, async (send) => {
     const before = (await browser.tabs.get(tabId)).url;
     await sendInput(tabId, send, 'Input.dispatchMouseEvent', { x: a.x, y: a.y, type: 'mouseMoved', button: 'none', buttons: 0 });
-    const done = await arrived(tabId, before);
+    const done = await arrived(tabId, before, ref);
     draw(tabId, send);
     return done;
   });
@@ -153,15 +157,16 @@ const DRAG_MOVES = 8;
 /** Press on one place, move in steps as a hand would, let go on another. Both have to be on screen. */
 async function realDrag(tabId: number, ref: string, how: How) {
   const from = await aimFor(tabId, ref, 'drag', how);
-  const to = how.toAt ?? (await ask<Point & { off: boolean }>(tabId, { t: 'where', ref: how.toRef!, spot: how.to?.spot }));
-  if ('off' in to && to.off) throw new Error('The place to drag to is not on screen from there. Scroll so both ends show first.');
+  const end = how.toAt ?? (await ask<Point & { off: boolean }>(tabId, { t: 'where', ref: how.toRef!, spot: how.to?.spot }));
+  if ('off' in end && end.off) throw new Error('The place to drag to is not on screen from there. Scroll so both ends show first.');
+  const to = await toTab(tabId, how.toRef, end);
   if (!from.hit) return false;
   return platform.cdp!(tabId, async (send) => {
     const before = (await browser.tabs.get(tabId)).url;
     const mouse = (type: string, p: Point, extra: object) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type, x: p.x, y: p.y, ...extra });
     await mouse('mouseMoved', from, { button: 'none', buttons: 0 });
     await mouse('mousePressed', from, { button: 'left', buttons: 1, clickCount: 1 });
-    if (!(await arrived(tabId, before))) return false;
+    if (!(await arrived(tabId, before, ref))) return false;
     for (let i = 1; i <= DRAG_MOVES; i++) {
       const k = i / DRAG_MOVES;
       await mouse('mouseMoved', { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k }, { button: 'left', buttons: 1 });
@@ -175,23 +180,25 @@ async function realDrag(tabId: number, ref: string, how: How) {
 const SCROLL_MS = 600;
 
 /** Scroll what is at a place, with the wheel where that can be trusted. Says where that got to. */
-async function realScroll(tabId: number, p: Point, by: Point) {
-  const pos = () => ask<{ key: string; top: number; height: number }>(tabId, { t: 'scrollpos', p });
+async function realScroll(tabId: number, p: Point, by: Point, ref?: string) {
+  const frame = frameOf(ref);
+  const onTab = await toTab(tabId, ref, p);
+  const pos = () => ask<{ key: string; top: number; height: number }>(tabId, { t: 'scrollpos', p }, frame);
   const start = await pos();
   const moved = async () => (await pos()).key !== start.key;
   const wheel = async () => {
     if (!platform.cdp) return;
-    await platform.cdp(tabId, (send) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: p.x, y: p.y, deltaX: by.x, deltaY: by.y, button: 'none', buttons: 0 })).catch(() => {});
+    await platform.cdp(tabId, (send) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: onTab.x, y: onTab.y, deltaX: by.x, deltaY: by.y, button: 'none', buttons: 0 })).catch(() => {});
     for (const end = Date.now() + SCROLL_MS; Date.now() < end; await sleep(50)) if (await moved()) break;
   };
   // A tab behind another aims the wheel with what it last drew, which may be from before the page moved. There the
   // wheel is only for a page that scrolls on its own terms and ignores being asked.
   if (await behind(tabId)) {
-    await ask(tabId, { t: 'scrollby', p, by });
+    await ask(tabId, { t: 'scrollby', p, by }, frame);
     if (!(await moved())) await wheel();
   } else {
     await wheel();
-    if (!(await moved())) await ask(tabId, { t: 'scrollby', p, by });
+    if (!(await moved())) await ask(tabId, { t: 'scrollby', p, by }, frame);
   }
   // It may still be gliding.
   await sleep(150);
@@ -205,7 +212,7 @@ async function scrollNote(tabId: number, ref: string | undefined, how: How) {
     await ask(tabId, { t: 'aim', ref: ref!, action: 'scroll', spot: how.spot, quick: await behind(tabId) });
     return 'It is on screen now.';
   }
-  if (how.at) return realScroll(tabId, how.at, how.by);
+  if (how.at) return realScroll(tabId, how.at, how.by, ref);
   if (!ref) {
     const view = await ask<{ w: number; h: number }>(tabId, { t: 'viewport' });
     return realScroll(tabId, { x: view.w / 2, y: view.h / 2 }, how.by);
@@ -213,11 +220,13 @@ async function scrollNote(tabId: number, ref: string | undefined, how: How) {
   // The wheel only turns something the pointer is over.
   const where = () => ask<Point & { off: boolean }>(tabId, { t: 'where', ref, spot: how.spot });
   if ((await where()).off) await ask(tabId, { t: 'aim', ref, action: 'scroll', spot: how.spot, quick: await behind(tabId) });
-  return realScroll(tabId, await where(), how.by);
+  return realScroll(tabId, await where(), how.by, ref);
 }
 
 /** Type for real: focus the field, select what is in it, and put the text in as an input method would. */
 async function realType(tabId: number, ref: string, text: string): Promise<boolean> {
+  // A frame may not take focus from a script, but it takes it from a click, as it does from a person.
+  if (frameOf(ref)) await realClick(tabId, ref, {});
   const ok = await ask<boolean>(tabId, { t: 'ready', ref, quick: await behind(tabId) });
   if (!ok) return false;
   await platform.cdp!(tabId, async (send) => {
@@ -273,6 +282,7 @@ async function setField(tabId: number, ref: string, value: string): Promise<stri
 export async function perform(tabId: number, ref: string | undefined, action: string, value?: string, how: How = {}): Promise<string | undefined> {
   if (action === 'scroll') return scrollNote(tabId, ref, how);
   if (action === 'set') return setField(tabId, ref!, value ?? '');
+  if (action === 'drag' && frameOf(ref) !== frameOf(how.toRef)) throw new Error('Both ends of a drag have to be in one frame.');
   let note: string | undefined;
   if (platform.cdp) {
     try {
@@ -294,6 +304,7 @@ export async function perform(tabId: number, ref: string | undefined, action: st
       if (/is not a (modifier|key)|is gone from the page|was not made|not on screen/.test((e as Error).message)) throw e;
     }
   }
-  await ask(tabId, { t: 'act', ref, action, value, how, quick: await behind(tabId) });
+  // The page script knows the other end of a drag by its own ref.
+  await ask(tabId, { t: 'act', ref, action, value, how: how.toRef ? { ...how, toRef: how.toRef.replace(/^f\d+:/, '') } : how, quick: await behind(tabId) });
   return note;
 }
