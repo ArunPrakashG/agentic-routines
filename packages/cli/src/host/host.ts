@@ -2,6 +2,7 @@ import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'nod
 import { appendFile, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, dirname, join } from 'node:path';
+import { cdpRelay } from './cdp.ts';
 import { checkUpload, MAX_STREAM, mb } from './files.ts';
 import { valueFor } from '../store/secrets.ts';
 import { paths, socketPath } from '../paths.ts';
@@ -148,6 +149,18 @@ export function runHost(): void {
   const toBrowser = (m: Message) => process.stdout.write(nativeFrame(m));
   const toClient = (c: Socket, m: Message) => c.writable && c.write(JSON.stringify(m) + '\n');
 
+  // What the host asks of the browser itself.
+  const own = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  const relay = cdpRelay(
+    (method, params) =>
+      new Promise((resolve, reject) => {
+        const id = nextId++;
+        own.set(id, { resolve, reject });
+        toBrowser({ id, method, params });
+      }),
+    log,
+  );
+
   const cleanup = () => {
     rmSync(sock, { force: true });
     rmSync(info, { force: true });
@@ -185,6 +198,15 @@ export function runHost(): void {
           );
           return;
         }
+        // Only ever started by this, so a person who never asks has nothing listening.
+        if (m.method === 'cdp.endpoint') {
+          const q = (m.params ?? {}) as { session?: string; keep?: boolean };
+          relay.grant(q.session ?? 'user', q.keep ? undefined : client).then(
+            (result) => toClient(client, { id: m.id, result }),
+            (e) => toClient(client, { id: m.id, error: (e as Error).message }),
+          );
+          return;
+        }
         const id = nextId++;
         pending.set(id, { client, id: m.id });
         toBrowser({ id, method: m.method, params: m.params });
@@ -192,6 +214,7 @@ export function runHost(): void {
     );
     const drop = () => {
       clients.delete(client);
+      relay.dropped(client);
       for (const session of sessions.get(client) ?? []) toBrowser({ event: 'agent.gone', data: { session } });
       sessions.delete(client);
       for (const [k, v] of pending) if (v.client === client) pending.delete(k);
@@ -204,6 +227,13 @@ export function runHost(): void {
     'data',
     nativeReader(async (m) => {
       if (isResponse(m)) {
+        const mine = own.get(m.id);
+        if (mine) {
+          own.delete(m.id);
+          if (m.error) mine.reject(new Error(String(m.error)));
+          else mine.resolve(m.result);
+          return;
+        }
         const p = pending.get(m.id);
         if (!p) return;
         pending.delete(m.id);
@@ -270,6 +300,10 @@ export function runHost(): void {
         if (m.event === 'profile.focus') {
           focusedAt = Date.now();
           writeInfo();
+          return;
+        }
+        if (m.event === 'cdp.event' || m.event === 'cdp.gone' || m.event === 'cdp.tab') {
+          relay.event(m.event, m.data);
           return;
         }
         for (const c of clients) toClient(c, m);
