@@ -24,7 +24,7 @@ export default defineBackground(() => {
 
   // ---------- requests from the MCP server, through the host ----------
   native.onRequest(async (method, p) => {
-    if (method.startsWith('browser.') || method === 'runs.get') return agent.handle(method, p);
+    if (method.startsWith('browser.') || method === 'runs.get' || method === 'runs.repeat') return agent.handle(method, p);
     if (method.startsWith('draft.')) return draft.handle(method, p);
     if (method === 'runs.markSaved') return runs.markSaved(p.run_id);
     // A rebuilt unpacked extension only runs after a reload. Waits so the answer gets out first.

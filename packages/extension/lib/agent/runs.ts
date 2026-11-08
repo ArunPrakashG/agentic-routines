@@ -1,4 +1,4 @@
-import type { RecordedEvent, Run } from '@agentic-routines/core';
+import { findRepeat, type RecordedEvent, type Repeat, type Run } from '@agentic-routines/core';
 
 // Every agent run is recorded. A new run starts after 10 idle minutes,
 // after a save, when the agent changes, or when a new agent session starts.
@@ -62,6 +62,13 @@ export async function get(id?: string, session?: string): Promise<StoredRun> {
   const r = id ? runs.find((x) => x.id === id) : runs.find((x) => !x.saved && x.events.length && (!session || x.session === session));
   if (!r) throw new Error(id ? `No run ${id}` : 'No recorded run. Do the task with the browser tools first.');
   return r;
+}
+
+/** The session's own run against everything recorded on this machine. */
+export async function repeat(session?: string): Promise<Repeat | null> {
+  const runs = await load();
+  const cur = runs.find((x) => !x.saved && x.events.length && (!session || x.session === session));
+  return cur ? findRepeat(cur, runs.filter((x) => x !== cur)) : null;
 }
 
 export async function list(): Promise<StoredRun[]> {

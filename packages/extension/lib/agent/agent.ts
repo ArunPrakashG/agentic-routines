@@ -414,6 +414,8 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'runs.get':
       return runs.get(p?.run_id, p?.session);
+    case 'runs.repeat':
+      return runs.repeat(p?.session);
     default:
       throw new Error(`Unknown method ${method}`);
   }
