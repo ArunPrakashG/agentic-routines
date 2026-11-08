@@ -410,6 +410,8 @@ export type Op =
   | { op: 'pause'; step: number; on: boolean }
   | { op: 'note'; step: number; text: string }
   | { op: 'first_in_list'; step: number }
+  | { op: 'read'; step: number; as: string; where?: 'before' | 'after' }
+  | { op: 'retarget'; step: number; role?: string; name?: string; text?: string; css?: string; near?: string }
   | { op: 'describe'; name?: string; description?: string; do_not_use_for?: string }
   | { op: 'expect'; text?: string; url?: string }
   | { op: 'each'; from: number; to: number; param?: string; step?: number; limit?: number }
@@ -584,6 +586,29 @@ function applyOne(d: Draft, op: Op): string {
       if (t) s.instructions = t;
       else delete s.instructions;
       return t ? `Step ${s.n} has a note.` : `Step ${s.n} has no note.`;
+    }
+    case 'read': {
+      const s = d.steps[op.step - 1];
+      if (!s) throw new EditError(`There is no step ${op.step}.`);
+      if (!s.target) throw new EditError(`Step ${s.n} has no element to read. Name a step that clicks, types into or selects the element.`);
+      const as = op.as.trim().slice(0, 60);
+      if (!as) throw new EditError('A read has a name: the key its text comes back under.');
+      if (d.steps.some((x) => x.action === 'read' && x.label === as)) throw new EditError(`A step already reads “${as}”.`);
+      const at = op.where === 'before' ? op.step - 1 : op.step;
+      d.steps.splice(at, 0, { n: 0, action: 'read', label: as, target: structuredClone(s.target), at: s.at ?? '' });
+      renumber(d);
+      return `Added step ${at + 1}: reads the text of that element and returns it as “${as}”.`;
+    }
+    case 'retarget': {
+      const s = d.steps[op.step - 1];
+      if (!s) throw new EditError(`There is no step ${op.step}.`);
+      if (!s.target) throw new EditError(`Step ${s.n} has no element to retarget.`);
+      guard([s], 'retargeted');
+      const t = s.target;
+      for (const k of ['role', 'name', 'text', 'near'] as const) if (op[k] !== undefined) (op[k] === '' ? delete t[k] : (t[k] = op[k]!.slice(0, 120)));
+      if (op.css !== undefined && op.css !== '') t.css = op.css.slice(0, 300);
+      delete s.crop;
+      return `Step ${s.n} now looks for ${[t.role, t.name && `“${t.name}”`, t.text && `text “${t.text}”`].filter(Boolean).join(' ') || t.css}.`;
     }
     case 'first_in_list': {
       const s = d.steps[op.step - 1];

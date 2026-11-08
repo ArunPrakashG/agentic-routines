@@ -9,6 +9,20 @@ function norm(s?: string): string {
   return (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * The part of a name that stays put when the rest changes: a chat row is named by who it is with, then the latest
+ * message, a unread count or a time. Only a name with a break in it has one.
+ */
+function lead(s?: string): string {
+  const parts = (s ?? '').split(/\n|\s[·|–—-]\s|:\s|,\s\d|\s\d+ unread/i);
+  return parts.length > 1 ? norm(parts[0]) : '';
+}
+
+const sameLead = (a?: string, b?: string) => {
+  const l = lead(a);
+  return l.length >= 3 && l === lead(b);
+};
+
 /** Ids that look generated (react-aria-12, :r3:, ember451) carry no signal. */
 export function isVolatileId(id: string): boolean {
   return /\d{3,}|^:r|^(ember|react|radix|mui|headlessui)[-_:]|[a-f0-9]{8,}/i.test(id);
@@ -23,6 +37,7 @@ export function score(rec: Locator, live: Locator): number {
   const ln = norm(live.name);
   if (rn && rn === ln) s += 6;
   else if (rn && ln && (ln.includes(rn) || rn.includes(ln))) s += 3;
+  else if (sameLead(rec.name, live.name)) s += 4;
   const rt = norm(rec.text);
   if (rt && rt === norm(live.text)) s += 3;
   for (const k of STABLE) {
@@ -46,6 +61,7 @@ function sameElement(rec: Locator, live: Locator, all: Locator[]): boolean {
   if (!rn && ln) return false;
   if (!rn && !stable.length) return true;
   if (rn && ln && (ln.includes(rn) || rn.includes(ln))) return true;
+  if (sameLead(rec.name, live.name)) return true;
   return stable.some((k) => live.attrs[k] === rec.attrs[k]);
 }
 
