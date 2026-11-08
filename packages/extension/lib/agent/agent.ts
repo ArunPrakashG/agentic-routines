@@ -199,7 +199,12 @@ async function act(source: string, session: string | undefined, tabId: number, r
     // Asked for at the last moment, for this field, and kept nowhere. What is recorded is the name.
     const stored = /^\{\{secret:([a-z0-9_]+)\}\}$/.exec(value ?? '')?.[1];
     if (d.field === 'password' && value && !stored) noteTyped(value);
-    note = await perform(tabId, ref, action, stored ? await secretForField(tabId, ref, stored, session) : value, how);
+    const secret = stored ? await secretForField(tabId, ref, stored, session) : undefined;
+    note = await perform(tabId, ref, action, secret ?? value, how);
+    // A field can drop what it does not want, or cut it short. Its length says so, and the value is never read back.
+    if (secret !== undefined && (await ask<number>(tabId, { t: 'heldLength', ref }).catch(() => -1)) !== secret.length) {
+      throw new Error(`The field did not keep the secret ${stored}: it holds something else now. Check what the field accepts with read_page.`);
+    }
   }
   const after = await settle(tabId, before);
   // A click on a tick is kept as what it came to, or a replay would untick what is already ticked.

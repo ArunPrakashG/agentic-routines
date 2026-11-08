@@ -941,7 +941,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
           {s.account && <Account account={s.account} go={go} />}
         </div>
       </header>
-      {empty && !recording ? (
+      {empty && !recording && !s.script && !s.publish ? (
         <main class="center">
           <Mark size={56} stroke="var(--border-strong)" cls="drift" />
           <div class="stack" style={{ gap: '8px', alignItems: 'center' }}>
@@ -1498,9 +1498,19 @@ function App() {
     );
   }
 
-  if (!s.account) return <SignIn s={s} />;
+  // A request for the person is answered on this computer and needs no account, so signing in does not hide it.
   if (s.install) return <InstallGit card={s.install} />;
   if (s.hooksReview) return <HooksReview r={s.hooksReview} />;
+  if (!s.account && s.script) {
+    return (
+      <div class="panel">
+        <main class="lib">
+          <ScriptCard card={s.script} />
+        </main>
+      </div>
+    );
+  }
+  if (!s.account) return <SignIn s={s} />;
 
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (
