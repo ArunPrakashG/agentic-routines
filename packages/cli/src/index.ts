@@ -2,6 +2,7 @@ import { runDebug, runLogs } from './commands/debug.ts';
 import { runDoctor } from './commands/doctor.ts';
 import { runMarks } from './commands/marks.ts';
 import { runProfiles } from './commands/profiles.ts';
+import { runStats } from './commands/stats.ts';
 import { runHost } from './host/host.ts';
 import { runMcp } from './mcp/server.ts';
 import { runSetup } from './commands/setup.ts';
@@ -32,6 +33,11 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
     console.error(e.message);
     process.exit(1);
   });
+} else if (cmd === 'stats') {
+  runStats().catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
 } else if (cmd === 'profiles') {
   runProfiles(args).catch((e) => {
     console.error(e.message);
@@ -54,6 +60,7 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
         [--exclusive] Also turn off other browser tools in those agents (--no-exclusive turns them back on)
         [--remove]    Take it all back out: tool server, guidance, plugin, hook and host
   doctor              Check what is connected and what is not, guidance and exclusivity included
+  stats               What the routines on this computer have saved, this week and per routine
   profiles            List the browser profiles that are open; "profiles name <number> <name>" names one
   marks [on|off]      Annotate screenshots: a numbered box and label on what the agent clicked or typed into
   debug [on|off]      Record every tool call an agent makes, with arguments, time and result (typed text and secrets left out)

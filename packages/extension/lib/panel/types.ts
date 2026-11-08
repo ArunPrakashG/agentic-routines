@@ -1,14 +1,14 @@
 import type { RecordedEvent } from '@agentic-routines/core';
 import type { Account } from '../remote/auth';
 import type { PublishCard } from '../remote/directory';
-import type { Hooks, HookState } from '@agentic-routines/core';
+import type { Hooks, HookState, Metered } from '@agentic-routines/core';
 import type { GitCard } from '../remote/git';
 
 export interface PanelState {
   account?: Account;
   connected: boolean;
   agents: string[];
-  routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; lastRun?: number; changed?: number[]; draftedBy?: string; published?: { as: string; version: number }; origin?: { kind: 'directory' | 'github' | 'folder'; source: string; ref?: string }; blocked?: string; hooks?: { count: number; state: HookState; reason?: string } }[];
+  routines: { name: string; owner: string; version: number; site: string; description: string; enabled: boolean; stats?: Metered; lastRun?: number; changed?: number[]; draftedBy?: string; published?: { as: string; version: number }; origin?: { kind: 'directory' | 'github' | 'folder'; source: string; ref?: string }; blocked?: string; hooks?: { count: number; state: HookState; reason?: string } }[];
   runs: { id: string; source: string; startedAt: number; updatedAt: number; events: RecordedEvent[] }[];
   recording?: string;
   publish?: PublishCard;

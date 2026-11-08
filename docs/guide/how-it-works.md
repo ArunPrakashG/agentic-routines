@@ -58,6 +58,14 @@ A replay always stops before a step you can't undo: publishing, paying, deleting
 
 A value typed into a password field is never saved. It becomes a placeholder, and the browser's existing sign-in does the work. Most runs need no secret at all.
 
+## What it saves
+
+The side panel and `agentic-routines stats` show what your routines saved, this week and per routine.
+
+The replays are measured: how many ran, how long they took and the model calls they needed. What they replaced is estimated. A replay saves about 24k tokens for each step it does in place of the model, less 45k for the replay itself, and saving a routine costs about 625k once, for proposing, editing and testing it. Those come from benchmarks of ten tasks on real sites with Sonnet, reproduced by `dev/bench/calibrate.mjs`. They count every token the model processed, including cached context, which is billed at a fraction of the price. So a short routine can show a loss, and a new one shows as not paid back until it has run enough. A stopped run counts against the total.
+
+Your own numbers will differ. Only the agent's runs count, not the ones you start in the panel.
+
 ## What stays on your computer
 
 Routines, recordings and screenshot crops live in `~/.agentic-routines` on your machine. Crops are never published. See the [privacy page](/privacy) for the full list of what is sent when you sign in or publish.

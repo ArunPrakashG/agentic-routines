@@ -6,7 +6,7 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/roboto/latin-500.css';
 import './tokens.css';
 import './panel.css';
-import { compileRun, siteOf, type ParamSpec } from '@agentic-routines/core';
+import { addSavings, compileRun, HOW_ESTIMATED, noSavings, roughTime, savingsOf, savingsText, siteOf, type ParamSpec } from '@agentic-routines/core';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Account as AccountInfo } from '../../lib/remote/auth';
@@ -774,6 +774,25 @@ function Submissions({ s, back }: { s: PanelState; back: () => void }) {
   );
 }
 
+/** The week's replays: what was measured, then what was estimated from them. */
+function Saved({ s }: { s: PanelState }) {
+  const week = s.routines.map((r) => savingsOf(r.stats, Date.now() - 7 * 24 * 60 * 60_000)).reduce(addSavings, noSavings());
+  if (!week.runs) return null;
+  return (
+    <section class="saved" aria-label="What routines saved this week">
+      <span class="name">This week</span>
+      <span class="meta">
+        {week.runs} replay{week.runs === 1 ? '' : 's'} took {roughTime(week.replayMs)} with {week.calls} model call{week.calls === 1 ? '' : 's'} (measured)
+      </span>
+      <span class="meta">{savingsText(week)} (estimated)</span>
+      <details>
+        <summary class="meta">How this is worked out</summary>
+        <p class="meta">{HOW_ESTIMATED}</p>
+      </details>
+    </section>
+  );
+}
+
 function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
   const recording = !!s.recording;
   const empty = !s.routines.length && !s.runs.length;
@@ -824,6 +843,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
               </section>
             );
           })}
+          <Saved s={s} />
           {s.routines.length > 0 && (
             <section aria-label="Saved routines" style={{ display: 'flex', flexDirection: 'column' }}>
               {s.routines.map((r) => (
@@ -841,6 +861,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                       {r.published ? ` · sent for review v${r.published.version}` : ''}
                       {r.lastRun ? ` · ran ${ago(r.lastRun)}` : ''}
                     </span>
+                    {!!r.stats?.recent.length && <span class="meta">{savingsText(savingsOf(r.stats))} over {r.stats.recent.length} run{r.stats.recent.length === 1 ? '' : 's'} (estimated)</span>}
                     {r.blocked && <span class="changed">Turned off: {r.blocked}</span>}
                     {r.hooks?.state === 'unsupported' && <span class="changed">Hooks need Chromium and are off here</span>}
                     {r.hooks && r.hooks.state !== 'unsupported' && (
