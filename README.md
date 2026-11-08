@@ -34,7 +34,7 @@ Coding agents such as Claude Code drive the browser one step at a time: read the
 - **Repeat.** A routine can run its steps for every value in a list or every row on a page, and skip steps that only sometimes apply, such as a notice. A pause still pauses on every pass.
 - **Share.** Install a routine someone else maintains, from the directory or a Git repository, and your agent skips the recording.
 
-On the long release form in the benchmark in [`dev/bench`](dev/bench), a replay took about 27 seconds and $0.06 against 1 minute 33 seconds and $0.32 for the agent doing it by hand. Results depend on the site and the model.
+On the long release form in the benchmark in [`dev/bench`](dev/bench), a replay took about 28 seconds and $0.09 against 57 seconds and $0.29 for the agent doing it by hand with the same browser tools (median of 3 runs on a cloud machine). Results depend on the site and the model.
 
 Length decides whether it pays. A one-step lookup on GitHub used about 70% more tokens as a replay than by hand, and saving a routine costs about 2.3 times one run by hand (median of 6 tasks). The fit is long tasks you repeat on sites with no API or MCP server.
 
