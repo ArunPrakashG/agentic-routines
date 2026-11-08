@@ -34,7 +34,7 @@ Coding agents such as Claude Code drive the browser one step at a time: read the
 - **Repeat.** A routine can run its steps for every value in a list or every row on a page, and skip steps that only sometimes apply, such as a notice. A pause still pauses on every pass.
 - **Share.** Install a routine someone else maintains, from the directory or a Git repository, and your agent skips the recording.
 
-On the long release form in the benchmark in [`dev/bench`](dev/bench), a replay took about 28 seconds and $0.09 against 57 seconds and $0.29 for the agent doing it by hand with the same browser tools (median of 3 runs on a cloud machine). Results depend on the site and the model.
+On the long release form in the benchmark in [`dev/bench`](dev/bench), a replay took about 28 seconds and $0.09 against 57 seconds and $0.29 for the agent doing it by hand with the same browser tools (median of 3 runs on a cloud machine). The method, every number and where it does not pay are in [Benchmarks](docs/guide/benchmarks.md). Results depend on the site and the model.
 
 Length decides whether it pays. A one-step lookup on GitHub used about 70% more tokens as a replay than by hand, and saving a routine costs about 2.3 times one run by hand (median of 6 tasks). The fit is long tasks you repeat on sites with no API or MCP server.
 
@@ -69,6 +69,23 @@ More in [Getting started](docs/guide/getting-started.md).
 `setup` also tells each agent to use Agentic Routines for all browser work and to try a saved routine first. Add `--exclusive` to turn off other browser tools, and `--remove` takes it all back out ([How agents choose](docs/guide/agents.md)). For Claude Code alone, the plugin installs with `/plugin install agentic-routines --marketplace ArunPrakashG/agentic-routines`.
 
 The full list of tools is in [Agent tools](docs/guide/tools.md), and the loop an agent follows to save a routine is in [Refine a routine](docs/guide/refine.md).
+
+## The browser tools
+
+Agentic Routines is also the browser your agent works in, with your sign-ins. Everything it does is recorded, so any of it can become a routine.
+
+- **Drive a page.** Real clicks, typing, key presses, hover, drag and scroll through the browser's debugging connection. Find elements by their words, work inside frames and shadow roots, answer dialogs, and run up to 20 steps in one `batch` call.
+- **Look.** Outlines, screenshots, the page's console and network, video, and a flight recorder that keeps the last minute of a tab.
+- **Script it.** `execute` runs Playwright code against the session's page without Node, and `cdp_endpoint` gives Playwright a local address backed by the extension.
+- **Hand over.** The agent gives you a tab for a login, a code, a payment or a bot check, and gets it back when you click. Secrets you keep for a site are typed by name; the agent never sees the value.
+- **Limit it.** Named sessions can be limited to some sites or made read-only. Scripts run only on sites you allow.
+- **Reach another computer.** Pair a browser on another machine with a one-time code.
+
+All of it is listed in [Agent tools](docs/guide/tools.md), and what protects you is in [Safety](docs/guide/safety.md).
+
+## Documentation
+
+[Getting started](docs/guide/getting-started.md) · [How it works](docs/guide/how-it-works.md) · [Routines](docs/guide/routines.md) · [Refining](docs/guide/refine.md) · [Agent tools](docs/guide/tools.md) · [Command line](docs/guide/cli.md) · [Safety](docs/guide/safety.md) · [Sharing](docs/guide/sharing.md) · [Remote browsers](docs/guide/remote.md) · [Hooks](docs/guide/hooks.md) · [Benchmarks](docs/guide/benchmarks.md) · [Troubleshooting](docs/guide/troubleshooting.md). The full index is [docs/README.md](docs/README.md), and the same pages are on the [wiki](../../wiki).
 
 ## Routine repositories
 
