@@ -464,6 +464,30 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await evalIn('chores.html', `localStorage.removeItem('chores.add'); 1`);
 }
 
+// ---------- batch and resize ----------
+{
+  await session();
+  await call('navigate', { url: `${SITE}/chores.html` });
+  const page = await read();
+  const item = refFor(page, /“Item”/);
+  const add = refFor(page, /button.*Add item/i);
+  const done = await call('batch', { actions: [{ tool: 'type', input: { ref: item, text: 'Plums' } }, { tool: 'click', input: { ref: add } }, { tool: 'find', input: { query: 'Plums' } }] });
+  check(!done.error && /1\. type/.test(done.text) && /2\. click/.test(done.text) && /3\. find/.test(done.text) && /Plums/.test(done.text), `a batch runs its steps and gives every answer: ${done.text.slice(0, 200)}`);
+  check(/add:Plums/.test(String(await evalIn('chores.html', `localStorage.getItem('chores.log')`))), 'and they really happened');
+  const stopped = await call('batch', { actions: [{ tool: 'click', input: { ref: 'ref_99999' } }, { tool: 'type', input: { ref: item, text: 'Never' } }] });
+  check(stopped.error && /Stopped at step 1/.test(stopped.text) && /1 after it did not run/.test(stopped.text), `it stops at the first failure and says how far it got: ${stopped.text.slice(0, 200)}`);
+  check(await evalIn('chores.html', `document.getElementById('item').value !== 'Never'`) === true, 'and nothing after it ran');
+  const refused = await call('batch', { actions: [{ tool: 'javascript', input: { code: '1' } }] });
+  check(refused.error, 'a tool that is not for a batch is refused');
+  const small = await call('resize_window', { width: 480, height: 800 });
+  check(!small.error && /The page is 480 by 800/.test(small.text), `the page can be laid out at a narrow size: ${small.text.slice(0, 160)}`);
+  check(await evalIn('chores.html', `innerWidth`) === 480, 'and it really is that wide');
+  const phone = await call('resize_window', { width: 480, height: 800, mobile: true });
+  check(!phone.error && /as a phone/.test(phone.text), 'or as a phone would show it');
+  const back = await call('resize_window', { reset: true });
+  check(!back.error && (await evalIn('chores.html', `innerWidth`)) !== 480, 'reset gives it its own size again');
+}
+
 // ---------- execute: Playwright code on the session's page ----------
 {
   await session();

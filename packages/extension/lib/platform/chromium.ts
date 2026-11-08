@@ -17,6 +17,8 @@ const held = new Map<number, { ready: Promise<void>; timer?: ReturnType<typeof s
 // The person pressed Cancel on that bar: nothing attaches again until this time, and everything uses DOM events.
 const REFUSED_MS = 10 * 60_000;
 let refusedUntil = 0;
+// A tab with a size laid on it stays attached: the size goes when the session does.
+const sized = new Set<number>();
 
 const hearing = new Set<(tabId: number, method: string, params: any, child?: string) => void>();
 
@@ -28,6 +30,7 @@ function listen() {
     if (source.tabId === undefined) return;
     clearTimeout(held.get(source.tabId)?.timer);
     held.delete(source.tabId);
+    sized.delete(source.tabId);
     if (reason === 'canceled_by_user') refusedUntil = Date.now() + REFUSED_MS;
     for (const fn of hearing) fn(source.tabId, 'detached', {});
   });
@@ -74,11 +77,21 @@ export const chromium: Platform = {
       return await fn(send);
     } finally {
       const now = held.get(tabId);
-      if (now) {
+      if (now && !sized.has(tabId)) {
         clearTimeout(now.timer);
         now.timer = setTimeout(() => void chromium.release!(tabId), IDLE_MS);
       }
     }
+  },
+  async emulate(tabId, size) {
+    if (size) sized.add(tabId);
+    await chromium.cdp!(tabId, async (send) => {
+      if (size) await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 1, mobile: !!size.mobile });
+      else await send('Emulation.clearDeviceMetricsOverride');
+    });
+    if (size) return;
+    sized.delete(tabId);
+    await chromium.release!(tabId);
   },
   sendTo(tabId, child, method, params) {
     return chromium.cdp!(tabId, () => browser.debugger.sendCommand({ tabId, ...(child ? { sessionId: child } : {}) } as { tabId: number }, method, params) as Promise<unknown>);

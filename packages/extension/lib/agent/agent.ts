@@ -258,7 +258,7 @@ let mayRunScript: (site: string, code: string, by: string) => Promise<void> = as
 export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
 
 // All a read-only session may call. Anything added later stays refused until someone decides otherwise.
-const READ_ONLY = new Set(['browser.downloads', 'browser.download_get', 'browser.recording', 'browser.flight_recorder', 'browser.network_capture', 'browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
+const READ_ONLY = new Set(['browser.downloads', 'browser.download_get', 'browser.recording', 'browser.flight_recorder', 'browser.network_capture', 'browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.resize', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
 
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
@@ -444,6 +444,18 @@ export async function handle(method: string, p: any): Promise<unknown> {
       if (h.continued) await waitLoaded(tabId).catch(() => {});
       const t = await browser.tabs.get(tabId).catch(() => undefined);
       return { ...h, tab_id: tabId, url: t?.url, title: unmark(t?.title ?? '') };
+    }
+    case 'browser.resize': {
+      const tabId = await working(p?.session, p.tab_id);
+      if (!platform.emulate) throw new Error('This browser does not let an extension change the size of a page.');
+      if (p.reset) {
+        await platform.emulate(tabId, null);
+        return 'The page has its own size again. Read it again before you act.';
+      }
+      await platform.emulate(tabId, { width: p.width, height: p.height, mobile: !!p.mobile });
+      await new Promise((r) => setTimeout(r, 300));
+      const view = await ask<Viewport>(tabId, { t: 'viewport' });
+      return `The page is ${view.w} by ${view.h}${p.mobile ? ', as a phone' : ''}. It may have laid out differently, so read it again before you act: refs and points from a picture before this no longer fit.`;
     }
     case 'browser.wait': {
       await working(p?.session, p.tab_id);
