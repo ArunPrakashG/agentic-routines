@@ -1,7 +1,7 @@
 import { flightOn, saveFlight, startFlight, stopFlight } from '../page/capture';
 import { secretForField } from '../page/secrets';
 import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type FastFrom, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
-import { challengeOn, uploadFile } from '../agent/agent';
+import { challengeOn, onAgentWork, uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
 import { answerDialog, dialogOn, listenBeforeLeaving, waitDialog } from '../page/dialogs';
@@ -52,6 +52,8 @@ export interface ReplayState {
   flightForRun?: boolean;
   /** The panel stopped waiting and gave the pause back to the agent. */
   handedBack?: boolean;
+  /** When the pause went back to the agent. A pause nobody answers is dropped after a while. */
+  handedAt?: number;
   error?: string;
   candidates?: Candidate[];
   /** Written by someone else (the directory, a Git source or a folder). Held to stricter rules. */
@@ -72,6 +74,8 @@ export interface ReplayState {
   /** Match the window to the recorded size for the run, and put it back after. */
   fitWindow?: boolean;
   /** The window as it was, to put back. */
+  /** The tab's page size was set to the recorded one without touching the window. */
+  emulated?: boolean;
   windowWas?: { id: number; width: number; height: number; left?: number; top?: number };
   /** A test of a draft: stops at the first pause without approving it, and changed steps fail it. */
   test?: boolean;
@@ -248,6 +252,14 @@ async function fitWindow(s: ReplayState) {
   try {
     const now = await ask<Viewport>(s.tabId, { t: 'viewport' });
     if (compareViewport(want, now).match !== 'different') return;
+    // The tab alone is set to the recorded size, so the person's window and other tabs stay as they are.
+    if (platform.emulate) {
+      await platform.emulate(s.tabId, { width: want.w, height: want.h });
+      s.emulated = true;
+      await sleep(400);
+      s.viewportNote = undefined;
+      return;
+    }
     const tab = await browser.tabs.get(s.tabId);
     const win = await browser.windows.get(tab.windowId);
     if (win.state !== 'normal' || win.width === undefined || win.height === undefined) {
@@ -271,6 +283,10 @@ async function fitWindow(s: ReplayState) {
 
 /** Puts the window back. Safe to call twice. */
 async function restoreWindow(s: ReplayState) {
+  if (s.emulated) {
+    s.emulated = false;
+    await platform.emulate?.(s.tabId, null).catch(() => {});
+  }
   const w = s.windowWas;
   s.windowWas = undefined;
   if (!w) return;
@@ -814,6 +830,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
         if (!live.has(s.id)) return result(s);
         if (approved === undefined) {
           s.handedBack = true;
+          s.handedAt = Date.now();
           notify(s);
           return result(s);
         }
@@ -880,8 +897,39 @@ const QUEUE_MS = 120_000;
 const ACTIVE = new Set<string>(['running', 'paused', 'needs_choice']);
 const routineKey = (r: Routine) => `${(r as Routine & { owner?: string }).owner ?? r.meta.owner ?? 'local'}/${r.meta.name}`;
 
+/** A pause the agent never answered stops holding the routine after this long. */
+const HANDED_BACK_MS = 10 * 60_000;
+
+/** Ends a run that is waiting on an answer nobody is going to give, and says why. */
+function abandon(s: ReplayState, why: string) {
+  s.status = 'failed';
+  s.error = why;
+  void ended(s);
+  end(s);
+  notify(s);
+  panelWaiters.get(s.id)?.(false);
+}
+
+/**
+ * The agent went on by hand after a run handed a pause back (it did the step itself, or the tab moved on). That run
+ * can no longer be resumed in a way that makes sense, so it ends instead of holding the routine.
+ */
+export function agentTookOver(session: string | undefined, tabId: number) {
+  for (const s of [...live.values()]) {
+    if (!s.handedBack || s.status !== 'paused' || s.tabId !== tabId || s.session !== session) continue;
+    abandon(s, `The agent went on by hand at step ${s.routine.steps[s.i]?.n ?? s.i + 1}, so the run ended there.`);
+  }
+}
+
+onAgentWork(agentTookOver);
+
 async function waitForRoutine(r: Routine, session?: string): Promise<string | undefined> {
   const key = routineKey(r);
+  for (const x of [...live.values()]) {
+    if (routineKey(x.routine) !== key || !x.handedBack || x.status !== 'paused') continue;
+    // Starting it again from the session that was holding the pause answers that pause: it is over.
+    if (x.session === session || Date.now() - (x.handedAt ?? 0) > HANDED_BACK_MS) abandon(x, x.session === session ? 'Started again, so the earlier run ended.' : 'Nobody answered the pause.');
+  }
   const holder = () => [...live.values()].find((x) => ACTIVE.has(x.status) && routineKey(x.routine) === key);
   const end = Date.now() + QUEUE_MS;
   for (let h = holder(); h; h = holder()) {

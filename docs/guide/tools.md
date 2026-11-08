@@ -188,7 +188,7 @@ The wording is fixed so that agents and skills can rely on it: `Routine <tool na
 | Tool | What it does |
 |---|---|
 | `rt_<name>` | One tool per saved routine, with its parameters. Replays without a model. |
-| `routine_run` | The same, by name, for clients that read tools only at startup. `match_viewport: true` resizes the window to the size the routine was recorded at and puts it back afterwards. |
+| `routine_run` | The same, by name, for clients that read tools only at startup. `match_viewport: true` sets the tab to the size the routine was recorded at and puts it back afterwards. |
 | `routine_resume` | Continue a paused replay. `approve` goes past a pause or stops. `choice` picks the element for a changed step. |
 | `routines_list` | Saved routines, what each is for and how the agent's runs of it have gone. Text from routines someone else wrote is shown as [untrusted data](/docs/safety). |
 | `routine_describe` | The full notes: when to use it, when not to, the pages it applies to, how its runs have gone, values it asks for, where it pauses. |

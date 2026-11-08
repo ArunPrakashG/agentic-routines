@@ -1186,6 +1186,8 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
     z.object({ op: z.literal('fixed'), step: z.number().int().describe('Keep the recorded value, do not ask for it') }),
     z.object({ op: z.literal('pause'), step: z.number().int(), on: z.boolean() }),
     z.object({ op: z.literal('note'), step: z.number().int(), text: z.string().max(1000).describe('For the agent that runs the routine: what to check at this step. Empty clears it.') }),
+    z.object({ op: z.literal('read'), step: z.number().int().describe('A step that uses the element to read'), as: z.string().max(60).describe('The name the text comes back under in the run result'), where: z.enum(['before', 'after']).optional().describe('Before or after that step. Default after') }),
+    z.object({ op: z.literal('retarget'), step: z.number().int(), role: z.string().optional(), name: z.string().max(120).optional().describe('The accessible name to match. Use the stable part: a chat name, not its last message. Empty clears it'), text: z.string().max(120).optional(), css: z.string().max(300).optional(), near: z.string().max(120).optional() }),
     z.object({ op: z.literal('first_in_list'), step: z.number().int().describe('A click that should take whatever is first in the list next time') }),
     z.object({ op: z.literal('describe'), name: z.string().optional(), description: z.string().max(1024).optional(), do_not_use_for: z.string().max(2000).optional() }),
     z.object({ op: z.literal('expect'), text: z.string().max(300).optional().describe('Text the page shows once the task has worked: a confirmation, the new row. Can use {{params}}. Empty clears it.'), url: z.string().max(300).optional().describe('Part of the address once it has worked') }),

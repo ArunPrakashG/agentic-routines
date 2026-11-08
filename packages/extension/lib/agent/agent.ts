@@ -42,11 +42,15 @@ async function describeIn(tabId: number, ref: string): Promise<Described> {
 
 // The tab an agent is working in glows while it works, and for a few seconds after its last call.
 const WORKING_MS = 6000;
+const workWatchers: Array<(session: string | undefined, tabId: number) => void> = [];
+/** Told whenever an agent's browser call starts on a tab. Replay uses it to end a pause the agent went past by hand. */
+export const onAgentWork = (fn: (session: string | undefined, tabId: number) => void) => void workWatchers.push(fn);
 async function working(session: string | undefined, requested?: number, leaving = false) {
   const tabId = await agentTabId(session, requested);
   const refused = takeRefused(tabId) ?? takePopupRefused(session);
   if (refused && !leaving) throw new Error(`${refused} Nothing was done on the page.`);
   if (!leaving) await onItsSites(session, tabId);
+  for (const fn of workWatchers) fn(session, tabId);
   await glow(tabId, 'run', WORKING_MS);
   // Attached from the first call, so the bar this puts up has already moved the page before anything is measured.
   await platform.cdp?.(tabId, async () => {}).catch(() => {});
