@@ -20,7 +20,8 @@
     "check:store": "node releases/scripts/check-store.mjs",
     "release": "node releases/scripts/build.mjs",
     "release:version": "node releases/scripts/version.mjs",
-    "release:bundle": "node releases/scripts/bundle.mjs"
+    "release:bundle": "node releases/scripts/bundle.mjs",
+    "release:private": "node releases/scripts/publish-private.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

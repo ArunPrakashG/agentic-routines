@@ -27,6 +27,8 @@ The Chrome zip also goes to Edge Add-ons. The sources zip goes to Firefox Add-on
 
 The first time only, `node releases/scripts/signing-key.mjs` makes the key that signs the manifest. Commit `releases/update-key.pub`, and keep `.keys/update-signing.pem` somewhere safe: without it, installed copies never update again. On a machine without the file, put it in `AR_UPDATE_SIGNING_KEY`.
 
+While the repo is private, `pnpm release:private 0.3.1` publishes the CLI package to GitHub Packages as `@arunprakashg/agentic-routines` (needs `gh` with the `write:packages` scope). Installing it takes `@arunprakashg:registry=https://npm.pkg.github.com` and a token with `read:packages` in `~/.npmrc`.
+
 `dev/e2e/e2e-install.sh` tries the install script and an update on this machine, using a throwaway key.
 
 `pnpm check:store <dir>` runs the store checks alone on a build folder.
