@@ -75,7 +75,7 @@ export const BROWSERS: Browser[] = [
 
 /** Extension ids the native host accepts. The first is the unpacked build, whose id the manifest key pins. Store ids are added when each listing exists. */
 export const EXTENSION_IDS: Record<Engine, string[]> = {
-  chromium: ['fafmcnlaedchfncjiimcndjlfphdfkdo'],
+  chromium: ['fafmcnlaedchfncjiimcndjlfphdfkdo', 'fnmcocjmifdfgeenaoadjcopjkflcnnc'],
   gecko: ['agentic-routines@agentic-routines.dev'],
 };
 

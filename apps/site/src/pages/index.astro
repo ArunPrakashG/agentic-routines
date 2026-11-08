@@ -11,12 +11,12 @@ const pain = [
 type Row = { task: string; note: string; tokens: string[]; time: string[]; cost: string[] };
 const same: Row[] = [
   { task: 'Edit a YouTube description', note: 'Real YouTube, signed in', tokens: ['539k', '97k', '−82%'], time: ['0:56', '0:19', '−66%'], cost: ['$0.21', '$0.04', '−81%'] },
-  { task: 'Release a build to testers', note: 'Replica of a store console, one form', tokens: ['430k', '131k', '−70%'], time: ['0:46', '0:15', '−67%'], cost: ['$0.17', '$0.04', '−73%'] },
-  { task: 'Release with every setting', note: 'The same console, a long form', tokens: ['910k', '199k', '−78%'], time: ['1:33', '0:27', '−71%'], cost: ['$0.32', '$0.06', '−83%'] },
+  { task: 'Release a build to testers', note: 'Replica of a store console, one form', tokens: ['530k', '109k', '−79%'], time: ['0:26', '0:10', '−63%'], cost: ['$0.10', '$0.02', '−82%'] },
+  { task: 'Release with every setting', note: 'The same console, a long form', tokens: ['1.29M', '339k', '−74%'], time: ['0:57', '0:28', '−50%'], cost: ['$0.29', '$0.09', '−69%'] },
 ];
 const changed: Row[] = [
-  { task: 'Release a build to testers', note: 'One button renamed since the recording', tokens: ['430k', '198k', '−54%'], time: ['0:46', '0:28', '−40%'], cost: ['$0.17', '$0.06', '−66%'] },
-  { task: 'Release with every setting', note: 'One button renamed since the recording', tokens: ['910k', '305k', '−66%'], time: ['1:33', '0:41', '−55%'], cost: ['$0.32', '$0.08', '−76%'] },
+  { task: 'Release a build to testers', note: 'One button renamed since the recording', tokens: ['530k', '226k', '−57%'], time: ['0:26', '0:23', '−13%'], cost: ['$0.10', '$0.04', '−60%'] },
+  { task: 'Release with every setting', note: 'One button renamed since the recording', tokens: ['1.29M', '381k', '−71%'], time: ['0:57', '0:38', '−33%'], cost: ['$0.29', '$0.07', '−75%'] },
 ];
 const tables = [
   { head: 'Same page as recorded', rows: same },
@@ -179,7 +179,7 @@ click     Next
 
       <div class="head" style="margin-top: 32px;">
         <h2 class="h2">Measured, not estimated.</h2>
-        <p class="lede">Up to 83% cheaper and 3.5 times faster than the same agent doing the task by hand. Each arrow goes from by hand to replay.</p>
+        <p class="lede">Up to 82% cheaper and 2.7 times faster than the same agent doing the task by hand. Each arrow goes from by hand to replay.</p>
       </div>
       {tables.map((t) => (
         <div class="tbl" role="table" aria-label={t.head}>
@@ -195,9 +195,9 @@ click     Next
         </div>
       ))}
       <div class="notes">
-        <p>A button was renamed since the recording. That added 12 to 15 seconds and 1 to 2 cents: your agent fixed that one step and the fix was saved.</p>
-        <p>Length decides it. The 30-step form used 78% fewer tokens. A one-step lookup on GitHub used 70% more, because your agent still has to find the routine, call it and read the answer off the page. Saving a routine also costs more than doing the task, so a short task may never earn that back.</p>
-        <p class="fine">Claude Sonnet 5.5 through Claude in Chrome, against the saved routine, on one machine. Median of 5 runs each, a small sample. Costs are what Claude Code reported at list prices. The YouTube task ran on real YouTube; the other two on a replica of a store console. Token totals include context read back from cache.</p>
+        <p>A button was renamed since the recording. That added 10 to 13 seconds: your agent fixed that one step and the fix was saved. It cost about 2 cents more on the small form and made no clear difference on the long one.</p>
+        <p>Length decides it. The 30-step form used 74% fewer tokens. A one-step lookup on GitHub used 70% more, because your agent still has to find the routine, call it and read the answer off the page. Saving a routine also costs more than doing the task, so a short task may never earn that back.</p>
+        <p class="fine">The YouTube row: Claude Sonnet 5.5 through Claude in Chrome against the saved routine, on real YouTube, median of 5 runs. The two console tasks: the same agent doing the task by hand with these browser tools against the saved routine, on a replica of a store console, on a cloud machine, median of 3 runs. All of it is a small sample. Costs are what Claude Code reported at list prices, and a replay still pays for the agent session around it. Token totals include context read back from cache.</p>
       </div>
     </div>
   </section>
