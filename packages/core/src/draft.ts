@@ -410,7 +410,7 @@ export type Op =
   | { op: 'pause'; step: number; on: boolean }
   | { op: 'note'; step: number; text: string }
   | { op: 'first_in_list'; step: number }
-  | { op: 'read'; step: number; as: string; where?: 'before' | 'after' }
+  | { op: 'read'; as: string; step?: number; before?: number; role?: string; name?: string; text?: string; where?: 'before' | 'after' }
   | { op: 'retarget'; step: number; role?: string; name?: string; text?: string; css?: string; near?: string }
   | { op: 'describe'; name?: string; description?: string; do_not_use_for?: string }
   | { op: 'expect'; text?: string; url?: string }
@@ -588,14 +588,28 @@ function applyOne(d: Draft, op: Op): string {
       return t ? `Step ${s.n} has a note.` : `Step ${s.n} has no note.`;
     }
     case 'read': {
-      const s = d.steps[op.step - 1];
-      if (!s) throw new EditError(`There is no step ${op.step}.`);
-      if (!s.target) throw new EditError(`Step ${s.n} has no element to read. Name a step that clicks, types into or selects the element.`);
       const as = op.as.trim().slice(0, 60);
       if (!as) throw new EditError('A read has a name: the key its text comes back under.');
       if (d.steps.some((x) => x.action === 'read' && x.label === as)) throw new EditError(`A step already reads “${as}”.`);
-      const at = op.where === 'before' ? op.step - 1 : op.step;
-      d.steps.splice(at, 0, { n: 0, action: 'read', label: as, target: structuredClone(s.target), at: s.at ?? '' });
+      let target: Locator;
+      let at: number;
+      if (op.step !== undefined) {
+        const s = d.steps[op.step - 1];
+        if (!s) throw new EditError(`There is no step ${op.step}.`);
+        if (!s.target) throw new EditError(`Step ${s.n} has no element to read. Name a step that clicks, types into or selects the element, or give name, text or css with before.`);
+        target = structuredClone(s.target);
+        at = op.where === 'before' ? op.step - 1 : op.step;
+      } else {
+        if (!Number.isInteger(op.before) || op.before! < 1 || op.before! > d.steps.length + 1) throw new EditError('Say which step to read before (before: N), or which step uses the element (step: N).');
+        if (!op.name && !op.text) throw new EditError('Say how to find the element: its name or its text, and a role if that helps.');
+        const near = d.steps[op.before! - 2];
+        target = { tag: '', ...(op.role ? { role: op.role } : {}), ...(op.name ? { name: op.name.slice(0, 120) } : {}), ...(op.text ? { text: op.text.slice(0, 120) } : {}), attrs: {}, css: '' };
+        at = op.before! - 1;
+        d.steps.splice(at, 0, { n: 0, action: 'read', label: as, target, at: near?.at ?? d.steps[op.before! - 1]?.at ?? '' });
+        renumber(d);
+        return `Added step ${at + 1}: reads the text of that element and returns it as “${as}”.`;
+      }
+      d.steps.splice(at, 0, { n: 0, action: 'read', label: as, target, at: d.steps[op.step! - 1].at ?? '' });
       renumber(d);
       return `Added step ${at + 1}: reads the text of that element and returns it as “${as}”.`;
     }

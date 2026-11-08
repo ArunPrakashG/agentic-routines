@@ -530,6 +530,8 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.screenshot': {
       const tabId = await working(p?.session, p.tab_id);
+      // A page still drawing itself gives a picture of a spinner; wait for it to settle, briefly.
+      await ask(tabId, { t: 'quiet' }).catch(() => {});
       const url = (await browser.tabs.get(tabId)).url ?? '';
       if (p.ref && p.note) {
         const e = await describeIn(tabId, p.ref);

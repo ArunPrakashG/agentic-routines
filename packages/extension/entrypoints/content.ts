@@ -8,6 +8,7 @@ import { heldLength, maskField, accessibleName, aimAt, allShadowRoots, attach, b
 
 export type ContentMsg =
   | { t: 'ping' }
+  | { t: 'quiet' }
   | { t: 'read'; filter?: 'interactive' | 'all'; wait?: number }
   | { t: 'knock'; nonce: string }
   | { t: 'place'; nonce: string; show?: Point }
@@ -143,6 +144,8 @@ function onChange(e: Event) {
 
 /** Elements at the recorded path, and of a tag that is rare enough to look through. */
 function ownKind(target: Locator): Element[] {
+  // Written by hand, so no tag to start from: every visible element with something to say for itself is a candidate.
+  if (!target.tag) return deepAll('*').filter((el) => !['html', 'head', 'script', 'style', 'meta', 'link', 'noscript', 'body'].includes(el.tagName.toLowerCase()) && visible(el)).slice(0, 4000);
   const out = new Set<Element>();
   try {
     for (const el of deepAll(target.css)) out.add(el);
@@ -215,6 +218,13 @@ export default defineContentScript({
           case 'ping':
             send(true);
             break;
+          case 'quiet':
+            void (async () => {
+              const end = Date.now() + 2500;
+              while (Date.now() < end && busyWhy()) await new Promise((r) => setTimeout(r, 200));
+              send({ ok: !busyWhy() });
+            })();
+            break;
           case 'rendering':
             requestAnimationFrame(() => send({ ok: true }));
             setTimeout(() => send({ ok: false }), 150);
@@ -222,8 +232,9 @@ export default defineContentScript({
           case 'read':
             void (async () => {
               // A page that is still drawing itself: wait for it to go quiet when asked, and say so when it has not.
-              const end = Date.now() + Math.min(msg.wait ?? 0, 10_000);
-              while (msg.wait && Date.now() < end && busyWhy()) await new Promise((r) => setTimeout(r, 200));
+              // Waits only while the page is busy, so a page that is ready costs nothing.
+              const end = Date.now() + Math.min(msg.wait ?? 3000, 10_000);
+              while (Date.now() < end && busyWhy()) await new Promise((r) => setTimeout(r, 200));
               const out = outline(msg.filter);
               const busy = busyWhy();
               if (busy) out.notes.busy = busy;
