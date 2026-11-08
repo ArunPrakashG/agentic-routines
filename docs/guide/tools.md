@@ -35,6 +35,21 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
 
+### Named sessions
+
+An agent's tabs normally belong to its server, and close when it stops. A named session keeps them until it is told otherwise, and can be limited.
+
+| Tool | What it does |
+|---|---|
+| `session_new` | Start one and work in it. `hosts` limits it to those sites and their subdomains, `read_only` stops it clicking, typing or running a routine |
+| `session_list` | The sessions, their limits and their tabs |
+| `session_use` | Work in one, by name. No name goes back to the server's own session |
+| `session_reset` | Close the tabs it opened, and keep its name and limits |
+| `session_delete` | Close them and forget it |
+| `session_allowlist` | See its limits or tighten them |
+
+A session stays in the browser profile it started in. If that profile is closed the agent is told, and nothing moves to another one. Start a server in a session with `AGENTIC_ROUTINES_SESSION=<name>`.
+
 ### Points on the page
 
 Most things have a ref, and a ref is better: it keeps working when the page moves. A point is for what has none: a canvas, a map, a place on a chart.

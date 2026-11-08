@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Away</title>
+<h1>Away</h1>
+<a id="popup" href="#" onclick="window.open(location.protocol + '//localhost:' + location.port + '/chores.html'); return false">Open elsewhere</a>
+<a id="popup-here" href="#" onclick="window.open('/chores.html?popup'); return false">Open here</a>
+<script>
+  // ?go sends the page to the same server under another name, as a redirect off a site would.
+  if (location.search === '?go') location.replace(location.protocol + '//localhost:' + location.port + '/chores.html');
+</script>

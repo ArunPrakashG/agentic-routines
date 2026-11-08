@@ -85,7 +85,10 @@ export class Bridge {
   private nextId = 1;
   /** MCP client name, e.g. "claude-code". */
   agent?: string;
-  private session = randomUUID();
+  private own = randomUUID();
+  private session: string = this.own;
+  /** The profile this session started in. It stays there: a closed browser is reported, not swapped for another. */
+  private stuck?: string;
   private waiting = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
 
   constructor(private onEvent: (e: Event) => void = () => {}) {}
@@ -103,9 +106,33 @@ export class Bridge {
     return Promise.all(all.map(async (h) => ({ id: h.profile ?? String(h.pid), label: await profileLabel(h), browser: h.browser, email: h.email, current: target?.pid === h.pid })));
   }
 
+  /** A named session, or back to this server's own. */
+  useSession(id: string | undefined, profile?: string) {
+    this.session = id ?? this.own;
+    if (profile === undefined) return;
+    if (profile !== this.stuck) {
+      this.sock?.destroy();
+      this.sock = undefined;
+      this.host = undefined;
+    }
+    this.stuck = profile;
+    this.told = true;
+  }
+
+  get sessionId() {
+    return this.session;
+  }
+
+  /** The profile this session works in, connecting if it has to. */
+  async profileId(): Promise<string | undefined> {
+    await this.open();
+    return this.host?.profile ?? (this.host ? String(this.host.pid) : undefined);
+  }
+
   /** Work in another profile from now on. */
   async use(name: string): Promise<BrowserProfile> {
     this.want = name;
+    this.stuck = undefined;
     this.sock?.destroy();
     this.sock = undefined;
     this.host = undefined;
@@ -122,6 +149,11 @@ export class Bridge {
   }
 
   private async pick(all: HostInfo[]): Promise<HostInfo> {
+    if (this.stuck) {
+      const h = all.find((x) => x.profile === this.stuck || String(x.pid) === this.stuck);
+      if (!h) throw new Error(`The browser profile this session started in is not open. Open it again, or use another session. Open now: ${(await Promise.all(all.map(profileLabel))).join(', ')}.`);
+      return h;
+    }
     if (!this.want) return [...all].sort((a, b) => (b.focusedAt ?? b.startedAt) - (a.focusedAt ?? a.startedAt))[0];
     const w = this.want.toLowerCase();
     const named = await Promise.all(all.map(async (h) => ({ h, label: (await profileLabel(h)).toLowerCase() })));
@@ -175,6 +207,7 @@ export class Bridge {
     sock.on('error', () => sock.destroy());
     this.sock = sock;
     this.host = h;
+    this.stuck = h.profile ?? String(h.pid);
     return sock;
   }
 

@@ -173,6 +173,56 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await fetch(`${CDP}/json/close/${before.id}`);
 }
 
+// ---------- named sessions ----------
+{
+  await session();
+  const OTHER = SITE.replace('127.0.0.1', 'localhost');
+  const tabList = async () => JSON.parse(/\[[\s\S]*\]/.exec((await call('tabs')).text)[0]);
+  const made = await call('session_new', { name: 'limits', hosts: ['127.0.0.1'] });
+  check(!made.error && /only 127.0.0.1/.test(made.text), 'session_new starts a session held to a site');
+  check(!(await call('navigate', { url: CHORES })).error, 'a listed site opens');
+  const off = await call('navigate', { url: `${OTHER}/chores.html` });
+  check(off.error && /outside this session/.test(off.text), 'an address off the list is refused');
+  check((await call('navigate', { url: `${OTHER}/chores.html`, new_tab: true })).error, 'so is a new tab to one');
+  const redirect = await call('navigate', { url: `${SITE}/away.html?go` });
+  check(redirect.error && /outside this session/.test(redirect.text), 'a redirect off the list is stopped and said');
+  check(!(await call('navigate', { url: `${SITE}/away.html` })).error, 'and the session can go on from a listed page');
+  await call('click', { ref: refFor(await read(), /Open elsewhere/) });
+  await sleep(800);
+  check(!(await pageOf('localhost:8773')), 'a popup off the list is closed');
+  check(/outside this session/.test((await call('read_page')).text), 'and the session hears about it once');
+  await call('click', { ref: refFor(await read(), /Open here/) });
+  await sleep(500);
+  check(!!(await pageOf('chores.html?popup')), 'a popup on the list opens');
+  check(!/localhost/.test((await call('tabs')).text), 'tabs shows only listed sites');
+  const wider = await call('session_allowlist', { name: 'limits', hosts: ['127.0.0.1', 'example.com'] });
+  check(wider.error && /Only the person/.test(wider.text), 'an agent cannot widen a list');
+
+  const tabId = (await tabList()).find((t) => t.held_by === 'you')?.id;
+  await session();
+  check(!(await call('session_use', { name: 'limits' })).error, 'a new server picks the session up by name');
+  check((await tabList()).find((t) => t.held_by === 'you')?.id === tabId, 'and it still has its tab after the old server went away');
+  check(/→ limits/.test((await call('session_list')).text), 'session_list marks the one in use');
+  await call('session_reset', { name: 'limits' });
+  await sleep(500);
+  check(!/held_by/.test((await call('tabs')).text), 'session_reset leaves it with no tab');
+
+  await call('session_new', { name: 'looking', read_only: true });
+  await call('navigate', { url: CHORES });
+  const typed = await call('type', { ref: refFor(await read(), /Item/), text: 'x' });
+  check(typed.error && /read-only/.test(typed.text), 'a read-only session cannot type');
+  check((await call('click', { ref: refFor(await read(), /Add item/) })).error, 'or click');
+  check(!(await call('read_page')).error, 'but can read');
+
+  // A public name that answers from this computer, as a rebinding attack would. Needs a resolver that knows it.
+  await call('session_new', { name: 'rebind', hosts: ['127.0.0.1.nip.io'] });
+  const rebound = await call('navigate', { url: SITE.replace('127.0.0.1', '127.0.0.1.nip.io') + '/chores.html' });
+  check(rebound.error && /private address/.test(rebound.text), 'a listed name on a private address is left');
+
+  for (const name of ['limits', 'looking', 'rebind']) await call('session_delete', { name });
+  check(/No named sessions/.test((await call('session_list')).text), 'session_delete forgets them');
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

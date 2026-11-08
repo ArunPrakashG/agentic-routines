@@ -12,7 +12,8 @@ import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
-import { adopt, agentTabId, ask, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, noteSession, openTab, settle, takeSpawned, waitLoaded } from '../page/tabs';
+import { adopt, agentTabId, ask, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, nameSession, noteSession, onItsSites, openTab, releaseSession, sessionTabs, settle, takePopupRefused, takeSpawned, waitLoaded } from '../page/tabs';
+import { listed, notListed, policyOf, setPolicy, takeRefused } from '../page/policy';
 
 // The browser tools agents call. Each call is done and recorded.
 
@@ -37,8 +38,11 @@ async function describeIn(tabId: number, ref: string): Promise<Described> {
 
 // The tab an agent is working in glows while it works, and for a few seconds after its last call.
 const WORKING_MS = 6000;
-async function working(session: string | undefined, requested?: number) {
+async function working(session: string | undefined, requested?: number, leaving = false) {
   const tabId = await agentTabId(session, requested);
+  const refused = takeRefused(tabId) ?? takePopupRefused(session);
+  if (refused && !leaving) throw new Error(`${refused} Nothing was done on the page.`);
+  if (!leaving) await onItsSites(session, tabId);
   await glow(tabId, 'run', WORKING_MS);
   // Attached from the first call, so the bar this puts up has already moved the page before anything is measured.
   await platform.cdp?.(tabId, async () => {}).catch(() => {});
@@ -236,14 +240,32 @@ let mayRunScript: (site: string, code: string, by: string) => Promise<void> = as
 };
 export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
 
+// All a read-only session may call. Anything added later stays refused until someone decides otherwise.
+const READ_ONLY = new Set(['browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
+
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
   if (p?.session) noteSession(p.session, source);
+  const policy = policyOf(p?.session);
+  if (policy?.readOnly && method.startsWith('browser.') && !READ_ONLY.has(method)) throw new Error(`This session is read-only, so ${method.slice(8)} is refused. Only the person can change that.`);
   switch (method) {
+    case 'browser.session': {
+      // A session's limits, as the server has them. It is sent again each time a server starts using the session.
+      setPolicy(p.target, p.policy);
+      if (p.policy?.name) nameSession(p.target, p.policy.name);
+      return true;
+    }
+    case 'browser.session_tabs':
+      return sessionTabs(p.target);
+    case 'browser.session_end':
+      await releaseSession(p.target);
+      if (p.forget) setPolicy(p.target, undefined);
+      return true;
     case 'browser.tabs': {
       const tabs = await browser.tabs.query({});
       return tabs
         .filter((t) => /^https?:/.test(t.url ?? ''))
+        .filter((t) => listed(policy?.hosts, t.url))
         .map((t) => {
           const h = t.id !== undefined ? heldBy(t.id) : undefined;
           return { id: t.id, title: unmark(t.title ?? ''), url: t.url, active: t.active, ...(h ? { held_by: h.session === p?.session ? 'you' : h.label } : {}), ...(t.id !== undefined && isOwnTab(p?.session, t.id) ? { yours: true } : {}), ...(t.id !== undefined && isLent(t.id) ? { lent: true } : {}) };
@@ -253,10 +275,11 @@ export async function handle(method: string, p: any): Promise<unknown> {
       let tabId: number;
       let asked: OpenDialog | undefined;
       let leftFrom = '';
+      if (policy?.hosts && !listed(policy.hosts, p.url)) throw new Error(notListed(p.url, policy.hosts));
       if (p.new_tab) {
         tabId = await openTab(p?.session, p.url);
       } else {
-        tabId = await working(p?.session, p.tab_id);
+        tabId = await working(p?.session, p.tab_id, true);
         await listenBeforeLeaving(tabId);
         const from = (await browser.tabs.get(tabId)).url ?? p.url;
         await browser.tabs.update(tabId, { url: p.url });
@@ -266,6 +289,9 @@ export async function handle(method: string, p: any): Promise<unknown> {
       await new Promise((r) => setTimeout(r, 200));
       await waitLoaded(tabId);
       await glow(tabId, 'run', WORKING_MS);
+      // A redirect off the list, or a listed name on a private address.
+      const offList = takeRefused(tabId);
+      if (offList) throw new Error(offList);
       const challenge = await challengeOn(tabId);
       const t = await browser.tabs.get(tabId);
       await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() }, p?.session);

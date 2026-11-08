@@ -32,7 +32,7 @@ export default defineConfig({
     description: "A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.",
     homepage_url: 'https://agenticroutines.arunprakashg.com',
     ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
-    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', 'webNavigation', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', ...(STORE ? [] : ['offscreen']), 'tabGroups'])],
+    permissions: ['nativeMessaging', 'tabs', 'scripting', 'storage', 'identity', 'webNavigation', 'webRequest', 'declarativeNetRequestWithHostAccess', ...(browser === 'firefox' ? [] : ['sidePanel', 'debugger', ...(STORE ? [] : ['offscreen']), 'tabGroups'])],
     // Hook code runs in the sandbox page, which can reach nothing: no network, no extension API. Chromium only.
     ...(browser === 'firefox' || STORE
       ? {}

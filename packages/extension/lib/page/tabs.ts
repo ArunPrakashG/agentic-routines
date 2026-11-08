@@ -2,6 +2,7 @@ import type { ContentMsg } from '../../entrypoints/content';
 import { platform } from '../platform';
 import { dialogOn, unlessDialog } from './dialogs';
 import { cancelSession, handedOver, onHandoffChange } from './handoff';
+import { guardTab, listed, notListed, policyOf, unguardTab, watchPolicies } from './policy';
 import type { Send } from '../platform/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -170,6 +171,52 @@ export function noteSession(session: string | undefined, name: string) {
 }
 const labelOf = (session: string) => labels.get(session) ?? (session === USER ? 'Replay' : 'Agent');
 
+// A named session outlives the server that started it: nothing ends it but being reset or deleted, and what it holds
+// is kept where a service worker that restarts can find it.
+const isNamed = (session: string) => session.startsWith('named:');
+function keepNamed() {
+  const all: Record<string, { tab?: number; opened: number[]; label?: string }> = {};
+  for (const s of new Set([...tabOf.keys(), ...opened.keys()])) if (isNamed(s)) all[s] = { tab: tabOf.get(s), opened: [...(opened.get(s) ?? [])], label: labels.get(s) };
+  void browser.storage.session?.set({ named: all }).catch(() => {});
+}
+async function restoreNamed() {
+  const all = ((await browser.storage.session?.get('named'))?.named ?? {}) as Record<string, { tab?: number; opened: number[]; label?: string }>;
+  for (const [s, v] of Object.entries(all)) {
+    if (v.label) labels.set(s, v.label);
+    const alive = async (id: number) => browser.tabs.get(id).then(() => true, () => false);
+    const mine = (await Promise.all(v.opened.map(async (id) => ((await alive(id)) ? id : undefined)))).filter((id): id is number => id !== undefined);
+    if (mine.length) opened.set(s, new Set(mine));
+    if (v.tab !== undefined && (await alive(v.tab))) {
+      holds.set(v.tab, { session: s, label: labelOf(s), until: Number.MAX_SAFE_INTEGER, marked: 0 });
+      tabOf.set(s, v.tab);
+    }
+  }
+}
+
+/** A named session goes by the name it was given. */
+export function nameSession(session: string, name: string) {
+  labels.set(session, name);
+  keepNamed();
+}
+
+/** What a named session has open, for the list. */
+export async function sessionTabs(session: string) {
+  await prune();
+  const ids = new Set([...(opened.get(session) ?? [])]);
+  const cur = tabOf.get(session);
+  if (cur !== undefined) ids.add(cur);
+  const tabs = await Promise.all([...ids].map((id) => browser.tabs.get(id).catch(() => undefined)));
+  return tabs.filter((t) => t).map((t) => ({ id: t!.id, url: t!.url, current: t!.id === cur }));
+}
+
+/** May this session act on what the tab is showing now. A navigation away is the way out, so that is not asked here. */
+export async function onItsSites(session: string | undefined, tabId: number) {
+  const hosts = policyOf(session)?.hosts;
+  if (!hosts) return;
+  const url = (await browser.tabs.get(tabId)).url;
+  if (!listed(hosts, url)) throw new Error(`Tab ${tabId} is at ${url}, and ${notListed(url ?? '', hosts)} Navigate to a listed site first.`);
+}
+
 // The title is the page's to change, so it is only a hint. A tab group belongs to the browser and a page cannot
 // touch it: the held tab goes in a group named for its agent, where the browser has groups and the tab is not already
 // in one of the person's own, and is not the only tab in its window.
@@ -208,8 +255,11 @@ function releaseTab(tabId: number) {
   const h = holds.get(tabId);
   holds.delete(tabId);
   if (h && tabOf.get(h.session) === tabId) tabOf.delete(h.session);
+  // A tab the session opened stays held to its sites, or its page could walk off them while nobody watches.
+  if (!h || !opened.get(h.session)?.has(tabId)) void unguardTab(tabId);
   void mark(tabId, null);
   paint(tabId);
+  keepNamed();
 }
 
 /** What the toolbar button says on this tab: WAIT for the person, RUN while something drives it. */
@@ -232,7 +282,9 @@ export async function releaseSession(session: string) {
   labels.delete(session);
   const mine = [...(opened.get(session) ?? [])];
   opened.delete(session);
+  keepNamed();
   for (const id of mine) {
+    void unguardTab(id);
     try {
       const tab = await browser.tabs.get(id);
       const win = await browser.windows.get(tab.windowId);
@@ -248,10 +300,12 @@ function claim(session: string, tabId: number): number {
   const before = tabOf.get(session);
   if (before !== undefined && before !== tabId) releaseTab(before);
   const label = labelOf(session);
-  holds.set(tabId, { session, label, until: Date.now() + LEASE_MS, marked: Date.now() });
+  holds.set(tabId, { session, label, until: isNamed(session) ? Number.MAX_SAFE_INTEGER : Date.now() + LEASE_MS, marked: Date.now() });
   tabOf.set(session, tabId);
+  void guardTab(tabId, policyOf(session));
   void mark(tabId, label);
   paint(tabId);
+  keepNamed();
   return tabId;
 }
 
@@ -259,7 +313,7 @@ function claim(session: string, tabId: number): number {
 function touch(tabId: number) {
   const h = holds.get(tabId);
   if (!h) return;
-  h.until = Date.now() + LEASE_MS;
+  if (!isNamed(h.session)) h.until = Date.now() + LEASE_MS;
   if (Date.now() - h.marked > 60_000) {
     h.marked = Date.now();
     void mark(tabId, h.label);
@@ -304,6 +358,11 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
     await browser.tabs.get(requested).catch(() => {
       throw new Error(`There is no tab ${requested}. Call tabs to see the open ones.`);
     });
+    const hosts = policyOf(session)?.hosts;
+    if (hosts && !opened.get(session)?.has(requested) && tabOf.get(session) !== requested) {
+      const url = (await browser.tabs.get(requested)).url;
+      if (!listed(hosts, url)) throw new Error(notListed(url ?? `Tab ${requested}`, hosts));
+    }
     const h = heldBy(requested);
     if (h && h.session !== session) throw new Error(`Tab ${requested} is locked by ${h.label}, another agent working in the browser. Use your own tab: leave out tab_id, or pass new_tab to navigate.`);
     return claim(session, requested);
@@ -373,6 +432,8 @@ const spawned = new Map<number, number>();
 
 export function watchTabs() {
   onHandoffChange((tabId) => paint(tabId));
+  watchPolicies();
+  void restoreNamed();
   void browser.storage.session?.get('lent').then((s) => {
     for (const id of (s.lent as number[] | undefined) ?? []) {
       lent.add(id);
@@ -389,11 +450,31 @@ export function watchTabs() {
   browser.tabs.onCreated.addListener((t) => {
     if (t.id === undefined || t.openerTabId === undefined) return;
     const h = heldBy(t.openerTabId);
-    if (!h || LEASE_MS - (h.until - Date.now()) > SPAWN_MS) return;
+    // A page held to a list opens nothing outside it, however long after the session last acted.
+    const hosts = h && policyOf(h.session)?.hosts;
+    if (hosts) {
+      void guardTab(t.id, policyOf(h.session));
+      const to = t.pendingUrl ?? t.url;
+      if (to && to !== 'about:blank' && !listed(hosts, to)) {
+        popupRefused.set(h.session, notListed(to, hosts));
+        void browser.tabs.remove(t.id).catch(() => {});
+        return;
+      }
+    }
+    if (!h || (!isNamed(h.session) && LEASE_MS - (h.until - Date.now()) > SPAWN_MS)) return;
     made(h.session, t.id);
+    keepNamed();
     cameFrom.set(t.id, t.openerTabId);
     spawned.set(t.openerTabId, t.id);
   });
+}
+
+const popupRefused = new Map<string, string>();
+/** A popup a page tried to open for this session and was stopped, once. */
+export function takePopupRefused(session: string = USER) {
+  const why = popupRefused.get(session);
+  popupRefused.delete(session);
+  return why;
 }
 
 /** The tab what a session just did has opened, once. */
@@ -412,6 +493,8 @@ export async function closeOwnTab(session: string = USER, requested?: number) {
   if (!isOwnTab(session, id)) throw new Error(`Tab ${id} is not one you opened, so it stays open.`);
   const from = cameFrom.get(id);
   opened.get(session)!.delete(id);
+  void unguardTab(id);
+  keepNamed();
   cameFrom.delete(id);
   if (holds.get(id)?.session === session) holds.delete(id);
   const current = tabOf.get(session) === id;
@@ -429,6 +512,8 @@ export async function openTab(session: string = USER, url: string): Promise<numb
   await prune();
   const own = tabOf.get(session);
   const windowId = own !== undefined ? await browser.tabs.get(own).then((t) => t.windowId, () => undefined) : undefined;
+  const hosts = policyOf(session)?.hosts;
+  if (hosts && !listed(hosts, url)) throw new Error(notListed(url, hosts));
   const t = await browser.tabs.create({ url, active: false, ...(windowId !== undefined ? { windowId } : {}) });
   return claim(session, made(session, t.id!));
 }
