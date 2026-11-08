@@ -183,11 +183,13 @@ interface Result {
   ref?: string;
   rect?: Rectish;
   candidates?: { ref?: string; rect?: Rectish }[];
+  view?: unknown;
 }
 
 function inTab<T extends Result>(res: T, frameId: number, box: Seen['box']): T {
   const place = (r?: Rectish) => r && { ...r, x: box.x + r.x * box.sx, y: box.y + r.y * box.sy };
-  return { ...res, ref: res.ref && inFrame(frameId, res.ref), rect: place(res.rect), candidates: res.candidates?.map((c) => ({ ...c, ref: c.ref && inFrame(frameId, c.ref), rect: place(c.rect) })) };
+  // The size a frame reports is its own, not the tab's.
+  return { ...res, view: undefined, ref: res.ref && inFrame(frameId, res.ref), rect: place(res.rect), candidates: res.candidates?.map((c) => ({ ...c, ref: c.ref && inFrame(frameId, c.ref), rect: place(c.rect) })) };
 }
 
 /** Look for a recorded element where it was recorded: in the page, or in the frame it was in. */

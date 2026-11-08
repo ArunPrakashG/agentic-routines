@@ -332,7 +332,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
         await listenBeforeLeaving(tabId);
         const from = (await browser.tabs.get(tabId)).url ?? p.url;
         await browser.tabs.update(tabId, { url: p.url });
-        asked = await whenLeaving(tabId, !!p.force);
+        asked = await whenLeaving(tabId, !!p.force, from, p.url);
         if (asked) leftFrom = from;
       }
       await new Promise((r) => setTimeout(r, 200));

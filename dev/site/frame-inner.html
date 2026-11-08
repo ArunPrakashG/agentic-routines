@@ -13,7 +13,7 @@
 <script>
   const who = new URLSearchParams(location.search).get('who');
   const big = who[0].toUpperCase() + who.slice(1);
-  document.getElementById('pay').textContent = `Pay ${big}`;
+  document.getElementById('pay').textContent = `Open ${big}`;
   document.querySelector('label').textContent = `Name ${big}`;
   document.getElementById('words').textContent = `Words ${big}`;
   const tell = (what) => parent.postMessage({ who, what }, '*');

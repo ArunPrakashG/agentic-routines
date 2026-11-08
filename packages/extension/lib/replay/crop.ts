@@ -1,5 +1,6 @@
 import { dHash } from '@agentic-routines/core';
 import { platform } from '../platform';
+import type { Send } from '../platform/types';
 import { bare, rendering } from '../page/tabs';
 import { annotatePng, paint, toBase64, type Mark } from './annotate';
 
@@ -142,7 +143,7 @@ export async function pngBase64(tabId: number): Promise<string> {
   if (!tab.active) {
     // A picture of the window shows the tab in front, so a tab behind another is taken through the DevTools
     // session, and the person is not switched away from what they are looking at. Browsers without one bring it forward.
-    if (platform.cdp) return bare(tabId, () => platform.cdp!(tabId, async (send) => (await send<{ data: string }>('Page.captureScreenshot', { format: 'png' })).data));
+    if (platform.cdp) return bare(tabId, () => platform.cdp!(tabId, hiddenPng));
     await browser.tabs.update(tabId, { active: true });
   }
   return bare(tabId, () => grab(tabId, tab.windowId));
@@ -155,6 +156,28 @@ async function grab(tabId: number, windowId: number): Promise<string> {
   } catch (e) {
     // Without a DevTools session a hidden window stays an error.
     if (!platform.cdp) throw e;
-    return platform.cdp(tabId, async (send) => (await send<{ data: string }>('Page.captureScreenshot', { format: 'png' })).data);
+    return platform.cdp(tabId, hiddenPng);
   }
+}
+
+// A tab that is not drawn can sit on a picture until another is asked for, so another request goes each second, and
+// the first answer wins. A tab that never draws is an error rather than a wait.
+async function hiddenPng(send: Send): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let left = 10;
+    const end = (fn: () => void) => {
+      clearInterval(timer);
+      fn();
+    };
+    const take = () =>
+      send<{ data: string }>('Page.captureScreenshot', { format: 'png' }).then(
+        (r) => end(() => resolve(r.data)),
+        (e) => end(() => reject(e)),
+      );
+    const timer = setInterval(() => {
+      if (--left > 0) void take();
+      else end(() => reject(new Error('The tab did not draw a picture. Bring it to the front and try again.')));
+    }, 1000);
+    void take();
+  });
 }

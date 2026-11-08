@@ -638,8 +638,9 @@ async function nextPass(s: ReplayState, l: Loop): Promise<number> {
     more = l.values.length > 0;
     if (more) s.params[e.param!] = l.values.shift()!;
   } else if (l.pass >= e.limit) {
+    // Rows that go leave the unvisited ones from the current place on; rows that stay, from the next one.
     const left = await countLike(s, e.matching!);
-    if (left > l.index + 1) l.record.note = `It stopped at its limit of ${e.limit}. There may be more on the page.`;
+    if (left > (left < l.seen ? l.index : l.index + 1)) l.record.note = `It stopped at its limit of ${e.limit}. There may be more on the page.`;
     more = false;
   } else {
     // A pass that took its row off the list leaves the next row where this one was.

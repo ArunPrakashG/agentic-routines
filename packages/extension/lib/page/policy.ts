@@ -71,6 +71,9 @@ export async function unguardTab(tabId: number) {
   await rules()?.updateSessionRules({ removeRuleIds: [tabId] }).catch(() => {});
 }
 
+/** The tab was sent away and has not been told yet. */
+export const wasRefused = (tabId: number) => refused.has(tabId);
+
 /** Why the last address this tab tried was refused, once. */
 export function takeRefused(tabId: number) {
   const why = refused.get(tabId);

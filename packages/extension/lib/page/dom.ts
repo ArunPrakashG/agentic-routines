@@ -169,8 +169,11 @@ function labelFor(el: Element): string {
     if (l) return clean(seenText(l));
   }
   const wrap = el.closest('label');
-  if (wrap) return clean(seenText(wrap));
-  return '';
+  if (!wrap) return '';
+  // A label around the field holds the field too: a list's options are not its name.
+  const all = clean(seenText(wrap));
+  const own = el.tagName === 'INPUT' ? '' : clean(seenText(el));
+  return own && all.includes(own) ? clean(all.replace(own, ' ')) : all;
 }
 
 export function accessibleName(el: Element): string {

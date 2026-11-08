@@ -56,7 +56,8 @@ const SUSPECT: { kind: string; re: RegExp }[] = [
   { kind: 'tool-call', re: /\broutine_(?:install|install_from_git|publish|resume|run|save)\b/gi },
   { kind: 'exfiltration', re: /\b(?:send|post|forward|upload|email|e-mail|exfiltrate|leak|transmit|submit|share|copy|paste|include|append)\b[^.\n]{0,70}\b(?:to|at|into|via|on)\b[^.\n]{0,50}(?:https?:\/\/|\bwww\.|\b[a-z0-9-]+\.(?:com|net|org|io|xyz|ru|cn|tk|ly|sh)\b|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi },
   { kind: 'exfiltration', re: /\b(?:api[ _-]?keys?|passwords?|credentials?|cookies?|session\s+tokens?|access\s+tokens?|secrets?|private\s+keys?|ssh\s+keys?|\.env)\b[^.\n]{0,60}\bhttps?:\/\/\S+/gi },
-  { kind: 'exfiltration', re: /https?:\/\/[^\s)'"]{0,200}[?&](?:token|key|secret|password|passwd|cookie|session|auth|data|q|content|prompt|history|memory)=[^\s)'"]{0,300}/gi },
+  // A value, not one already hidden as … (which matching sees as ...).
+  { kind: 'exfiltration', re: /https?:\/\/[^\s)'"]{0,200}[?&](?:token|key|secret|password|passwd|cookie|session|auth|data|q|content|prompt|history|memory)=(?!…|\.\.\.(?:[&\s)'"]|$))[^\s)'"&][^\s)'"]{0,300}/gi },
   { kind: 'exfiltration', re: /!\[[^\]]{0,100}\]\(\s*https?:\/\/[^)\s]{0,200}\?[^)\s]{0,300}\)/gi },
   { kind: 'secrecy', re: /\b(?:do\s+not|don't|never|without)\s+(?:tell|telling|inform|informing|mention|mentioning|reveal|revealing|alert|alerting|notify|notifying|show|showing)\b[^.\n]{0,30}\b(?:user|human|person|owner|anyone)\b/gi },
   { kind: 'secrecy', re: /\b(?:secretly|silently|quietly|covertly)\b[^.\n]{0,30}\b(?:send|post|upload|install|run|click|type|navigate|publish)\b/gi },

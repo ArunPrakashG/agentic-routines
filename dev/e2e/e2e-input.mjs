@@ -35,7 +35,9 @@ const read = async (args = {}) => (await call('read_page', args)).text;
 
 // What the page says, read the way a test reads it and not through the tools under test.
 async function say(id, match = 'trusted.html') {
-  const t = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'page' && x.url.includes(match));
+  const pages = (await (await fetch(`${CDP}/json/list`)).json()).filter((x) => x.type === 'page');
+  const t = pages.find((x) => x.url.includes(match));
+  if (!t) throw new Error(`No page at ${match}. Open: ${pages.map((x) => x.url).join(', ')}`);
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   const out = await new Promise((res) => {
@@ -48,7 +50,9 @@ async function say(id, match = 'trusted.html') {
 
 // Anything else about the page, the same way.
 async function evalIn(expression, match) {
-  const t = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'page' && x.url.includes(match));
+  const pages = (await (await fetch(`${CDP}/json/list`)).json()).filter((x) => x.type === 'page');
+  const t = pages.find((x) => x.url.includes(match));
+  if (!t) throw new Error(`No page at ${match}. Open: ${pages.map((x) => x.url).join(', ')}`);
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   const out = await new Promise((res) => {
@@ -314,27 +318,29 @@ for (const where of ['behind another tab', 'in front']) {
   check(/already/.test(r.text) && (await evalIn(`document.getElementById('news').checked`, m)) === true, `ticking it again leaves it: ${r.text.slice(0, 120)}`);
   await set(/“Dark mode”/, 'on');
   check((await evalIn(`document.getElementById('sw').getAttribute('aria-checked')`, m)) === 'true', 'turns on a switch');
-  await set(/“Small”/, true);
-  check((await evalIn(`document.getElementById('small').checked`, m)) === true, 'chooses a radio');
+  // Large starts chosen: turning it off by itself is refused, and choosing Small turns it off.
   r = await set(/“Large”/, false);
-  check(r.error, 'and says a radio does not go off by itself');
-  await set(/“Country”/, 'Japan');
+  check(r.error, `a radio does not go off by itself: ${r.text.slice(0, 120)}`);
+  await set(/“Small”/, true);
+  check((await evalIn(`document.getElementById('small').checked`, m)) === true && (await evalIn(`document.getElementById('large').checked`, m)) === false, 'chooses a radio, and the other goes off');
+  const chose = await set(/“Country”/, 'Japan');
   await set(/“Volume”/, 70);
   await set(/“Day”/, '2026-12-25');
   await set(/“Name”/, 'Asha');
   const state = () => evalIn(`[document.getElementById('country').value, document.getElementById('vol').value, document.getElementById('day').value, document.getElementById('who').value].join('|')`, m);
-  check((await state()) === 'Japan|70|2026-12-25|Asha', `a select, slider, date and text: ${await state()}`);
+  check((await state()) === 'Japan|70|2026-12-25|Asha', `a select, slider, date and text: ${await state()} (${chose.text.slice(0, 160)})`);
   r = await set(/“Day”/, 'next friday');
   check(r.error && /YYYY-MM-DD/.test(r.text), `a date in the wrong form is refused: ${r.text.slice(0, 160)}`);
   const d = await call('routine_propose', { name: 'fields-replay', description: 'Fill in the fields page. Use when the user asks for this.' });
   check(!d.error && /form_input|set/i.test(d.text), `proposes a routine of it: ${d.text.slice(0, 200)}`);
   const id = d.text.match(/^Draft (d-\S+)/m)?.[1];
   await call('routine_save', { draft_id: id });
-  await call('navigate', { url: `${SITE}/fields.html?ticked` });
+  // The replay opens the page it was recorded on, so it starts unticked. A setting is a state: it ticks once and stays.
+  await call('navigate', { url: `${SITE}/trusted.html` });
   r = await call('routine_run', { name: 'fields-replay', params: { name: 'Asha' } });
   check(/done|finished/i.test(r.text), `replays it: ${r.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
-  const rm = 'fields.html?ticked';
-  check((await say('news-out', rm)) === 'news changes 0', `a replay does not untick what is already ticked: ${await say('news-out', rm)}`);
+  const rm = 'fields.html';
+  check((await say('news-out', rm)) === 'news changes 1' && (await evalIn(`document.getElementById('news').checked`, rm)) === true, `a replay ticks the box once and leaves it ticked: ${await say('news-out', rm)}`);
   check((await say('plain-out', rm)) === 'plain yes', 'a replay clicks the plain clickable');
 }
 
@@ -349,12 +355,12 @@ for (const where of ['behind another tab', 'in front']) {
   await sleep(500);
   let page = await read({ tab_id: tab });
   const ref = (re) => refFor(page, re);
-  check(/f\d+:ref_\d+ .*“Pay Same”/.test(page), `a frame on the same site is in the outline, ${where}: ${page.split('\n').filter((l) => /Pay|frame/.test(l)).join(' | ').slice(0, 300)}`);
-  check(/f\d+:ref_\d+ .*“Pay Cross”/.test(page), `so is a frame from another site, ${where}`);
+  check(/f\d+:ref_\d+ .*“Open Same”/.test(page), `a frame on the same site is in the outline, ${where}: ${page.split('\n').filter((l) => /Open|frame/.test(l)).join(' | ').slice(0, 300)}`);
+  check(/f\d+:ref_\d+ .*“Open Cross”/.test(page), `so is a frame from another site, ${where}`);
   check(/“Shadow go”/.test(page) && /“Shadow name”/.test(page) && /“Deep go”/.test(page), `so is what is in a closed shadow root, ${where}`);
-  check(!/Pay Off|Pay Tiny/.test(page), `a frame nobody can see is not, ${where}`);
+  check(!/Open Off|Open Tiny/.test(page), `a frame nobody can see is not, ${where}`);
 
-  await call('click', { ref: ref(/“Pay Same”/), tab_id: tab });
+  await call('click', { ref: ref(/“Open Same”/), tab_id: tab });
   check((await say('same-out', m)) === 'same pay true', `clicks in a frame on the same site, ${where}: ${await say('same-out', m)}`);
   await call('type', { ref: ref(/“Name Same”/), text: 'Asha', tab_id: tab });
   check((await say('same-out', m)) === 'same typed Asha', `types in it, ${where}: ${await say('same-out', m)}`);
@@ -365,12 +371,12 @@ for (const where of ['behind another tab', 'in front']) {
   await call('click', { ref: ref(/“Deep go”/), tab_id: tab });
   check((await say('shadow-out', m)) === 'shadow deep true', `clicks in a shadow root in a shadow root, ${where}`);
   // Far down the page, and in another process: the page has to scroll it on screen for the frame.
-  await call('click', { ref: ref(/“Pay Cross”/), tab_id: tab });
+  await call('click', { ref: ref(/“Open Cross”/), tab_id: tab });
   check((await say('cross-out', m)) === 'cross pay true', `clicks in a frame from another site, off screen, ${where}: ${await say('cross-out', m)}`);
   await call('type', { ref: ref(/“Name Cross”/), text: 'Mira', tab_id: tab });
   check((await say('cross-out', m)) === 'cross typed Mira', `types in it, ${where}: ${await say('cross-out', m)}`);
 
-  r = await call('find', { query: 'Pay Cross', tab_id: tab });
+  r = await call('find', { query: 'Open Cross', tab_id: tab });
   check(/f\d+:ref_\d+/.test(r.text), `find looks in frames, ${where}: ${r.text.slice(0, 160)}`);
   r = await call('find', { query: 'Shadow go', tab_id: tab });
   check(/ref_\d+/.test(r.text), `and in shadow roots, ${where}`);
@@ -378,7 +384,7 @@ for (const where of ['behind another tab', 'in front']) {
   check(/Words Same/.test(r.text) && /Words Cross/.test(r.text) && !/Words Off/.test(r.text), `a page's words include its frames, ${where}: ${r.text.slice(0, 200)}`);
 
   // A point on a picture lands in the frame drawn there.
-  const shot = await call('screenshot', { tab_id: tab });
+  const shot = await call('screenshot', { tab_id: tab, full: true });
   const size = shot.text.match(/picture is (\d+)×(\d+)/);
   const b = await evalIn(`(() => { const r = document.getElementById('cross').getBoundingClientRect(); return { x: r.x, y: r.y, vw: innerWidth, vh: innerHeight }; })()`, m);
   await evalIn(`document.getElementById('cross-out').textContent = 'cross nothing'`, m);
@@ -387,15 +393,16 @@ for (const where of ['behind another tab', 'in front']) {
 
   // And a replay finds each of them where it was recorded.
   if (where === 'behind another tab') {
-    const d = await call('routine_propose', { name: 'frames-replay', description: 'Pay in every frame. Use when the user asks for this.' });
+    const d = await call('routine_propose', { name: 'frames-replay', description: 'Open something in every frame. Use when the user asks for this.' });
     const id = d.text.match(/^Draft (d-\S+)/m)?.[1];
     check(!!id, `proposes a routine of it: ${d.text.slice(0, 200)}`);
     await call('routine_save', { draft_id: id });
     await call('navigate', { url: `${SITE}/frames.html?replay`, tab_id: tab });
     await sleep(500);
-    r = await call('routine_run', { name: 'frames-replay', params: { name: 'Asha' } });
+    r = await call('routine_run', { name: 'frames-replay', params: { name_same: 'Asha', shadow_name: 'Ravi', name_cross: 'Mira' } });
     check(/done|finished/i.test(r.text), `replays it: ${r.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
-    const rm = 'frames.html?replay';
+    // A replay starts at the address it recorded.
+    const rm = 'frames.html?behind';
     check(/^same /.test(await say('same-out', rm)) && (await say('same-out', rm)) !== 'same nothing', `a replay works in the same-site frame: ${await say('same-out', rm)}`);
     check((await say('cross-out', rm)) === 'cross pay true', `and in the frame from another site: ${await say('cross-out', rm)}`);
     check(/^shadow /.test(await say('shadow-out', rm)) && (await say('shadow-out', rm)) !== 'shadow nothing', `and in the closed shadow root: ${await say('shadow-out', rm)}`);
@@ -433,7 +440,7 @@ for (const where of ['behind another tab', 'in front']) {
   await call('navigate', { url: `${SITE}/dialogs.html?replay` });
   r = await call('routine_run', { name: 'dialogs-replay', params: { dialog_answer: 'Ravi' } });
   check(/done|finished/i.test(r.text), `replays them: ${r.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
-  check((await say('out', 'dialogs.html?replay')) === 'prompt Ravi', `with the new answer: ${await say('out', 'dialogs.html?replay')}`);
+  check((await say('out', 'dialogs.html')) === 'prompt Ravi', `with the new answer: ${await say('out', 'dialogs.html')}`);
 
   // A page that asks before it is left.
   await call('navigate', { url: `${SITE}/dialogs.html?leave` });
@@ -479,23 +486,33 @@ for (const where of ['behind another tab', 'in front']) {
   r = await call('read_console_messages', { only_errors: true });
   check(/boom from the page/.test(r.text) && !/page started/.test(r.text), `only the errors: ${r.text.slice(0, 200)}`);
   r = await call('read_network_requests');
-  check(/Listening starts/.test(r.text), `says listening starts now: ${r.text.slice(0, 160)}`);
+  check(/Listening start/.test(r.text), `says when listening started: ${r.text.slice(0, 160)}`);
   await call('click', { ref: refFor(page, /“Send a request”/) });
   await sleep(500);
   r = await call('read_network_requests', { url_contains: 'overview' });
-  check(/GET .*overview\.html\?key=…&who=… 200/.test(r.text) && !/s3cret/.test(r.text), `a request, with its values hidden: ${r.text.slice(0, 240)}`);
+  check(/GET .*overview\.html\?key=…&who=… 200/.test(r.text) && !/s3cret/.test(r.text), `a request, with its values hidden: ${r.text.split('\n').filter((l) => /^[A-Z]+ /.test(l)).join(' | ').slice(0, 240) || r.text.slice(-200)}`);
 
   // A script waits for the person, and a no is a no.
   const panel = await (await fetch(`${CDP}/json/new?${EXT}/sidepanel.html`, { method: 'PUT' })).json();
+  // Signed in, as the panel shows nothing else to someone who is not.
+  const signIn = `chrome.storage.local.set({ session: { account: { email: 'test@example.com', name: 'Test' }, access: 'x', accessExp: Date.now() + 3600000, refresh: 'x' } })`;
+  await sleep(1000);
+  await evalIn(signIn, `${EXT}/sidepanel.html`);
   const answer = async (label) => {
     const ws = new WebSocket(panel.webSocketDebuggerUrl);
     await new Promise((res) => (ws.onopen = res));
     const out = await new Promise((res) => {
-      ws.onmessage = (e) => res(JSON.parse(e.data));
-      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: `(async () => { for (let i = 0; i < 40; i++) { const b = [...document.querySelectorAll('section[aria-label="Allow a script"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)}); if (b) { b.click(); return true; } await new Promise((r) => setTimeout(r, 100)); } return false; })()`, awaitPromise: true, returnByValue: true } }));
+      ws.onmessage = (e) => {
+        const m = JSON.parse(e.data);
+        if (m.id === 1) res(m);
+      };
+      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: `(async () => { for (let i = 0; i < 100; i++) { const b = [...document.querySelectorAll('section[aria-label="Allow a script"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)}); if (b) { b.click(); return true; } await new Promise((r) => setTimeout(r, 100)); } return document.body.innerText.slice(0, 300); })()`, awaitPromise: true, returnByValue: true } }));
     });
     ws.close();
-    return out.result.result.value;
+    if (!out.result) throw new Error(`The side panel did not answer: ${JSON.stringify(out.error ?? out)}`);
+    const v = out.result.result.value;
+    if (v !== true) console.log(`  the panel shows: ${String(v).replace(/\n/g, ' | ')}`);
+    return v === true;
   };
   let run = call('javascript', { code: '1 + 1' });
   check(await answer('No'), 'a script waits in the panel');

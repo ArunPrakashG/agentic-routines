@@ -132,11 +132,27 @@ async function aimFor(tabId: number, ref: string, action: string, how: How) {
   return a;
 }
 
+// A frame from another site gets input only where the browser last drew it, so one just scrolled on screen is drawn first.
+// A tab that is not drawn can sit on a picture until another is asked for, so another goes every quarter second. After a
+// few seconds the input goes anyway.
+async function drawFrame(send: Send, ref: string) {
+  if (!frameOf(ref)) return;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const drawn = new Promise<void>((done) => {
+    const shot = () => void send('Page.captureScreenshot', { format: 'jpeg', quality: 1 }).then(() => done(), () => done());
+    timer = setInterval(shot, 250);
+    shot();
+  });
+  await Promise.race([drawn, sleep(3000)]);
+  clearInterval(timer);
+}
+
 /** Click an element for real. Says what was on top of it, if something was. */
 async function realClick(tabId: number, ref: string, how: How): Promise<{ done: boolean; note?: string }> {
   const a = await aimFor(tabId, ref, 'click', how);
   if (!a.hit) return { done: false, note: a.over ? `“${a.over}” is drawn over it, so a person could not have clicked it; check the page took it.` : undefined };
   return platform.cdp!(tabId, async (send) => {
+    await drawFrame(send, ref);
     const before = (await browser.tabs.get(tabId)).url;
     await mouseClick(tabId, send, a.x, a.y, mouseOpts(how));
     return { done: await arrived(tabId, before, ref) };
@@ -148,6 +164,7 @@ async function realHover(tabId: number, ref: string, how: How) {
   const a = await aimFor(tabId, ref, 'hover', how);
   if (!a.hit) return false;
   return platform.cdp!(tabId, async (send) => {
+    await drawFrame(send, ref);
     const before = (await browser.tabs.get(tabId)).url;
     await glideTo(tabId, send, a.x, a.y);
     await sendInput(tabId, send, 'Input.dispatchMouseEvent', { x: a.x, y: a.y, type: 'mouseMoved', button: 'none', buttons: 0 });
@@ -167,6 +184,7 @@ async function realDrag(tabId: number, ref: string, how: How) {
   const to = await toTab(tabId, how.toRef, end);
   if (!from.hit) return false;
   return platform.cdp!(tabId, async (send) => {
+    await drawFrame(send, ref);
     const before = (await browser.tabs.get(tabId)).url;
     const mouse = (type: string, p: Point, extra: object) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type, x: p.x, y: p.y, ...extra });
     await mouse('mouseMoved', from, { button: 'none', buttons: 0 });

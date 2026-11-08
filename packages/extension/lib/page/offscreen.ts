@@ -9,7 +9,8 @@ export async function ensureOffscreen() {
   if (await off.hasDocument?.()) return;
   try {
     await off.createDocument({
-      url: 'offscreen.html',
+      // The page cannot read the manifest itself, so it is told here whether to frame the sandbox.
+      url: hasHooks() ? 'offscreen.html?hooks' : 'offscreen.html',
       reasons: hasHooks() ? ['IFRAME_SCRIPTING', 'BLOBS'] : ['BLOBS'],
       justification: 'Makes a video from pictures of a tab, and runs the hooks of a routine in a sandbox that cannot reach the network.',
     });
