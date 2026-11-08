@@ -18,7 +18,9 @@ export type Action =
   | 'drag'
   | 'scroll'
   | 'set'
-  | 'dialog';
+  | 'dialog'
+  | 'each'
+  | 'if';
 
 /** Everything we know about an element, captured when it was used. */
 export interface Locator {
@@ -83,8 +85,29 @@ export interface Step {
   crop?: string;
   /** Replay stops here and waits for approval. */
   pause?: 'auto' | 'author';
-  /** Click whatever is first in the list now, not the item that was recorded. */
-  pick?: 'first';
+  /** Click whatever is first in the list now, not the item that was recorded, or in a loop over elements the one this pass is on. */
+  pick?: 'first' | 'each';
+  /** each: the next steps repeat. */
+  each?: {
+    /** One pass per value of this parameter, and in those steps {{param}} is that value. */
+    param?: string;
+    /** One pass per element like this one on the page. */
+    matching?: Locator;
+    /** How many steps repeat. */
+    count: number;
+    limit: number;
+  };
+  /** if: the next `then` steps run when the page has this, and the `else` steps after those when it does not. */
+  when?: {
+    /** Text on the page. Can use {{params}}. */
+    text?: string;
+    /** An element on the page. */
+    has?: Locator;
+    /** The other way round. */
+    not?: boolean;
+    then: number;
+    else: number;
+  };
   /** Text for the agent about this step: what to check, what a good result looks like. */
   instructions?: string;
   pointer?: Pointer;
@@ -227,6 +250,10 @@ export interface RunResult {
   outcome?: { ok: boolean; wanted: string };
   /** How long each step took, by step number. */
   step_ms?: Record<number, number>;
+  /** Every loop that ran: its step, how many passes, and why it stopped early when it did. */
+  loops?: { n: number; passes: number; note?: string }[];
+  /** Every branch that ran: its step, and which way it went each time. */
+  branches?: { n: number; took: ('then' | 'else')[] }[];
   /** Notes the author left on the steps the run stopped at or changed, for the agent. */
   step_notes?: { n: number; label: string; text: string }[];
 }

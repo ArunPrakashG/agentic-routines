@@ -1,10 +1,11 @@
 import { isIrreversible, isItemUrl, isNavigation, shortUrl, siteOf, stepBuilder, targetLabel } from './compile.ts';
+import { blockProblems, DEFAULT_LOOP, isBlock, MAX_LOOP, spanOf } from './blocks.ts';
 import { checkHooks } from './hooks.ts';
 import { onSite } from './routine-md.ts';
 import { deriveUrls } from './urls.ts';
 import { pageSimilarity, SAME_PAGE, urlPattern } from './match.ts';
 import { MAX_EXPECT } from './types.ts';
-import type { Expect, ParamSpec, RecordedEvent, Routine, RoutineMeta, Run, Step } from './types.ts';
+import type { Expect, Locator, ParamSpec, RecordedEvent, Routine, RoutineMeta, Run, Step } from './types.ts';
 
 // A draft is a run on its way to becoming a routine: every recorded step, numbered, nothing dropped
 // until the agent says so. The hints say what could go; the edits are checked here, not trusted.
@@ -354,11 +355,23 @@ export function hints(d: Draft): Hint[] {
 const CAP = 140;
 const clip = (s: string, n = CAP) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
+const asksFor = (s: Step, k: string) => !!s.value?.includes(`{{${k}}}`) || !!s.url?.includes(`{{${k}}}`) || s.each?.param === k || !!s.when?.text?.includes(`{{${k}}}`);
+
+const span = (a: number, count: number) => (count === 1 ? `step ${a}` : `steps ${a}–${a + count - 1}`);
+
+function renderBlock(s: DraftStep): string {
+  if (s.each) return `${s.n}. for each ${s.each.param ? `value of {{${s.each.param}}}` : `“${clip(s.each.matching?.name ?? s.each.matching?.tag ?? 'element', 40)}” on the page`}, repeat ${span(s.n + 1, s.each.count)}, at most ${s.each.limit} times`;
+  const w = s.when!;
+  const what = w.text ? `the page shows “${clip(w.text, 60)}”` : `“${clip(w.has?.name ?? w.has?.tag ?? 'element', 40)}” is on the page`;
+  return `${s.n}. if ${w.not ? 'not: ' : ''}${what}, run ${w.then ? span(s.n + 1, w.then) : 'nothing'}${w.else ? `; otherwise run ${span(s.n + 1 + w.then, w.else)}` : ''}`;
+}
+
 export function renderStep(s: DraftStep, d?: Draft): string {
+  if (isBlock(s)) return renderBlock(s);
   const value = s.value !== undefined ? `: ${s.value.startsWith('{{') ? s.value : clip(s.value, 60)}` : '';
   const what = s.action === 'navigate' ? clip(s.url ?? s.label, 100) : `“${clip(s.label, 60)}”`;
   const where = s.action === 'navigate' || !s.at ? '' : ` on ${shortUrl(s.at).replace(/^[^/]*/, '') || '/'}`;
-  const flags = [s.pause ? 'pauses' : '', s.pick ? 'first in list' : '', s.target?.modal ? `in dialog “${clip(s.target.modal, 40)}”` : '', s.instructions ? 'has note' : ''].filter(Boolean);
+  const flags = [s.pause ? 'pauses' : '', s.pick === 'first' ? 'first in list' : s.pick === 'each' ? 'each element in turn' : '', s.target?.modal ? `in dialog “${clip(s.target.modal, 40)}”` : '', s.instructions ? 'has note' : ''].filter(Boolean);
   void d;
   return `${s.n}. ${s.action} ${what}${value}${where}${s.effect ? ` → ${s.effect}` : ''}${flags.length ? ` [${flags.join(', ')}]` : ''}`;
 }
@@ -366,7 +379,7 @@ export function renderStep(s: DraftStep, d?: Draft): string {
 export function renderDraft(d: Draft, opts: { hints?: boolean } = {}): string {
   const lines = [`Draft ${d.id} · ${d.name} · ${d.steps.length} steps on ${d.site}${d.base ? ` · refines v${d.base.version}` : ''}`, ''];
   for (const s of d.steps) lines.push(renderStep(s, d));
-  const params = Object.entries(d.params).filter(([k]) => d.steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`)) || d.expect?.text?.includes(`{{${k}}}`) || d.expect?.url?.includes(`{{${k}}}`));
+  const params = Object.entries(d.params).filter(([k]) => d.steps.some((s) => asksFor(s, k)) || d.expect?.text?.includes(`{{${k}}}`) || d.expect?.url?.includes(`{{${k}}}`));
   if (params.length) lines.push('', 'Asks each run for: ' + params.map(([k, p]) => `${k}${p.example ? ` (recorded: ${clip(p.example, 40)})` : ''}`).join(', '));
   if (d.secrets.length) lines.push(`Secrets (never kept): ${d.secrets.join(', ')}`);
   if (d.expect) lines.push(`A finished run should show: ${[d.expect.text, d.expect.url && `an address with ${d.expect.url}`].filter(Boolean).join(' and ')}`);
@@ -395,6 +408,8 @@ export type Op =
   | { op: 'first_in_list'; step: number }
   | { op: 'describe'; name?: string; description?: string; do_not_use_for?: string }
   | { op: 'expect'; text?: string; url?: string }
+  | { op: 'each'; from: number; to: number; param?: string; step?: number; limit?: number }
+  | { op: 'if'; from: number; to: number; else_to?: number; text?: string; has_step?: number; not?: boolean }
   | { op: 'undo' }
   | { op: 'reset' };
 
@@ -402,6 +417,41 @@ const MAX_NOTE = 1000;
 
 function snapshot(d: Draft): Snapshot {
   return structuredClone({ name: d.name, description: d.description, doNotUse: d.doNotUse, steps: d.steps, params: d.params, secrets: d.secrets, expect: d.expect });
+}
+
+/** Applies an edit and keeps every loop and branch around the steps it had, whatever moved. A block with nothing left goes. */
+function keepingBlocks(d: Draft, edit: () => string): string {
+  const parts = (s: DraftStep, i: number) => {
+    const [a, z] = spanOf(s, i);
+    const first = s.action === 'if' ? a + (s.when?.then ?? 0) : z;
+    return { s, one: d.steps.slice(a, first), two: d.steps.slice(first, z) };
+  };
+  const blocks = d.steps.flatMap((s, i) => (isBlock(s) ? [parts(s, i)] : []));
+  const note = edit();
+  // Taking away an empty block can leave the one around it empty too.
+  for (let before = -1; before !== d.steps.length; ) {
+    before = d.steps.length;
+    for (const b of blocks) {
+      const at = d.steps.indexOf(b.s);
+      if (at < 0) continue;
+      const last = (list: DraftStep[]) => Math.max(-1, ...list.map((x) => d.steps.indexOf(x)));
+      const oneEnd = last(b.one);
+      const twoEnd = last(b.two);
+      if (b.s.each) b.s.each.count = oneEnd < 0 ? 0 : oneEnd - at;
+      if (b.s.when) {
+        b.s.when.then = oneEnd < 0 ? 0 : oneEnd - at;
+        b.s.when.else = twoEnd < 0 ? 0 : twoEnd - Math.max(at, oneEnd);
+      }
+    }
+    d.steps = d.steps.filter((s) => !isBlock(s) || (s.each ? s.each.count > 0 : (s.when?.then ?? 0) + (s.when?.else ?? 0) > 0));
+  }
+  d.steps.forEach((s, i) => {
+    if (s.pick === 'each' && !d.steps.some((h, j) => h.each?.matching && i > j && i < spanOf(h, j)[1])) delete s.pick;
+  });
+  renumber(d);
+  const bad = blockProblems(d.steps, d.params);
+  if (bad.length) throw new EditError(bad.join(' '));
+  return note;
 }
 
 function renumber(d: Draft) {
@@ -541,6 +591,45 @@ function applyOne(d: Draft, op: Op): string {
       if (op.do_not_use_for !== undefined) d.doNotUse = op.do_not_use_for.trim() || undefined;
       return 'Updated the description.';
     }
+    case 'each': {
+      const { from, to } = op;
+      if (!d.steps[from - 1] || !d.steps[to - 1] || from > to) throw new EditError(`Steps ${from} to ${to} are not in the draft.`);
+      if (from < 2) throw new EditError('A routine starts by opening a page, so a loop starts at step 2 or later.');
+      if (!!op.param === (op.step !== undefined)) throw new EditError('Give param for a loop over a list of values, or step for one over each element like the one that step used.');
+      const limit = op.limit ?? DEFAULT_LOOP;
+      if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LOOP) throw new EditError(`A limit is 1 to ${MAX_LOOP}.`);
+      let matching: Locator | undefined;
+      if (op.step !== undefined) {
+        const s = d.steps[op.step - 1];
+        if (!s?.target || op.step < from || op.step > to) throw new EditError(`Step ${op.step} is not a step on an element inside the loop.`);
+        matching = s.target;
+        s.pick = 'each';
+      }
+      if (op.param) {
+        const p = d.params[op.param];
+        if (!p) throw new EditError(`${op.param} is not a parameter. Make it one with { "op": "param", ... } first.`);
+        if (p.type !== 'string') throw new EditError('A loop goes over text, not files.');
+        p.description = `${p.description ? `${p.description} ` : ''}One or more: one per line, or separated by commas.`.slice(0, 300);
+      }
+      d.steps.splice(from - 1, 0, { n: from, action: 'each', label: op.param ? `For each ${op.param}` : `For each “${clip(matching?.name ?? matching?.tag ?? 'element', 40)}”`, each: { ...(op.param ? { param: op.param } : { matching }), count: to - from + 1, limit } });
+      return `Steps ${from + 1} to ${to + 1} repeat, at most ${limit} times. A step that pauses pauses on every pass. Test it with routine_test.`;
+    }
+    case 'if': {
+      const { from, to } = op;
+      const elseTo = op.else_to ?? to;
+      if (!d.steps[from - 1] || !d.steps[to - 1] || !d.steps[elseTo - 1] || from > to || elseTo < to) throw new EditError(`Steps ${from} to ${elseTo} are not in the draft.`);
+      if (from < 2) throw new EditError('A routine starts by opening a page, so a branch starts at step 2 or later.');
+      const text = op.text?.trim();
+      if (!!text === (op.has_step !== undefined)) throw new EditError('Give text to look for on the page, or has_step for the element that step used.');
+      for (const ref of (text ?? '').matchAll(/\{\{(secret:)?([a-z0-9_]+)\}\}/g)) {
+        if (ref[1]) throw new EditError('A branch cannot look for a secret.');
+        if (!d.params[ref[2]]) throw new EditError(`{{${ref[2]}}} is not a parameter.`);
+      }
+      const has = op.has_step !== undefined ? d.steps[op.has_step - 1]?.target : undefined;
+      if (op.has_step !== undefined && !has) throw new EditError(`Step ${op.has_step} is not a step on an element.`);
+      d.steps.splice(from - 1, 0, { n: from, action: 'if', label: text ? `If the page shows “${clip(text, 40)}”` : `If “${clip(has?.name ?? has?.tag ?? 'element', 40)}” is there`, when: { ...(text ? { text } : { has }), ...(op.not ? { not: true } : {}), then: to - from + 1, else: elseTo - to } });
+      return `Step ${from} now decides whether ${span(from + 1, to - from + 1)} run${elseTo > to ? `, and ${span(to + 2, elseTo - to)} run otherwise` : ''}. routine_test runs the way the page goes today; say so if the other way could not be tried.`;
+    }
     case 'expect': {
       const text = op.text?.trim();
       const url = op.url?.trim();
@@ -579,7 +668,7 @@ export function applyOps(draft: Draft, ops: Op[]): { draft: Draft; notes: string
       }
       d.history.push(snapshot(d));
       if (d.history.length > MAX_HISTORY) d.history.shift();
-      notes.push(applyOne(d, op));
+      notes.push(op.op === 'reset' ? applyOne(d, op) : keepingBlocks(d, () => applyOne(d, op)));
       if (op.op === 'reset') d.history = [];
     } catch (e) {
       if (e instanceof EditError) throw new EditError(`Edit ${i + 1} (${op.op}) was refused, and none of them were applied. ${e.message}`);
@@ -615,13 +704,15 @@ export function validateRoutine(r: Routine): { problems: string[]; warnings: str
     if (s.label.length > 300 || (s.value?.length ?? 0) > 4096) problems.push(`Step ${s.n} is too long.`);
     if ((s.instructions?.length ?? 0) > MAX_NOTE) problems.push(`Step ${s.n} has a note over ${MAX_NOTE} characters.`);
     if (s.action === 'navigate' && !s.url) problems.push(`Step ${s.n} navigates nowhere.`);
+    if (s.when?.text?.includes('{{secret:')) problems.push(`Step ${s.n} looks for a secret on the page.`);
     for (const u of [s.url, s.page?.url]) if (u && m.site && !onSite(u.replace(PLACEHOLDER, 'x'), m.site)) problems.push(`Step ${s.n} leaves ${m.site}.`);
     if (s.target && (Object.keys(s.target.attrs).length > 20 || s.target.css.length > 600)) problems.push(`Step ${s.n} has an element description that is too large.`);
-    for (const ref of `${s.value ?? ''} ${s.url ?? ''}`.matchAll(/\{\{(secret:)?([a-z0-9_]+)\}\}/g)) {
+    for (const ref of `${s.value ?? ''} ${s.url ?? ''} ${s.when?.text ?? ''}`.matchAll(/\{\{(secret:)?([a-z0-9_]+)\}\}/g)) {
       if (ref[1] ? !m.secrets.includes(ref[2]) : !m.params[ref[2]]) problems.push(`Step ${s.n} uses {{${ref[1] ?? ''}${ref[2]}}}, which is not declared.`);
     }
   });
   for (const p of m.pauses) if (p < 1 || p > r.steps.length) problems.push('A pause points at a step that is not there.');
+  problems.push(...blockProblems(r.steps, m.params));
   return { problems: [...new Set(problems)], warnings };
 }
 
@@ -631,7 +722,7 @@ export function finalize(d: Draft, draftedBy?: string): { routine: Routine; pinn
     const { at: _a, navigatedTo: _n, effect: _e, ts: _t, ...rest } = s;
     return { ...rest, n: i + 1 };
   });
-  const used = (k: string) => steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`)) || !!d.expect?.text?.includes(`{{${k}}}`) || !!d.expect?.url?.includes(`{{${k}}}`);
+  const used = (k: string) => steps.some((s) => asksFor(s, k)) || !!d.expect?.text?.includes(`{{${k}}}`) || !!d.expect?.url?.includes(`{{${k}}}`);
   const params = Object.fromEntries(Object.entries(d.params).filter(([k]) => used(k)));
   const secrets = d.secrets.filter((k) => steps.some((s) => s.value?.includes(`{{secret:${k}}}`)));
   const routine: Routine = {

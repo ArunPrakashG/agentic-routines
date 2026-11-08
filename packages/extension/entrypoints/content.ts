@@ -35,7 +35,7 @@ export type ContentMsg =
   | { t: 'markUpload'; ref: string }
   | { t: 'unmarkUpload' }
   | { t: 'resolve'; target: Locator; wide?: boolean }
-  | { t: 'first'; target: Locator }
+  | { t: 'first'; target: Locator; index?: number }
   | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
   | { t: 'veil'; on: boolean }
   | { t: 'lock'; label: string | null; ttl?: number }
@@ -281,9 +281,10 @@ export default defineContentScript({
             // Same kind of element in the same place in the page, whichever row of a list it is.
             const shape = (l: Locator) => `${l.tag}|${l.role}|${(l.css ?? '').replace(/:nth-of-type\(\d+\)/g, '')}`;
             const want = shape(msg.target);
-            const el = interactive().find((c) => shape(describe(c)) === want);
-            if (el) send({ ok: { kind: 'found', view: viewport(), disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true', ref: refOf(el), role: role(el), name: accessibleName(el), score: 0, rect: rectOf(el) } });
-            else send({ ok: { kind: 'missing', view: viewport(), candidates: [] } });
+            const like = interactive().filter((c) => shape(describe(c)) === want);
+            const el = like[msg.index ?? 0];
+            if (el) send({ ok: { kind: 'found', count: like.length, view: viewport(), disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true', ref: refOf(el), role: role(el), name: accessibleName(el), score: 0, rect: rectOf(el) } });
+            else send({ ok: { kind: 'missing', count: like.length, view: viewport(), candidates: [] } });
             break;
           }
           case 'act': {

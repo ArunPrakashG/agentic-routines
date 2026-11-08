@@ -59,7 +59,7 @@ Agents see only `name`, `description` and `params` up front. The body comes back
 
 ## Steps
 
-Steps are declarative: navigate, click, type, select, upload, wait and read. A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
+Steps are declarative: navigate, click, type, select, upload, wait and read, and `each` and `if`, which repeat the steps after them or only run them sometimes ([Loops and branches](/docs/refine#loops-and-branches)). A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
 
 ## Share a routine through Git
 

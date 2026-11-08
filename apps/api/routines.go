@@ -32,7 +32,7 @@ var (
 	placeRef    = regexp.MustCompile(`\{\{(secret:)?([a-z0-9_]+)\}\}`)
 	placeOnly   = regexp.MustCompile(`^\{\{([a-z0-9_]+)\}\}$`)
 	modsPattern = regexp.MustCompile(`^((ctrl|shift|alt|cmd)(\+(ctrl|shift|alt|cmd))*)?$`)
-	actions     = map[string]bool{"navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true, "hover": true, "drag": true, "scroll": true, "set": true, "dialog": true}
+	actions     = map[string]bool{"each": true, "if": true, "navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true, "hover": true, "drag": true, "scroll": true, "set": true, "dialog": true}
 	// Names that would read as the service or as a place, not a person.
 	reserved = map[string]bool{"local": true, "admin": true, "api": true, "me": true, "root": true, "support": true, "official": true, "agentic-routines": true, "agenticroutines": true, "browser-routines": true, "browserroutines": true, "routines": true, "www": true}
 )
@@ -176,6 +176,90 @@ type step struct {
 	Instructions string   `json:"instructions,omitempty"`
 	Pointer      *pointer `json:"pointer,omitempty"`
 	Dismiss      bool     `json:"dismiss,omitempty"`
+	// A loop or a branch over the steps after it.
+	Each *eachIn `json:"each,omitempty"`
+	When *whenIn `json:"when,omitempty"`
+}
+
+type eachIn struct {
+	Param    string   `json:"param,omitempty"`
+	Matching *locator `json:"matching,omitempty"`
+	Count    int      `json:"count"`
+	Limit    int      `json:"limit"`
+}
+
+type whenIn struct {
+	Text string   `json:"text,omitempty"`
+	Has  *locator `json:"has,omitempty"`
+	Not  bool     `json:"not,omitempty"`
+	Then int      `json:"then"`
+	Else int      `json:"else"`
+}
+
+const maxLoop = 100
+
+// blocksOK holds what the extension holds (packages/core/src/blocks.ts): each block covers steps that exist, and two that touch nest.
+func (r *routineIn) blocksOK() bool {
+	type span struct {
+		at, z int
+		loop  bool
+		arms  [][2]int
+	}
+	var spans []span
+	for i, s := range r.Steps {
+		small := func(l *locator) bool {
+			return l == nil || (len(l.Attrs) <= 20 && len(l.CSS) <= 600 && len(l.Modal) <= 100)
+		}
+		switch s.Action {
+		case "each":
+			e := s.Each
+			if e == nil || e.Count < 1 || e.Limit < 1 || e.Limit > maxLoop || (e.Param == "") == (e.Matching == nil) || !small(e.Matching) {
+				return false
+			}
+			if e.Param != "" && r.Meta.Params[e.Param].Type != "string" {
+				return false
+			}
+			spans = append(spans, span{i, i + 1 + e.Count, true, [][2]int{{i + 1, i + 1 + e.Count}}})
+		case "if":
+			w := s.When
+			if w == nil || w.Then < 0 || w.Else < 0 || w.Then+w.Else < 1 || (w.Text == "" && w.Has == nil) || len(w.Text) > 300 || !small(w.Has) {
+				return false
+			}
+			mid := i + 1 + w.Then
+			spans = append(spans, span{i, mid + w.Else, false, [][2]int{{i + 1, mid}, {mid, mid + w.Else}}})
+		default:
+			if s.Each != nil || s.When != nil {
+				return false
+			}
+		}
+	}
+	for _, x := range spans {
+		if x.z > len(r.Steps) {
+			return false
+		}
+		for _, y := range spans {
+			for _, arm := range x.arms {
+				if arm[0] <= y.at && y.at < arm[1] && (y.z > arm[1] || (x.loop && y.loop)) {
+					return false
+				}
+			}
+		}
+	}
+	for i, s := range r.Steps {
+		if s.Pick != "each" {
+			continue
+		}
+		inLoop := false
+		for j, h := range r.Steps {
+			if h.Each != nil && h.Each.Matching != nil && i > j && i <= j+h.Each.Count {
+				inLoop = true
+			}
+		}
+		if !inLoop {
+			return false
+		}
+	}
+	return true
 }
 
 type spot struct {
@@ -285,6 +369,13 @@ func (r *routineIn) placeholdersOK() bool {
 	}
 	for i := range r.Steps {
 		s := &r.Steps[i]
+		if w := s.When; w != nil {
+			for _, ref := range placeRef.FindAllStringSubmatch(w.Text, -1) {
+				if p, ok := m.Params[ref[2]]; ref[1] != "" || !ok || p.Type == "file" {
+					return false
+				}
+			}
+		}
 		if s.Action == "upload" {
 			if s.Value == nil {
 				return false
@@ -385,6 +476,9 @@ func (r *routineIn) check(name string) string {
 	if e := m.Expect; e != nil && (len(e.Text) > 300 || len(e.URL) > 300) {
 		return "bad_expect"
 	}
+	if !r.blocksOK() {
+		return "bad_steps"
+	}
 	for i, s := range r.Steps {
 		if s.N != i+1 || !actions[s.Action] || len(s.Label) > 300 || (s.Value != nil && len(*s.Value) > 4096) || len(s.Crop) > 32 {
 			return "bad_steps"
@@ -392,7 +486,7 @@ func (r *routineIn) check(name string) string {
 		if s.Pause != "" && s.Pause != "auto" && s.Pause != "author" {
 			return "bad_steps"
 		}
-		if s.Pick != "" && s.Pick != "first" {
+		if s.Pick != "" && s.Pick != "first" && s.Pick != "each" {
 			return "bad_steps"
 		}
 		if !s.Pointer.ok() {

@@ -24,7 +24,7 @@ The loop: do the task with the browser tools. When it is done, decide whether it
 
 A browser tool result can end by saying the steps you just did repeat ones already recorded. Take that as the answer to whether this task is worth keeping, and save it when it is done.
 
-The extension checks every edit: a step that submits, publishes, pays or deletes keeps its pause, an address stays on the routine's own site, and an address cannot carry a per-session value.`;
+Steps that repeat for each of several values or rows go in an each edit, and steps that only sometimes apply, such as a notice, go in an if edit. The extension checks every edit: a step that submits, publishes, pays or deletes keeps its pause, an address stays on the routine's own site, and an address cannot carry a per-session value.`;
 const API = process.env.AGENTIC_ROUTINES_API ?? 'https://agenticroutines.arunprakashg.com';
 
 /**
@@ -214,6 +214,16 @@ function absoluteFiles(r: Routine, params: Record<string, string>) {
   return out;
 }
 
+/** How often the loops went round and which way the branches went. A branch that only went one way has an untried other way. */
+function loopsNote(r: RunResult): string {
+  const lines = (r.loops ?? []).map((l) => `Step ${l.n} repeated ${l.passes} time${l.passes === 1 ? '' : 's'}.${l.note ? ` ${l.note}` : ''}`);
+  for (const b of r.branches ?? []) {
+    const ways = new Set(b.took);
+    lines.push(`Step ${b.n} went ${ways.size > 1 ? 'both ways' : ways.has('then') ? 'the “yes” way' : 'the “no” way'}.${r.test && ways.size === 1 ? ' The other way was not tried on this page.' : ''}`);
+  }
+  return lines.length ? `\n${lines.join(' ')}` : '';
+}
+
 function describeTest(r: RunResult): string {
   // Step labels, addresses and errors come from the pages the draft visited.
   const tw = (r.trace ?? []).length ? block((r.trace ?? []).join('\n'), 'what each step did') : undefined;
@@ -223,7 +233,7 @@ function describeTest(r: RunResult): string {
   const note = skipped.length ? `\nA test never performs a step that pauses in a real run (step ${skipped.join(', ')}), and never approves one.` : '';
   const looked = r.outcome ? (r.outcome.ok ? `\nThe page shows ${quote(r.outcome.wanted)}, as expected.` : '') : '';
   if (r.status === 'done' && r.outcome && !r.outcome.ok) return `Test failed: every step ran but the page does not show ${quote(r.outcome.wanted)}, which is what this routine says a finished run looks like. Either the steps did not do the task or the check is wrong. Look with read_page, then edit the draft.${note}\n${trace}${where}`;
-  if (r.status === 'done') return `Test passed.${looked} ${r.steps_total - skipped.length} of ${r.steps_total} steps replayed on the live site with no model.${note}\n${trace}${where}\nIf this is what you expect, call routine_save.`;
+  if (r.status === 'done') return `Test passed.${loopsNote(r)}${looked} ${r.steps_total - skipped.length} of ${r.steps_total} steps replayed on the live site with no model.${note}\n${trace}${where}\nIf this is what you expect, call routine_save.`;
   const after = skipped.length && (r.at_step ?? 0) > Math.min(...skipped) ? `\nThis step comes after skipped step ${Math.min(...skipped)} and may need what it does. If so this is expected: steps before it are proven, the rest can only be checked by running the routine for real and approving the pause.` : '';
   return `Test failed at step ${r.at_step ?? '?'}${r.step_label ? ` ${quote(`“${r.step_label}”`)}` : ''}: ${quote(r.error ?? 'failed')}${note}${after}\n${trace}${where}\nEdit the draft with routine_edit (undo goes back one edit, reset to the proposal) and test again.`;
 }
@@ -241,6 +251,7 @@ export function describeResult(r: RunResult & { tidy?: string }): string {
       if (r.updated_to) parts.push(`routine updated to v${r.updated_to}`);
       let t = parts.join(' · ');
       if (r.outcome && !r.outcome.ok) t += `\nThe page does not show ${quote(r.outcome.wanted)}, which is what this routine says a finished run looks like. Do not report success until you have looked with read_page. If the task did not happen, finish it with the browser tools.`;
+      t += loopsNote(r);
       if (r.approved_in_panel?.length) t += `\nThe routine paused and the user approved ${r.approved_in_panel.join(', ')} in the side panel.`;
       if (r.read && Object.keys(r.read).length) {
         // Read from the page: data, however it is worded.
@@ -749,6 +760,8 @@ export async function runMcp(): Promise<void> {
     z.object({ op: z.literal('first_in_list'), step: z.number().int().describe('A click that should take whatever is first in the list next time') }),
     z.object({ op: z.literal('describe'), name: z.string().optional(), description: z.string().max(1024).optional(), do_not_use_for: z.string().max(2000).optional() }),
     z.object({ op: z.literal('expect'), text: z.string().max(300).optional().describe('Text the page shows once the task has worked: a confirmation, the new row. Can use {{params}}. Empty clears it.'), url: z.string().max(300).optional().describe('Part of the address once it has worked') }),
+    z.object({ op: z.literal('each'), from: z.number().int(), to: z.number().int(), param: z.string().optional().describe('Repeat steps from to to for each value of this parameter: one per line or separated by commas. In those steps {{param}} is one value.'), step: z.number().int().optional().describe('Or repeat them for each element on the page like the one this step used'), limit: z.number().int().optional().describe('At most this many times, up to 100. Default 25.') }),
+    z.object({ op: z.literal('if'), from: z.number().int(), to: z.number().int().describe('Steps from to to run when it holds'), else_to: z.number().int().optional().describe('Steps after to, up to this one, run when it does not'), text: z.string().max(300).optional().describe('Text on the page. Can use {{params}}.'), has_step: z.number().int().optional().describe('Or the element this step used is on the page, as for a notice that only sometimes shows'), not: z.boolean().optional() }),
     z.object({ op: z.literal('undo') }),
     z.object({ op: z.literal('reset') }),
   ]);

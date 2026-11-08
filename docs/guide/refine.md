@@ -35,9 +35,32 @@ A real case: publishing to a testing track shows a dialog offering to go back to
 | `pause` | Add a pause before a step, or take away one you added. |
 | `note` | Text for the agent that runs the routine: what to check at this step. |
 | `first_in_list` | A click that takes whatever is first in the list next time. |
+| `each` | Repeat steps `from` to `to`: for each value of a parameter (`param`), or for each element on the page like the one a step used (`step`). At most `limit` times, 25 unless you say, 100 at the most. |
+| `if` | Run steps `from` to `to` only when the page shows `text` or has the element a step used (`has_step`). Steps after `to` up to `else_to` run otherwise. `not` turns it round. |
 | `describe` | Change the name, description or "do not use for". |
 | `expect` | What the page shows once the task has worked: `text` it shows, part of the `url`. Can use `{{name}}`. Empty clears it. |
 | `undo`, `reset` | Back one edit, or back to the proposal. |
+
+## Loops and branches
+
+A routine that adds one row, posts one listing or fills in one line is often a routine someone wants to run for twenty. Record it once, then wrap the steps that repeat:
+
+```json
+[{ "op": "param", "step": 2, "name": "item" }, { "op": "each", "from": 2, "to": 3, "param": "item" }]
+```
+
+Now `item` takes several values, one per line, or separated by commas when they are all on one line. Each pass has one of them as `{{item}}`. A run given more values than the limit stops before doing anything.
+
+For a list on the page, name the step that used the first row: `{ "op": "each", "from": 2, "to": 3, "step": 2 }`. That step takes each row like it in turn, and a pass that takes its row off the list does not skip the next one. It stops at the end of the list or at its limit, and says when there may be more.
+
+A notice that only sometimes shows is the usual branch: `{ "op": "if", "from": 2, "to": 2, "has_step": 2 }` closes it when it is there and carries on when it is not. A branch waits a moment and looks again before it decides no, because pages show notices late.
+
+What stays the same:
+
+- A step that submits, publishes, pays or deletes pauses on every pass. Saying yes once says yes once.
+- A loop over elements stops when the row it reaches has a button that looks irreversible and was not what was recorded.
+- `routine_test` runs the way the page goes today and says when the other way was not tried. Change the page and test again to try both.
+- A loop cannot go inside a loop. A branch can go inside a loop, and inside another branch.
 
 ## What the extension refuses
 
