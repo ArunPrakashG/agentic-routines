@@ -3,6 +3,7 @@ import { open } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, join } from 'node:path';
 import { checkUpload, MAX_STREAM, mb } from './files.ts';
+import { valueFor } from '../store/secrets.ts';
 import { paths, socketPath } from '../paths.ts';
 import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from '../protocol.ts';
 import * as sources from '../store/sources.ts';
@@ -197,6 +198,15 @@ export function runHost(): void {
           return;
         }
         // The person typed this path in the panel to run a routine; the same checks apply.
+        // Only the browser can ask: this branch hears nothing from an agent's connection. It names the site, and gets nothing for any other.
+        if (req.method === 'host.secret') {
+          const q = req.params as { name: string; origin: string };
+          valueFor(String(q.name), String(q.origin)).then(
+            (result) => toBrowser({ id: req.id, result }),
+            (e) => toBrowser({ id: req.id, error: (e as Error).message }),
+          );
+          return;
+        }
         if (req.method === 'host.allowFiles') {
           allowFiles((req.params as { paths: string[] }).paths).then(
             (result) => toBrowser({ id: req.id, result }),

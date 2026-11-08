@@ -62,7 +62,7 @@ A replay always stops before a step you can't undo: publishing, paying, deleting
 
 ## Secrets
 
-A value typed into a password field is never saved. It becomes a placeholder, and the browser's existing sign-in does the work. Most runs need no secret at all.
+A value typed into a password field is never recorded. It becomes a placeholder, and the browser's existing sign-in does the work, unless you chose to [keep a secret for that site](safety.md#secrets-you-keep-for-a-site). Most runs need no secret at all.
 
 ## What it saves
 

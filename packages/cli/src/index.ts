@@ -2,6 +2,7 @@ import { runDebug, runLogs } from './commands/debug.ts';
 import { runDoctor } from './commands/doctor.ts';
 import { runMarks } from './commands/marks.ts';
 import { runProfiles } from './commands/profiles.ts';
+import { runSecrets } from './commands/secrets.ts';
 import { runSessions } from './commands/sessions.ts';
 import { runStats } from './commands/stats.ts';
 import { runHost } from './host/host.ts';
@@ -44,6 +45,11 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
     console.error(e.message);
     process.exit(1);
   });
+} else if (cmd === 'secrets') {
+  runSecrets(args).catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
 } else if (cmd === 'session') {
   runSessions(args).catch((e) => {
     console.error(e.message);
@@ -71,6 +77,7 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
   doctor              Check what is connected and what is not, guidance and exclusivity included
   stats               What the routines on this computer have saved, this week and per routine
   profiles            List the browser profiles that are open; "profiles name <number> <name>" names one
+  secrets             Keep a password or one-time code seed for one site, for routines to use: "secrets add <name> --origin <origin>" [--totp]. Agents get the name only
   session             List named sessions; "session allow <name> <site>" and "session write <name>" widen one
   marks [on|off]      Annotate screenshots: a numbered box and label on what the agent clicked or typed into
   debug [on|off]      Record every tool call an agent makes, with arguments, time and result (typed text and secrets left out)

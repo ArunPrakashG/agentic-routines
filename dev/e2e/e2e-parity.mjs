@@ -258,6 +258,47 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await session();
 }
 
+// ---------- secrets kept for a site ----------
+{
+  await session();
+  const { add, remove, totp } = await import(`${CLI}/src/store/secrets.ts`).catch(() => ({}));
+  check(!!add, 'the store can be loaded directly for the test (node strips types)');
+  const value = 'correct-horse-9142';
+  await add({ name: 'site_pw', origin: SITE, kind: 'value', value });
+  await add({ name: 'other_pw', origin: 'https://example.com', kind: 'value', value: 'not-for-this-site' });
+  await add({ name: 'site_code', origin: SITE, kind: 'totp', value: 'JBSWY3DPEHPK3PXP' });
+  const names = await call('secrets_list');
+  check(/site_pw/.test(names.text) && !names.text.includes(value), 'secrets_list gives names and no value');
+
+  await call('navigate', { url: `${SITE}/fields.html` });
+  const outline = await read();
+  const field = refFor(outline, /textbox/);
+  const typed = await call('type_secret', { ref: field, name: 'site_pw' });
+  check(!typed.error && !typed.text.includes(value), 'type_secret types it and does not say it');
+  const after = await read();
+  check(!after.includes(value) && /\(filled\)/.test(after), 'read_page says filled, even in a plain text field');
+  const inPage = await evalIn('fields.html', `[...document.querySelectorAll('input,textarea')].some((e) => e.value === ${JSON.stringify(value)})`);
+  check(inPage === true, 'the value is really in the field');
+  const shown = await evalIn('fields.html', `getComputedStyle([...document.querySelectorAll('input,textarea')].find((e) => e.value === ${JSON.stringify(value)})).webkitTextSecurity`);
+  check(shown === 'disc', 'and shows as dots in a picture');
+  const script = await call('javascript', { code: 'document.title' });
+  check(script.error && /no script may run/.test(script.text), 'no script runs in the tab after that');
+
+  const wrong = await call('type_secret', { ref: refFor(await read(), /textbox/), name: 'other_pw' });
+  check(wrong.error && /kept for/.test(wrong.text) && !wrong.text.includes('not-for-this-site'), 'a secret for another site does not go in');
+  await call('navigate', { url: `${SITE}/frames.html` });
+  const framed = refFor(await read(), /^.*f\d+:ref_\d+.*textbox/m) ?? refFor(await read(), /f\d+:ref_\d+/);
+  if (framed) check((await call('type_secret', { ref: framed, name: 'other_pw' })).error, 'nor in a frame of a site it was not kept for');
+  await call('navigate', { url: `${SITE}/fields.html` });
+  const code = await call('type_secret', { ref: refFor(await read(), /textbox/), name: 'site_code' });
+  check(!code.error, 'a one-time code goes in by name');
+  check(/^\d{6}$/.test(totp('JBSWY3DPEHPK3PXP')) && totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 59_000) === '287082', 'and is the code an authenticator would show');
+
+  const run = await call('routine_propose', { name: 'sign_in_with_secret', description: 'Fill the field. Use when testing secrets.' });
+  check(!run.text.includes(value) && /\{\{secret:site_pw\}\}|site_pw/.test(run.text), 'a routine proposed from it holds the name, not the value');
+  for (const n of ['site_pw', 'other_pw', 'site_code']) await remove(n);
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);
