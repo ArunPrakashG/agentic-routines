@@ -9,9 +9,11 @@ export interface Settings {
   idleMinutes: 0 | 10 | 30 | 60;
   agentCursor: boolean;
   handoffNotifications: boolean;
+  /** Input at a person's pace. See paced.ts. */
+  humanInput: boolean;
 }
 
-export const DEFAULTS: Settings = { tabsWhere: 'auto', grouping: 'session', idleMinutes: 30, agentCursor: true, handoffNotifications: true };
+export const DEFAULTS: Settings = { tabsWhere: 'auto', grouping: 'session', idleMinutes: 30, agentCursor: true, handoffNotifications: true, humanInput: false };
 
 let now: Settings = { ...DEFAULTS };
 const listeners = new Set<() => void>();
@@ -24,6 +26,7 @@ const CHOICES: { [K in keyof Settings]: readonly Settings[K][] } = {
   idleMinutes: [0, 10, 30, 60],
   agentCursor: [true, false],
   handoffNotifications: [true, false],
+  humanInput: [true, false],
 };
 
 /** Only what is listed above, with a value it allows. Anything else is refused rather than stored. */

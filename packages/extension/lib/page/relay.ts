@@ -1,6 +1,7 @@
 import * as native from '../agent/native';
 import { platform } from '../platform';
 import { handedOver } from './handoff';
+import { glideTo, paced } from './paced';
 import { listed, notListed, policyOf } from './policy';
 import { refuseScript, scrub } from './secrets';
 import { agentTabId, closeOwnTab, glow, heldBy, isOwnTab, openTab, sessionTabs } from './tabs';
@@ -165,6 +166,7 @@ export async function handleRelay(method: string, p: any): Promise<unknown> {
         lastGlow = Date.now();
         void glow(tabId, 'run', 8000);
       }
+      if (p.method === 'Input.dispatchMouseEvent' && params?.type === 'mouseMoved' && !p.child && paced()) await platform.cdp!(tabId, (send) => glideTo(tabId, send, params.x, params.y, params.modifiers)).catch(() => {});
       return scrub(await platform.sendTo!(tabId, p.child, p.method, params));
     }
     case 'cdp.window': {
