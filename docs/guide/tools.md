@@ -9,7 +9,9 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | Tool | What it does |
 |---|---|
 | `tabs` | List open tabs: id, title and address. |
-| `navigate` | Open an address in the agent tab. If an installed routine handles the page, it adds a hint line (see [Finding a routine first](#finding-a-routine-first)). |
+| `dialog` | Answer an alert, confirm or prompt that has stopped the page. Recorded as a step; yes to one that sounds final pauses a replay. |
+| `close_tab` | Close a tab you opened, or that a page opened because of what you did. Any other tab stays open. Not recorded. |
+| `navigate` | Open an address in the agent tab. Pass `force` to leave a page that asks first. If an installed routine handles the page, it adds a hint line (see [Finding a routine first](#finding-a-routine-first)). |
 | `read_page` | The page as an outline of roles and names. Interactive elements get a ref such as `ref_12`. Text a person can't see is left out. The result is wrapped as [untrusted data](/docs/safety). Adds the same hint line when the tab has moved to a page a routine handles. |
 | `page_llm_content` | The text the site publishes for models, when it has any: a Markdown version of this page, else `/llms.txt` or `/llms-full.txt`. Costs far less than `read_page`. See below. |
 | `click` | Click an element by ref, or a point by `x` and `y` from your last screenshot. `button`, `count` (2 is a double click) and `modifiers` (`ctrl+shift`) are optional. |
@@ -130,3 +132,7 @@ A routine written by someone else also pauses before any step that looks irrever
 ## Frames and shadow roots
 
 A page's outline includes every frame a person can see and whatever is inside shadow roots, open or closed. A ref in a frame says which one, like `f12:ref_3`, and works in `click`, `type`, `form_input` and the rest like any other ref. Frames that are hidden or too small to see are left out, so what they say never reaches you. A coordinate on a screenshot lands in whatever is drawn there, frame or not. Routines remember which frame a step was in by its address, and replay it there.
+
+## Dialogs
+
+An alert, confirm or prompt stops the page until someone answers. Every tool that needs the page then says so and quotes the dialog, and `dialog` answers it. The browser only reports dialogs on a tab with a debugging connection, which starts at the first click or key and lasts a minute after the last one. Behind another tab with no connection the browser answers no by itself. In front with no connection a dialog waits for the person. A dialog a person answers while recording is not captured.

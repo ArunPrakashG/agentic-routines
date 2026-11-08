@@ -1,0 +1,19 @@
+<!doctype html>
+<title>Dialogs</title>
+<h1>Dialogs</h1>
+<button id="al">Show notice</button>
+<button id="co">Ask to archive</button>
+<button id="pr">Ask for a name</button>
+<button id="dirty">Make unsaved changes</button>
+<a id="pop" href="dialogs.html?popup" target="_blank">Open another</a>
+<p id="out">nothing</p>
+<script>
+  const say = (t) => (document.getElementById('out').textContent = t);
+  document.getElementById('al').onclick = () => { alert('Saved a copy'); say('alert done'); };
+  document.getElementById('co').onclick = () => say(confirm('Archive this list?') ? 'confirm yes' : 'confirm no');
+  document.getElementById('pr').onclick = () => say(`prompt ${prompt('What name?', 'someone')}`);
+  document.getElementById('dirty').onclick = () => {
+    addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = ''; });
+    say('dirty');
+  };
+</script>

@@ -17,7 +17,8 @@ export type Action =
   | 'hover'
   | 'drag'
   | 'scroll'
-  | 'set';
+  | 'set'
+  | 'dialog';
 
 /** Everything we know about an element, captured when it was used. */
 export interface Locator {
@@ -74,7 +75,7 @@ export interface Step {
   label: string;
   /** navigate: target URL. */
   url?: string;
-  /** type/select/set/upload/press: a literal, "{{param}}" or "{{secret:name}}". */
+  /** type/select/set/upload/press/dialog: a literal, "{{param}}" or "{{secret:name}}". */
   value?: string;
   target?: Locator;
   page?: PageFingerprint;
@@ -87,6 +88,8 @@ export interface Step {
   /** Text for the agent about this step: what to check, what a good result looks like. */
   instructions?: string;
   pointer?: Pointer;
+  /** dialog: answer no. Its value is what to type in one that asks for text. */
+  dismiss?: boolean;
 }
 
 export interface ParamSpec {
@@ -154,6 +157,8 @@ export interface RecordedEvent {
   /** The page size at that moment. */
   view?: Viewport;
   pointer?: Pointer;
+  /** dialog: it was answered no. */
+  dismiss?: boolean;
 }
 
 export interface Run {

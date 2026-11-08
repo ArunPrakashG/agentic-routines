@@ -2,6 +2,7 @@ import type { Locator, PageFingerprint, Pointer, RecordedEvent, Spot, Viewport }
 import { areaBase64, cropHash, markedPng, pngBase64, pngSize, regionBase64, type Frame, type Rect } from '../replay/crop';
 import { MAX_MARKS, type Mark } from '../replay/annotate';
 import type { How, Point } from '../page/dom';
+import { answerDialog, dialogNote, dialogOn, listenBeforeLeaving, whenLeaving, type OpenDialog } from '../page/dialogs';
 import { findInTab, landOn, readTab, textOfTab, toTab } from '../page/frames';
 import { perform } from '../page/input';
 import * as llm from '../page/llm';
@@ -9,7 +10,7 @@ import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
-import { agentTabId, ask, frameOf, glow, heldBy, noteSession, openTab, settle, waitLoaded } from '../page/tabs';
+import { agentTabId, ask, closeOwnTab, frameOf, glow, heldBy, isOwnTab, noteSession, openTab, settle, takeSpawned, waitLoaded } from '../page/tabs';
 
 // The browser tools agents call. Each call is done and recorded.
 
@@ -122,6 +123,9 @@ export async function uploadFile(tabId: number, ref: string, value: string): Pro
   return { names: infos.map((i) => i.name), warnings };
 }
 
+/** A dialog as a step knows it: nothing on the page to find, only what it said. */
+const dialogLocator = (d: OpenDialog): Locator => ({ tag: 'dialog', role: 'alertdialog', name: d.message.slice(0, 200), attrs: { type: d.type }, css: '' });
+
 // The element a default screenshot centres on, for each session.
 const lastActed = new Map<string, { tabId: number; ref: string }>();
 
@@ -221,22 +225,30 @@ export async function handle(method: string, p: any): Promise<unknown> {
         .filter((t) => /^https?:/.test(t.url ?? ''))
         .map((t) => {
           const h = t.id !== undefined ? heldBy(t.id) : undefined;
-          return { id: t.id, title: unmark(t.title ?? ''), url: t.url, active: t.active, ...(h ? { held_by: h.session === p?.session ? 'you' : h.label } : {}) };
+          return { id: t.id, title: unmark(t.title ?? ''), url: t.url, active: t.active, ...(h ? { held_by: h.session === p?.session ? 'you' : h.label } : {}), ...(t.id !== undefined && isOwnTab(p?.session, t.id) ? { yours: true } : {}) };
         });
     }
     case 'browser.navigate': {
       let tabId: number;
+      let asked: OpenDialog | undefined;
+      let leftFrom = '';
       if (p.new_tab) {
         tabId = await openTab(p?.session, p.url);
       } else {
         tabId = await working(p?.session, p.tab_id);
+        await listenBeforeLeaving(tabId);
+        const from = (await browser.tabs.get(tabId)).url ?? p.url;
         await browser.tabs.update(tabId, { url: p.url });
+        asked = await whenLeaving(tabId, !!p.force);
+        if (asked) leftFrom = from;
       }
       await new Promise((r) => setTimeout(r, 200));
       await waitLoaded(tabId);
       await glow(tabId, 'run', WORKING_MS);
       const t = await browser.tabs.get(tabId);
       await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() }, p?.session);
+      // In a replay the page asks again, after the step that leaves it.
+      if (asked) await runs.record(source, { action: 'dialog', url: leftFrom, ts: Date.now(), target: dialogLocator(asked) }, p?.session);
       const account = await ask<string | undefined>(tabId, { t: 'account' }).catch(() => undefined);
       return { url: t.url, title: unmark(t.title ?? ''), tab_id: tabId, account };
     }
@@ -271,7 +283,8 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const { ref, spot, at } = await aimed(p?.session, tabId, p.ref, p.x, p.y);
       const pointer = { ...pressedHow(p), ...(spot ? { spot } : {}) };
       const { d, after, changed, note } = await act(source, p?.session, tabId, ref, 'click', undefined, Object.keys(pointer).length ? { pointer } : {}, { on: !!p.mark, note: p.note }, { ...pointer, at });
-      return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}${note ? ` ${note}` : ''}`;
+      const popped = takeSpawned(tabId);
+      return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}${note ? ` ${note}` : ''}${popped ? ` That opened a new tab, ${popped}: pass it as tab_id to work there.` : ''}${dialogNote(tabId)}`;
     }
     case 'browser.hover': {
       const tabId = await working(p?.session, p.tab_id);
@@ -315,7 +328,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const tabId = await working(p?.session, p.tab_id);
       const { d } = await act(source, p?.session, tabId, p.ref, 'type', p.text, {}, { on: !!p.mark, note: p.note });
       if (p.submit) await act(source, p?.session, tabId, p.ref, 'press', 'Enter');
-      return `Typed into “${d.label || d.loc.name || d.loc.tag}”.`;
+      return `Typed into “${d.label || d.loc.name || d.loc.tag}”.${dialogNote(tabId)}`;
     }
     case 'browser.select': {
       const tabId = await working(p?.session, p.tab_id);
@@ -335,7 +348,21 @@ export async function handle(method: string, p: any): Promise<unknown> {
       await perform(tabId, undefined, 'press', keys);
       const after = await settle(tabId, before);
       await runs.record(source, { action: 'press', url: before, value: keys, ts: Date.now(), navigatedTo: after !== before ? after : undefined }, p?.session);
-      return `Pressed ${p.key}${p.repeat > 1 ? ` ${p.repeat} times` : ''}.`;
+      return `Pressed ${p.key}${p.repeat > 1 ? ` ${p.repeat} times` : ''}.${dialogNote(tabId)}`;
+    }
+    case 'browser.dialog': {
+      const tabId = await working(p?.session, p.tab_id);
+      const open = dialogOn(tabId);
+      if (!open) throw new Error('No dialog is open in this tab that the browser has said anything about.');
+      const before = (await browser.tabs.get(tabId)).url ?? '';
+      await answerDialog(tabId, p.accept, p.text);
+      const after = await settle(tabId, before);
+      await runs.record(source, { action: 'dialog', url: before, ts: Date.now(), target: dialogLocator(open), fieldLabel: open.type === 'prompt' ? 'dialog answer' : undefined, value: p.accept && open.type === 'prompt' ? (p.text ?? open.answer ?? '') : undefined, dismiss: p.accept ? undefined : true, navigatedTo: after !== before ? after : undefined }, p?.session);
+      return `Answered ${p.accept ? 'yes' : 'no'} to the ${open.type} dialog that said: ${open.message}.${after !== before ? ` Now at ${after}` : ''}${dialogNote(tabId)}`;
+    }
+    case 'browser.close_tab': {
+      const back = await closeOwnTab(p?.session, p.tab_id);
+      return back !== undefined ? `Closed. Back on tab ${back}, where it was opened from.` : 'Closed.';
     }
     case 'browser.screenshot': {
       const tabId = await working(p?.session, p.tab_id);
