@@ -12,7 +12,7 @@ import * as runs from '../lib/agent/runs';
 import { watchDialogs } from '../lib/page/dialogs';
 import { watchLogs } from '../lib/page/logs';
 import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
-import { ask, releaseSession, tellAll, watchTabs } from '../lib/page/tabs';
+import { ask, heldBy, isLent, lend, lentTabs, releaseSession, takeBack, tellAll, watchTabs } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
 // When each routine last ran and which steps changed then, by owner/name.
@@ -242,6 +242,18 @@ export default defineBackground(() => {
       install: installing?.card,
       script: scripting?.card,
       scriptSites: await scriptSites(),
+      lent: await Promise.all(
+        lentTabs().map(async (id) => {
+          const t = await browser.tabs.get(id).catch(() => undefined);
+          let site = t?.url ?? '';
+          try {
+            site = new URL(site).host;
+          } catch {
+            // Shown as it is.
+          }
+          return { id, title: t?.title ?? '', site, by: heldBy(id)?.label };
+        }),
+      ),
       hooksReview: reviewing && { id: reviewing.id, name: reviewing.name, hooks: reviewing.hooks, state: reviewing.state, busy: reviewing.busy, error: reviewing.error },
       replay: r && {
         id: r.id,
@@ -324,8 +336,21 @@ export default defineBackground(() => {
     push();
   }
 
+  async function toggleLend(tabId: number) {
+    if (!isLent(tabId)) lend(tabId);
+    else await giveBack(tabId);
+    await push();
+  }
+  async function giveBack(tabId: number) {
+    replay.stopOnTab(tabId);
+    await takeBack(tabId);
+  }
+
   async function command(c: PanelCommand): Promise<unknown> {
     switch (c.t) {
+      case 'takeBack':
+        await giveBack(c.tabId);
+        return;
       case 'save': {
         const run = await runs.get(c.runId);
         const opts: CompileOptions = { name: c.name, description: c.description, fixed: c.fixed };
@@ -460,6 +485,8 @@ export default defineBackground(() => {
       fromToolbar(tab.id);
       return false;
     }
+    // One click lends a website's tab and opens the panel, which says so; the next takes it back. A tab an agent opened is not the person's to lend.
+    if (tab.id !== undefined && /^https?:/.test(tab.url ?? '') && (isLent(tab.id) || !heldBy(tab.id))) void toggleLend(tab.id);
     return true;
   });
   browser.action.setBadgeBackgroundColor?.({ color: '#3530E0' });

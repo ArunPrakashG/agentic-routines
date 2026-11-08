@@ -971,6 +971,11 @@ export function panelDecide(id: string, approve: boolean) {
 }
 
 /** Drop a run that stopped where the page changed. */
+/** The person took the tab back: a run on it stops. */
+export function stopOnTab(tabId: number) {
+  for (const s of live.values()) if (s.tabId === tabId) stop(s.id);
+}
+
 export function stop(id: string) {
   const s = live.get(id);
   if (!s) return;

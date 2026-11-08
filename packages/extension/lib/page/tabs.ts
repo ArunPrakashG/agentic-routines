@@ -214,7 +214,7 @@ function releaseTab(tabId: number) {
 
 /** What the toolbar button says on this tab: WAIT for the person, RUN while something drives it. */
 export function paint(tabId: number) {
-  const text = handedOver(tabId) ? 'WAIT' : heldBy(tabId) ? 'RUN' : null;
+  const text = handedOver(tabId) ? 'WAIT' : heldBy(tabId) ? 'RUN' : lent.has(tabId) ? 'ON' : null;
   void browser.action.setBadgeText({ tabId, text: text as string }).catch(() => {});
 }
 
@@ -291,6 +291,12 @@ async function prune() {
  */
 export async function agentTabId(session: string = USER, requested?: number): Promise<number> {
   await prune();
+  const back = takenFrom.get(session);
+  if (back !== undefined && (requested === undefined || requested === back)) {
+    // Said once to a session that leaves out the tab. One that names it keeps being told, until the person lends it again.
+    if (requested === undefined || lent.has(back)) takenFrom.delete(session);
+    if (!lent.has(back)) throw new Error(`The user took tab ${back} back. Do not use it again unless they lend it. Call again to work in a tab of your own.`);
+  }
   const wanted = requested ?? tabOf.get(session);
   // It is the person's until they give it back, and a click from here must not be what gives it back.
   if (wanted !== undefined && handedOver(wanted)) throw new Error(`Tab ${wanted} is with the user: a hand-over is waiting for them. Call handoff again to wait for it, and do nothing in that tab until it returns.`);
@@ -313,6 +319,52 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
   return claim(session, made(session, id));
 }
 
+// Tabs the person lent with the toolbar button. Stored so that a service worker that restarts still knows.
+const lent = new Set<number>();
+const takenFrom = new Map<string, number>();
+const keepLent = () => browser.storage.session?.set({ lent: [...lent] }).catch(() => {});
+export const isLent = (tabId: number) => lent.has(tabId);
+export const lentTabs = () => [...lent];
+
+export function lend(tabId: number) {
+  lent.add(tabId);
+  void keepLent();
+  paint(tabId);
+}
+
+/** The person takes it back. Whatever session held it hears so on its next call, and its debugger lets go. */
+export async function takeBack(tabId: number) {
+  lent.delete(tabId);
+  void keepLent();
+  const h = holds.get(tabId);
+  if (h) {
+    takenFrom.set(h.session, tabId);
+    releaseTab(tabId);
+  }
+  paint(tabId);
+  await glow(tabId, 'off');
+  await platform.release?.(tabId);
+}
+
+/** Work in a lent tab, named by id or by address. It stays the person's: it is never in the list of tabs a session may close. */
+export async function adopt(session: string = USER, o: { tabId?: number; url?: string }) {
+  await prune();
+  const tabs = await Promise.all(lentTabs().map((id) => browser.tabs.get(id).catch(() => undefined)));
+  const open = tabs.filter((t) => t?.id !== undefined) as (Browser.tabs.Tab & { id: number })[];
+  const match = o.tabId !== undefined ? open.filter((t) => t.id === o.tabId) : open.filter((t) => t.url === o.url || (o.url && t.url?.startsWith(o.url)));
+  if (!match.length) {
+    const said = o.tabId !== undefined ? `Tab ${o.tabId} has` : `No tab at ${o.url} has`;
+    throw new Error(`${said} not been lent. The user lends a tab with the Agentic Routines toolbar button.${open.length ? ` Lent now: ${open.map((t) => `${t.id} (${t.url})`).join(', ')}.` : ''}`);
+  }
+  if (match.length > 1) throw new Error(`More than one lent tab is at that address: ${match.map((t) => t.id).join(', ')}. Pass tab_id.`);
+  const tabId = match[0].id;
+  const h = heldBy(tabId);
+  if (h && h.session !== session) throw new Error(`Tab ${tabId} is locked by ${h.label}, another agent working in the browser.`);
+  takenFrom.delete(session);
+  claim(session, tabId);
+  return tabId;
+}
+
 // A tab that a page opened because of what a session did there, and the tab it came from. Within a moment of the session
 // acting, because a person can open tabs from there too, and those are theirs.
 const SPAWN_MS = 10_000;
@@ -321,6 +373,15 @@ const spawned = new Map<number, number>();
 
 export function watchTabs() {
   onHandoffChange((tabId) => paint(tabId));
+  void browser.storage.session?.get('lent').then((s) => {
+    for (const id of (s.lent as number[] | undefined) ?? []) {
+      lent.add(id);
+      paint(id);
+    }
+  });
+  browser.tabs.onRemoved.addListener((tabId) => {
+    if (lent.delete(tabId)) void keepLent();
+  });
   // A new document starts with the button's text cleared.
   browser.tabs.onUpdated.addListener((tabId, info) => {
     if (info.status) paint(tabId);
