@@ -845,6 +845,27 @@ export async function runMcp(): Promise<void> {
   );
 
   server.registerTool(
+    'cdp_endpoint',
+    {
+      description:
+        "A local DevTools address for this session's tabs in the person's own browser, for Playwright's connectOverCDP or anything else that speaks CDP. Prefer the step tools on a page you have not seen: they tell you what each step did, and only they record work that can become a routine. Use this when you already know the page and have code to run against it. Holds a token: treat it as a password, and do not pass it to anything you would not give the browser to.",
+    },
+    async () =>
+      guarded(async () => {
+        const r = await bridge.call<{ endpoint: string }>('cdp.endpoint', {});
+        return text(
+          [
+            `Endpoint: ${r.endpoint}`,
+            `In Playwright: const browser = await chromium.connectOverCDP(endpoint); const page = browser.contexts()[0].pages()[0];`,
+            `It lasts as long as this server runs, or eight hours, on 127.0.0.1 only. One connection at a time.`,
+            `A client sees only this session's tabs. Cookie reads and writes are limited to their sites. Clearing data, closing the browser, bringing a window to the front and new browser contexts are refused.`,
+            `What is done through it is not recorded, so it cannot become a routine.`,
+          ].join('\n'),
+        );
+      }),
+  );
+
+  server.registerTool(
     'flight_recorder',
     {
       description:

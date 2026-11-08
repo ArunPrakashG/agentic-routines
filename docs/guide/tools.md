@@ -83,6 +83,23 @@ An agent's tabs normally belong to its server, and close when it stops. A named 
 
 A session stays in the browser profile it started in. If that profile is closed the agent is told, and nothing moves to another one. Start a server in a session with `AGENTIC_ROUTINES_SESSION=<name>`.
 
+### A DevTools address, for Playwright
+
+| Tool | What it does |
+|---|---|
+| `cdp_endpoint` | A local address that speaks CDP, for `chromium.connectOverCDP` or anything else that does. |
+
+This is the person's own browser with their sign-ins, reached through the extension's debugger. The browser's real debugging port stays closed. The endpoint starts when an agent first asks for it, and stops when nothing holds a token, so a person who never uses it has nothing listening.
+
+```js
+const browser = await chromium.connectOverCDP(endpoint);
+const page = browser.contexts()[0].pages()[0];
+```
+
+Prefer the step tools on a page you have not seen. They say what each step did, and only they record work that can become a routine. What is done through the endpoint is not recorded.
+
+It needs a token and listens on `127.0.0.1` only. It refuses cross-site requests and any other `Host`. A client sees this session's tabs, and one client connects at a time. Cookie reads and writes, and site storage, are limited to the sites of those tabs. Clearing data, closing the browser, bringing a window to the front and `newContext` are refused, and so is a separate CDP session on a page. Downloads go where the browser sends them. A read-only session gets no endpoint, since CDP has no way to read without being able to touch. Once a stored secret is typed into a tab, nothing that could read it runs there until the tab goes to a new page.
+
 ### Points on the page
 
 Most things have a ref, and a ref is better: it keeps working when the page moves. A point is for what has none: a canvas, a map, a place on a chart.

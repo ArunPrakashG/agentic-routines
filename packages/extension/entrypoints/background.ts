@@ -14,6 +14,7 @@ import { watchLogs } from '../lib/page/logs';
 import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
 import { videoPiece, watchCaptures } from '../lib/page/capture';
 import { policyOf } from '../lib/page/policy';
+import { handleRelay, watchRelay } from '../lib/page/relay';
 import { scrub, scrubText, watchSecrets } from '../lib/page/secrets';
 import { changeSettings, onSettingsChanged, settings } from '../lib/page/settings';
 import { ask, heldBy, isLent, lend, lentTabs, releaseSession, takeBack, tellAll, watchTabs } from '../lib/page/tabs';
@@ -40,6 +41,7 @@ export default defineBackground(() => {
   const answer = async (method: string, p: any) => {
     if (method.startsWith('browser.') || method === 'runs.get' || method === 'runs.repeat') return agent.handle(method, p);
     if (method.startsWith('draft.')) return draft.handle(method, p);
+    if (method.startsWith('cdp.')) return handleRelay(method, p);
     if (method === 'runs.markSaved') return runs.markSaved(p.run_id);
     // A rebuilt unpacked extension only runs after a reload. Waits so the answer gets out first.
     if (method === 'extension.reload') return void setTimeout(() => browser.runtime.reload(), 100);
@@ -68,6 +70,7 @@ export default defineBackground(() => {
   onSettingsChanged(() => push());
   watchSecrets();
   watchCaptures();
+  watchRelay();
   browser.notifications?.onClicked.addListener((id) => {
     const tabId = Number(/^handoff-(\d+)$/.exec(id)?.[1]);
     if (!tabId) return;

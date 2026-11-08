@@ -347,6 +347,75 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   check(!/abc123456789|hunter22xyz|abcdef123456/.test(raw), 'with credentials, passwords and tokens gone');
 }
 
+// ---------- a local CDP endpoint, for Playwright ----------
+{
+  await session();
+  const { chromium } = await import(`${CLI}/node_modules/playwright-core/index.mjs`);
+  const { default: WebSocket } = await import(`${CLI}/node_modules/ws/wrapper.mjs`);
+  const { request } = await import('node:http');
+  const raw = (url, headers = {}) =>
+    new Promise((resolve) => {
+      const r = request(url, { headers }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      });
+      r.on('error', () => resolve(0));
+      r.end();
+    });
+
+  await call('navigate', { url: `${SITE}/chores.html` });
+  const said = (await call('cdp_endpoint', {})).text;
+  const endpoint = /Endpoint: (\S+)/.exec(said)?.[1];
+  check(!!endpoint, 'cdp_endpoint gives an address');
+  const u = new URL(endpoint);
+  check(u.hostname === '127.0.0.1', 'on localhost only');
+  check((await raw(`http://127.0.0.1:${u.port}/json/version`)) === 403, 'with no token, refused');
+  check((await raw(`http://127.0.0.1:${u.port}/json/version?token=nope`)) === 403, 'with a wrong token, refused');
+  check((await raw(`${endpoint.replace('/?', '/json/version?')}`, { Host: 'evil.example' })) === 403, 'with a foreign Host, refused');
+  check((await raw(`${endpoint.replace('/?', '/json/version?')}`, { Origin: 'https://evil.example' })) === 403, 'from a web page, refused');
+  check((await raw(`${endpoint.replace('/?', '/json/version?')}`)) === 200, 'with the token, it answers');
+
+  // A tab that is the person's, which this session must not see.
+  await inExtension(`chrome.tabs.create({ url: '${SITE}/away.html', active: false }).then(() => 1)`);
+  const browser = await chromium.connectOverCDP(endpoint);
+  const pages = browser.contexts()[0].pages();
+  check(pages.length === 1 && pages[0].url().includes('chores.html'), 'Playwright connects, and sees only the session\'s tab');
+  await pages[0].fill('#item', 'via playwright');
+  await pages[0].click('#add');
+  check((await pages[0].textContent('#status')) === 'Added via playwright', 'and drives it');
+  await pages[0].evaluate(() => (document.cookie = 'mine=1'));
+  const cookies = await browser.contexts()[0].cookies();
+  check(cookies.every((c) => c.domain === '127.0.0.1'), 'cookie reads stay on the session\'s pages');
+  const cleared = await browser.contexts()[0].clearCookies().then(() => 'done', (e) => e.message);
+  check(/refused/.test(cleared), 'clearing data is refused');
+  const fresh = await browser.newContext().then(() => 'made', (e) => e.message);
+  check(fresh !== 'made', 'a new context is refused');
+  const front = await pages[0].bringToFront().then(() => 'done', (e) => e.message);
+  check(/refused/.test(front), 'bringToFront is refused');
+  const popup = await browser.contexts()[0].newPage();
+  check(!!popup, 'a new page opens as a tab of the session');
+  await popup.close();
+  await browser.close();
+
+  const direct = await new Promise((resolve) => {
+    const ws = new WebSocket(endpoint.replace('http://', 'ws://').replace('/?', '/devtools/browser/relay?'));
+    ws.on('open', () => ws.send(JSON.stringify({ id: 1, method: 'Browser.close' })));
+    ws.on('message', (d) => {
+      ws.close();
+      resolve(JSON.parse(String(d)));
+    });
+    ws.on('error', () => resolve({ error: { message: 'no connection' } }));
+  });
+  check(!!direct.error, 'closing the browser is refused');
+
+  const again = await chromium.connectOverCDP(endpoint);
+  await again.close();
+  check(true, 'a client can come back after the last one left');
+
+  await session();
+  check((await raw(`http://127.0.0.1:${u.port}/json/version?token=${u.searchParams.get('token')}`)) === 0, 'when the agent goes, nothing is listening');
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

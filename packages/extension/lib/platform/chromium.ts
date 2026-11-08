@@ -18,7 +18,7 @@ const held = new Map<number, { ready: Promise<void>; timer?: ReturnType<typeof s
 const REFUSED_MS = 10 * 60_000;
 let refusedUntil = 0;
 
-const hearing = new Set<(tabId: number, method: string, params: any) => void>();
+const hearing = new Set<(tabId: number, method: string, params: any, child?: string) => void>();
 
 let listening = false;
 function listen() {
@@ -33,7 +33,7 @@ function listen() {
   });
   browser.debugger.onEvent.addListener((source, method, params) => {
     if (source.tabId === undefined) return;
-    for (const fn of hearing) fn(source.tabId, method, params);
+    for (const fn of hearing) fn(source.tabId, method, params, (source as { sessionId?: string }).sessionId);
   });
 }
 
@@ -79,6 +79,15 @@ export const chromium: Platform = {
         now.timer = setTimeout(() => void chromium.release!(tabId), IDLE_MS);
       }
     }
+  },
+  sendTo(tabId, child, method, params) {
+    return chromium.cdp!(tabId, () => browser.debugger.sendCommand({ tabId, ...(child ? { sessionId: child } : {}) } as { tabId: number }, method, params) as Promise<unknown>);
+  },
+  async targetOf(tabId) {
+    await chromium.cdp!(tabId, async () => {});
+    const t = (await browser.debugger.getTargets()).find((x) => x.tabId === tabId);
+    if (!t) throw new Error(`No DevTools target for tab ${tabId}`);
+    return t.id;
   },
   async release(tabId) {
     const h = held.get(tabId);
