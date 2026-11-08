@@ -32,7 +32,7 @@ var (
 	placeRef    = regexp.MustCompile(`\{\{(secret:)?([a-z0-9_]+)\}\}`)
 	placeOnly   = regexp.MustCompile(`^\{\{([a-z0-9_]+)\}\}$`)
 	modsPattern = regexp.MustCompile(`^((ctrl|shift|alt|cmd)(\+(ctrl|shift|alt|cmd))*)?$`)
-	actions     = map[string]bool{"each": true, "if": true, "navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true, "hover": true, "drag": true, "scroll": true, "set": true, "dialog": true}
+	actions     = map[string]bool{"each": true, "if": true, "navigate": true, "click": true, "type": true, "clear": true, "select": true, "upload": true, "press": true, "wait": true, "read": true, "hover": true, "drag": true, "scroll": true, "set": true, "dialog": true, "handoff": true}
 	// Names that would read as the service or as a place, not a person.
 	reserved = map[string]bool{"local": true, "admin": true, "api": true, "me": true, "root": true, "support": true, "official": true, "agentic-routines": true, "agenticroutines": true, "browser-routines": true, "browserroutines": true, "routines": true, "www": true}
 )

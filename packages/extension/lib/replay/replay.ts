@@ -1,9 +1,10 @@
 import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, soundsIrreversible, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
-import { uploadFile } from '../agent/agent';
+import { challengeOn, uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
 import { answerDialog, dialogOn, listenBeforeLeaving, waitDialog } from '../page/dialogs';
 import { resolveInTab, textOfTab } from '../page/frames';
+import { cancelHandoff, handOver } from '../page/handoff';
 import { perform as input } from '../page/input';
 import { platform } from '../platform';
 import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from '../page/tabs';
@@ -56,6 +57,7 @@ export interface ReplayState {
   relaxCrop?: boolean;
   /** A step did not match while the person was looking at something else. */
   hiddenNote?: string;
+  handoffs?: { n: number; reason: string }[];
   /** Steps that paused only because they look irreversible. */
   forcedPauses: number[];
   /** The step an agent chose another element for, which waits for the person when that element looks irreversible. */
@@ -157,6 +159,7 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     viewport_note: s.viewportNote,
     hidden_note: s.hiddenNote,
+    handoffs: s.handoffs,
     loops: s.loops.length ? s.loops : undefined,
     branches: s.branches.length ? s.branches : undefined,
     forced_pauses: s.forcedPauses.length ? s.forcedPauses : undefined,
@@ -467,6 +470,16 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     await after(from);
     return 'next';
   }
+  if (kind === 'handoff') {
+    // A person cannot be asked in a test. A secret never goes on the card.
+    if (s.test) {
+      if (!s.skipped.includes(step.n)) s.skipped.push(step.n);
+      s.trace.push(`${step.n}. skipped “${step.label}”, it hands over to the user in a real run`);
+      return 'next';
+    }
+    await toThePerson(s, fill(step.value, s.params, {}) ?? 'This step needs you.', step);
+    return 'next';
+  }
   await stayOnSite(s);
   if (kind === 'dialog') {
     const open = await waitDialog(s.tabId, DIALOG_WAIT_MS);
@@ -669,6 +682,32 @@ async function runBlock(s: ReplayState, step: Step) {
   await goTo(s, yes ? first : first + w.then);
 }
 
+// How long a run waits for a person: under what the agent's call waits for the whole run.
+const HANDOFF_WAIT_MS = 12 * 60_000;
+
+/** The tab is the person's until they give it back, and the run only waits. */
+async function toThePerson(s: ReplayState, reason: string, step: Step) {
+  await glow(s.tabId, 'paused', HANDOFF_WAIT_MS);
+  notify(s);
+  const h = await handOver(s.tabId, { reason, by: s.routine.meta.name, session: s.session, waitMs: HANDOFF_WAIT_MS });
+  if (!live.has(s.id)) throw new Error('Stopped while the tab was with the user');
+  if (!h.continued) {
+    if (!h.closed) cancelHandoff(s.tabId);
+    throw new Error(h.closed ? `Stopped: the tab was closed while it was with the user at step ${step.n}` : `Stopped: nobody finished the hand-over at step ${step.n}`);
+  }
+  (s.handoffs ??= []).push({ n: step.n, reason });
+  await waitLoaded(s.tabId).catch(() => {});
+  await glow(s.tabId, 'run', DRIVING_MS);
+}
+
+/** A bot check where a step should be: reported and handed over, never solved. */
+async function passChallenge(s: ReplayState, step: Step) {
+  const kind = await challengeOn(s.tabId);
+  if (!kind) return;
+  if (s.test) throw new Error(`Stopped: the page is a bot check or a refusal (${kind}), which a test cannot get past. A real run hands it to the user`);
+  await toThePerson(s, `This page is asking for a check (${kind}) before the routine can go on. Only you can do it.`, step);
+}
+
 // The page glows for as long as the replay is driving it, amber while it waits for a person.
 const DRIVING_MS = 8000;
 const DIALOG_WAIT_MS = 5000;
@@ -772,6 +811,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
       }
       await glow(s.tabId, 'run', DRIVING_MS);
       const began = Date.now();
+      if (step.action !== 'navigate' && step.action !== 'handoff') await passChallenge(s, step);
       const went = await runStep(s, step, choiceRef, ov);
       s.stepMs[step.n] = (s.stepMs[step.n] ?? 0) + Date.now() - began;
       if (went === 'stop') {
@@ -938,5 +978,6 @@ export function stop(id: string) {
   s.status = 'failed';
   s.error = 'Stopped in the side panel';
   end(s);
+  cancelHandoff(s.tabId);
   notify(s);
 }

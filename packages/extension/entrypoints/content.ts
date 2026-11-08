@@ -1,4 +1,6 @@
 import { resolve, type Locator, type RecordedEvent, type Spot } from '@agentic-routines/core';
+import { hideCard, showCard, type CardText } from '../lib/page/card';
+import { challengeHere } from '../lib/page/challenge';
 import { hiddenWhy } from '../lib/page/hidden';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
@@ -39,6 +41,8 @@ export type ContentMsg =
   | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
   | { t: 'veil'; on: boolean }
   | { t: 'lock'; label: string | null; ttl?: number }
+  | { t: 'card'; show: CardText | null }
+  | { t: 'challenge' }
   | { t: 'record'; on: boolean };
 
 function b64ToBytes(b64: string) {
@@ -409,6 +413,14 @@ export default defineContentScript({
           case 'lock':
             lock(msg.label, msg.ttl);
             send({ ok: true });
+            break;
+          case 'card':
+            if (msg.show) showCard(msg.show);
+            else hideCard();
+            send({ ok: true });
+            break;
+          case 'challenge':
+            send({ ok: challengeHere() });
             break;
           case 'record':
             recording = msg.on;

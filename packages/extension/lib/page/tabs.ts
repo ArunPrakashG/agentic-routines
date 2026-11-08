@@ -1,6 +1,7 @@
 import type { ContentMsg } from '../../entrypoints/content';
 import { platform } from '../platform';
 import { dialogOn, unlessDialog } from './dialogs';
+import { cancelSession, handedOver, onHandoffChange } from './handoff';
 import type { Send } from '../platform/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -208,6 +209,13 @@ function releaseTab(tabId: number) {
   holds.delete(tabId);
   if (h && tabOf.get(h.session) === tabId) tabOf.delete(h.session);
   void mark(tabId, null);
+  paint(tabId);
+}
+
+/** What the toolbar button says on this tab: WAIT for the person, RUN while something drives it. */
+export function paint(tabId: number) {
+  const text = handedOver(tabId) ? 'WAIT' : heldBy(tabId) ? 'RUN' : null;
+  void browser.action.setBadgeText({ tabId, text: text as string }).catch(() => {});
 }
 
 /**
@@ -215,6 +223,7 @@ function releaseTab(tabId: number) {
  * A tab the person is looking at, or has since taken over, stays open.
  */
 export async function releaseSession(session: string) {
+  cancelSession(session);
   const t = tabOf.get(session);
   if (t !== undefined) {
     releaseTab(t);
@@ -242,6 +251,7 @@ function claim(session: string, tabId: number): number {
   holds.set(tabId, { session, label, until: Date.now() + LEASE_MS, marked: Date.now() });
   tabOf.set(session, tabId);
   void mark(tabId, label);
+  paint(tabId);
   return tabId;
 }
 
@@ -266,7 +276,10 @@ async function prune() {
     if (gone) {
       holds.delete(tabId);
       if (tabOf.get(h.session) === tabId) tabOf.delete(h.session);
-      if (h.until < Date.now()) void mark(tabId, null);
+      if (h.until < Date.now()) {
+        void mark(tabId, null);
+        paint(tabId);
+      }
     }
   }
 }
@@ -278,6 +291,9 @@ async function prune() {
  */
 export async function agentTabId(session: string = USER, requested?: number): Promise<number> {
   await prune();
+  const wanted = requested ?? tabOf.get(session);
+  // It is the person's until they give it back, and a click from here must not be what gives it back.
+  if (wanted !== undefined && handedOver(wanted)) throw new Error(`Tab ${wanted} is with the user: a hand-over is waiting for them. Call handoff again to wait for it, and do nothing in that tab until it returns.`);
   if (requested !== undefined) {
     await browser.tabs.get(requested).catch(() => {
       throw new Error(`There is no tab ${requested}. Call tabs to see the open ones.`);
@@ -304,6 +320,11 @@ const cameFrom = new Map<number, number>();
 const spawned = new Map<number, number>();
 
 export function watchTabs() {
+  onHandoffChange((tabId) => paint(tabId));
+  // A new document starts with the button's text cleared.
+  browser.tabs.onUpdated.addListener((tabId, info) => {
+    if (info.status) paint(tabId);
+  });
   browser.tabs.onCreated.addListener((t) => {
     if (t.id === undefined || t.openerTabId === undefined) return;
     const h = heldBy(t.openerTabId);

@@ -30,6 +30,7 @@ A real case: publishing to a testing track shows a dialog offering to go back to
 | `remove` | Drop steps, by number or range such as `"3-5"`. |
 | `navigate` | Replace steps `from` to `to` with one step that opens an address. |
 | `open` | Add a step that opens an address before step N. |
+| `handoff` | Add a step before step N that gives the tab to the person, for a login or a code, and waits until they give it back. A test skips it and says so. |
 | `param` | Make a typed value a parameter, by `step` or by `value`. Without either, declare a parameter to use as `{{name}}` in an address. |
 | `fixed` | Keep the recorded value instead of asking for it. |
 | `pause` | Add a pause before a step, or take away one you added. |

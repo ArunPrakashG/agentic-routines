@@ -401,6 +401,7 @@ export type Op =
   | { op: 'remove'; steps: StepRef[] }
   | { op: 'navigate'; from: number; to: number; url: string }
   | { op: 'open'; before: number; url: string }
+  | { op: 'handoff'; before: number; reason: string }
   | { op: 'param'; name: string; step?: number; value?: string; description?: string; example?: string }
   | { op: 'fixed'; step: number }
   | { op: 'pause'; step: number; on: boolean }
@@ -514,6 +515,14 @@ function applyOne(d: Draft, op: Op): string {
       d.steps.splice(op.before - 1, 0, navStep(op.url));
       renumber(d);
       return `Added step ${op.before}: navigate ${clip(op.url, 100)}.`;
+    }
+    case 'handoff': {
+      if (!Number.isInteger(op.before) || op.before < 1 || op.before > d.steps.length + 1) throw new EditError(`There is no step ${op.before} to hand over before.`);
+      if (!op.reason?.trim()) throw new EditError('A hand-over says what the person has to do.');
+      const value = op.reason.trim().slice(0, 300);
+      d.steps.splice(op.before - 1, 0, { n: 0, action: 'handoff', label: clip(`Hand over: ${value}`, 100), value, at: d.steps[op.before - 1]?.at ?? d.steps[op.before - 2]?.at ?? '' });
+      renumber(d);
+      return `Added step ${op.before}: hands the tab to the person, who is told “${clip(value, 100)}”.`;
     }
     case 'param': {
       if (!/^[a-z0-9_]{1,40}$/.test(op.name)) throw new EditError(`“${op.name}” is not a parameter name. Use lowercase letters, digits and underscores.`);

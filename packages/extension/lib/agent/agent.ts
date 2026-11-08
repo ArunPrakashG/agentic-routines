@@ -4,6 +4,7 @@ import { MAX_MARKS, type Mark } from '../replay/annotate';
 import type { How, Point } from '../page/dom';
 import { answerDialog, dialogNote, dialogOn, listenBeforeLeaving, whenLeaving, type OpenDialog } from '../page/dialogs';
 import { findInTab, landOn, readTab, textOfTab, toTab } from '../page/frames';
+import { handOver, handedTo } from '../page/handoff';
 import { perform } from '../page/input';
 import { consoleOf, networkOf, runScript } from '../page/logs';
 import * as llm from '../page/llm';
@@ -216,6 +217,19 @@ async function act(source: string, session: string | undefined, tabId: number, r
   return { d, after, changed: after !== before, uploaded, note };
 }
 
+// Some of these clear by themselves in a few seconds, so that is waited for. Nothing here tries to get past one.
+const CHALLENGE_CLEARS_MS = 8000;
+export async function challengeOn(tabId: number): Promise<string | undefined> {
+  const check = () => ask<string | undefined>(tabId, { t: 'challenge' }).catch(() => undefined);
+  let kind = await check();
+  const end = Date.now() + CHALLENGE_CLEARS_MS;
+  while (kind && Date.now() < end) {
+    await new Promise((r) => setTimeout(r, 500));
+    kind = await check();
+  }
+  return kind;
+}
+
 // The person says which sites may run an agent's scripts. Only the panel can say so, so it is handed in from there.
 let mayRunScript: (site: string, code: string, by: string) => Promise<void> = async () => {
   throw new Error('Nothing here can ask the user yet.');
@@ -252,12 +266,13 @@ export async function handle(method: string, p: any): Promise<unknown> {
       await new Promise((r) => setTimeout(r, 200));
       await waitLoaded(tabId);
       await glow(tabId, 'run', WORKING_MS);
+      const challenge = await challengeOn(tabId);
       const t = await browser.tabs.get(tabId);
       await runs.record(source, { action: 'navigate', url: t.url ?? p.url, ts: Date.now() }, p?.session);
       // In a replay the page asks again, after the step that leaves it.
       if (asked) await runs.record(source, { action: 'dialog', url: leftFrom, ts: Date.now(), target: dialogLocator(asked) }, p?.session);
       const account = await ask<string | undefined>(tabId, { t: 'account' }).catch(() => undefined);
-      return { url: t.url, title: unmark(t.title ?? ''), tab_id: tabId, account };
+      return { url: t.url, title: unmark(t.title ?? ''), tab_id: tabId, account, challenge };
     }
     case 'browser.read': {
       const tabId = await working(p?.session, p.tab_id);
@@ -265,7 +280,8 @@ export async function handle(method: string, p: any): Promise<unknown> {
       if (p.ref) return { text: await ask<string>(tabId, { t: 'text', ref: p.ref }), notes: { omitted: {}, longValues: 0 }, url: (await browser.tabs.get(tabId)).url };
       const out = await readTab(tabId, p.filter, p.wait);
       const account = await ask<string | undefined>(tabId, { t: 'account' }).catch(() => undefined);
-      return { ...out, url: (await browser.tabs.get(tabId)).url, account };
+      const challenge = await ask<string | undefined>(tabId, { t: 'challenge' }).catch(() => undefined);
+      return { ...out, url: (await browser.tabs.get(tabId)).url, account, challenge };
     }
     case 'browser.llm': {
       const tabId = await working(p?.session, p.tab_id);
@@ -325,6 +341,23 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const { note } = await act(source, p?.session, tabId, aim.ref, 'scroll', undefined, { pointer }, undefined, { ...pointer, at: aim.at });
       if (f?.tabId === tabId) f.moved = true;
       return note;
+    }
+    case 'browser.handoff': {
+      // Asking again while the person still has it picks up the same hand-over.
+      const again = p.tab_id ?? handedTo(p?.session);
+      let tabId: number;
+      if (again !== undefined && handedTo(p?.session) === again) tabId = again;
+      else {
+        tabId = await agentTabId(p?.session, p.tab_id);
+        const url = (await browser.tabs.get(tabId)).url ?? '';
+        await runs.record(source, { action: 'handoff', url, value: String(p.reason), ts: Date.now() }, p?.session);
+      }
+      await glow(tabId, 'paused', p.wait_seconds * 1000);
+      const h = await handOver(tabId, { reason: String(p.reason), by: source, session: p?.session, waitMs: p.wait_seconds * 1000 });
+      if (h.closed) return { ...h, tab_id: tabId };
+      if (h.continued) await waitLoaded(tabId).catch(() => {});
+      const t = await browser.tabs.get(tabId).catch(() => undefined);
+      return { ...h, tab_id: tabId, url: t?.url, title: unmark(t?.title ?? '') };
     }
     case 'browser.wait': {
       await working(p?.session, p.tab_id);
