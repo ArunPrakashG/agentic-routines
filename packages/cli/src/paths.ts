@@ -35,6 +35,7 @@ export const paths = {
   debugFlag: () => join(home(), 'debug'),
   marksFlag: () => join(home(), 'marks'),
   shots: () => join(home(), 'logs', 'shots'),
+  captures: () => join(home(), 'captures'),
 };
 
 /** Unix socket on macOS/Linux, named pipe on Windows. */

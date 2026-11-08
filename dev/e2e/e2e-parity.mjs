@@ -299,6 +299,54 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   for (const n of ['site_pw', 'other_pw', 'site_code']) await remove(n);
 }
 
+// ---------- video, flight recorder, network ----------
+{
+  const { statSync, readFileSync } = await import('node:fs');
+  await session();
+  await call('navigate', { url: CHORES });
+  const pathOf = (t) => /Saved (\S+)/.exec(t)?.[1];
+  const started = await call('recording', { action: 'start', format: 'webm' });
+  check(!started.error, 'recording starts');
+  const id = JSON.parse(/\[[\s\S]*\]/.exec((await call('tabs')).text)[0]).find((t) => t.held_by === 'you')?.id;
+  check((await badgeOf(id)) === 'REC', 'the toolbar button says REC');
+  await call('type', { ref: refFor(await read(), /Item/), text: 'on video' });
+  await sleep(2500);
+  const stopped = await call('recording', { action: 'stop' });
+  const video = pathOf(stopped.text);
+  check(!!video && statSync(video).size > 1000, 'it leaves a video file');
+  check(readFileSync(video).subarray(0, 4).toString('hex') === '1a45dfa3', 'and it really is WebM');
+  check((statSync(video).mode & 0o077) === 0, 'readable only by this account');
+
+  const mp4 = await call('recording', { action: 'start', format: 'mp4' });
+  if (!mp4.error) {
+    await sleep(1500);
+    const file = pathOf((await call('recording', { action: 'stop' })).text);
+    check(!!file && readFileSync(file).subarray(4, 8).toString() === 'ftyp', 'MP4 is really MP4');
+  }
+
+  // Behind another tab: the page is not drawn, and the pictures still have to come.
+  await call('recording', { action: 'start' });
+  await inExtension(`chrome.tabs.create({ url: 'about:blank', active: true }).then(() => 1)`);
+  await sleep(2500);
+  const behind = await call('recording', { action: 'stop' });
+  check(!behind.error && !!pathOf(behind.text), 'recording works on a tab behind another');
+
+  await call('flight_recorder', { action: 'start' });
+  await sleep(2500);
+  const kept = await call('flight_recorder', { action: 'save_last' });
+  check(!kept.error && !!pathOf(kept.text), 'flight_recorder saves what it kept');
+  await call('flight_recorder', { action: 'cancel' });
+
+  await call('network', { action: 'start' });
+  await call('navigate', { url: `${SITE}/logs.html?token=abcdef123456` });
+  await evalIn('logs.html', `fetch('/chores.html', { method: 'POST', headers: { Authorization: 'Bearer abc123456789' }, body: 'user=me&password=hunter22xyz' }).catch(() => 0)`);
+  await sleep(500);
+  const har = pathOf((await call('network', { action: 'stop' })).text);
+  const raw = readFileSync(har, 'utf8');
+  check(!!JSON.parse(raw).log.entries.length, 'network writes a HAR');
+  check(!/abc123456789|hunter22xyz|abcdef123456/.test(raw), 'with credentials, passwords and tokens gone');
+}
+
 await client.close();
 console.log(failures ? `\n${failures} failed` : '\nAll passed');
 process.exit(failures ? 1 : 0);

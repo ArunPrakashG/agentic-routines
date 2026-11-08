@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { listenForVideo } from './recorder';
 
 // A service worker cannot hold a frame, so this page does: it frames the sandbox page and passes a hook
 // and its context in, and the answer back. It has no more power than the background has, and it does not
@@ -41,7 +42,9 @@ addEventListener('message', (e) => {
   waiting.delete(a.id);
 });
 
-boot();
+// A store build has no hooks and no sandbox to frame.
+if ((browser.runtime.getManifest() as { sandbox?: unknown }).sandbox) boot();
+listenForVideo();
 
 browser.runtime.onMessage.addListener((msg: { t?: string; id: number; code: string; ctx: unknown; ms: number; max: number }, sender: { id?: string }, send: (a: unknown) => void) => {
   if (msg?.t !== 'hook.run' || sender.id !== browser.runtime.id) return;

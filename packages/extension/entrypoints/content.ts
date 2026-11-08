@@ -40,7 +40,7 @@ export type ContentMsg =
   | { t: 'resolve'; target: Locator; wide?: boolean }
   | { t: 'first'; target: Locator; index?: number }
   | { t: 'glow'; mode: GlowMode | 'off'; ttl?: number }
-  | { t: 'veil'; on: boolean }
+  | { t: 'veil'; on: boolean; hold?: boolean }
   | { t: 'lock'; label: string | null; ttl?: number }
   | { t: 'card'; show: CardText | null }
   | { t: 'challenge' }
@@ -415,7 +415,7 @@ export default defineContentScript({
             send({ ok: true });
             break;
           case 'veil':
-            veil(msg.on);
+            veil(msg.on, msg.hold);
             send({ ok: true });
             break;
           case 'lock':

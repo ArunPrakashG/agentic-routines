@@ -228,6 +228,8 @@ export interface RunResult {
   error?: string;
   /** Text read by "read" steps, keyed by label. */
   read?: Record<string, string>;
+  /** A failed run with the flight recorder on: the video of its last minute. */
+  flight_recording?: string;
   updated_to?: number;
   /** Pauses the user approved in the side panel, which the agent otherwise cannot see. */
   approved_in_panel?: string[];

@@ -24,6 +24,11 @@ export async function secretForField(tabId: number, ref: string, name: string): 
   return value;
 }
 
+/** A password an agent typed by hand: not stored, and left out of whatever comes back all the same. */
+export function noteTyped(value: string) {
+  if (value.length >= 4) spent.set(value, 'typed_password');
+}
+
 /** A script could read what was typed, whatever is done to its result. */
 export function refuseScript(tabId: number) {
   const name = inTab.get(tabId);

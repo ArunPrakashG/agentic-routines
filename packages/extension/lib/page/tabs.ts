@@ -275,9 +275,17 @@ function releaseTab(tabId: number) {
   keepNamed();
 }
 
+// The person sees it on the button whenever a tab is being recorded.
+const recording = new Set<number>();
+export function markRecording(tabId: number, on: boolean) {
+  if (on) recording.add(tabId);
+  else recording.delete(tabId);
+  paint(tabId);
+}
+
 /** What the toolbar button says on this tab: WAIT for the person, RUN while something drives it. */
 export function paint(tabId: number) {
-  const text = handedOver(tabId) ? 'WAIT' : heldBy(tabId) ? 'RUN' : lent.has(tabId) ? 'ON' : null;
+  const text = handedOver(tabId) ? 'WAIT' : recording.has(tabId) ? 'REC' : heldBy(tabId) ? 'RUN' : lent.has(tabId) ? 'ON' : null;
   void browser.action.setBadgeText({ tabId, text: text as string }).catch(() => {});
 }
 
