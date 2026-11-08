@@ -76,8 +76,39 @@ export async function cropHash(tabId: number, r: Rect): Promise<string | undefin
   return img ? hashAt(img, r) : undefined;
 }
 
+/** The part of the page a picture shows and at what size, so a point read off it can be turned back into a point in the page. */
+export interface Frame {
+  x: number;
+  y: number;
+  /** Page pixels to one pixel of the picture. */
+  sx: number;
+  sy: number;
+}
+
+/** A PNG says its size in its first bytes. */
+export function pngSize(b64: string) {
+  const head = atob(b64.slice(0, 44));
+  const at = (i: number) => (head.charCodeAt(i) << 24) | (head.charCodeAt(i + 1) << 16) | (head.charCodeAt(i + 2) << 8) | head.charCodeAt(i + 3);
+  return { w: at(16), h: at(20) };
+}
+
+const ZOOM_W = 1280;
+
+/** Part of the page, a little enlarged so small print can be read. */
+export async function regionBase64(tabId: number, r: { x: number; y: number; w: number; h: number }): Promise<{ data: string; frame: Frame; w: number; h: number }> {
+  const data = await pngBase64(tabId);
+  const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+  const tab = await browser.tabs.get(tabId);
+  const dpr = img.width / (tab.width || img.width);
+  const k = Math.min(2, ZOOM_W / r.w);
+  const [outW, outH] = [Math.max(1, Math.round(r.w * k)), Math.max(1, Math.round(r.h * k))];
+  const c = new OffscreenCanvas(outW, outH);
+  c.getContext('2d')!.drawImage(img, r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr, 0, 0, outW, outH);
+  return { data: await toBase64(c), frame: { x: r.x, y: r.y, sx: r.w / outW, sy: r.h / outH }, w: outW, h: outH };
+}
+
 /** What an agent sees unless it asks for more: an area around an element, else the whole tab at half size. */
-export async function areaBase64(tabId: number, around?: Rect, marks: Mark[] = []): Promise<{ data: string; area: boolean }> {
+export async function areaBase64(tabId: number, around?: Rect, marks: Mark[] = []): Promise<{ data: string; area: boolean; frame: Frame; w: number; h: number }> {
   const data = await pngBase64(tabId);
   const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
   const tab = await browser.tabs.get(tabId);
@@ -97,7 +128,7 @@ export async function areaBase64(tabId: number, around?: Rect, marks: Mark[] = [
   const g = c.getContext('2d')!;
   g.drawImage(img, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, outW, outH);
   paint(g, marks, outW / w, x, y);
-  return { data: await toBase64(c), area: !!onScreen };
+  return { data: await toBase64(c), area: !!onScreen, frame: { x, y, sx: w / outW, sy: h / outH }, w: outW, h: outH };
 }
 
 /** The whole tab with marks on it. */

@@ -254,7 +254,7 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   let res: Found = { kind: 'missing' };
   while (Date.now() < end) {
     const fix = s.fixes[step.n];
-    res = await ask<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target! });
+    res = await ask<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target!, wide: !!step.pointer?.spot || step.action === 'hover' || step.action === 'drag' || step.action === 'scroll' });
     noteViewport(s, res.view);
     // A button can stay disabled for a moment after the step before it, and a click on it does nothing.
     if (res.kind === 'found' && !res.disabled) break;
@@ -425,6 +425,11 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     await after(before);
     return 'next';
   }
+  // Scrolling the page itself has nothing to find.
+  if (kind === 'scroll' && !step.target) {
+    await input(s.tabId, undefined, 'scroll', undefined, step.pointer);
+    return 'next';
+  }
   await waitForPage(s.tabId, step.page);
   if (!ref) {
     const found = await findElement(s, step);
@@ -454,7 +459,12 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     await uploadFile(s.tabId, ref, fill(step.value, s.params)!);
   }
   else if (kind === 'read') s.read[step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
-  else await input(s.tabId, ref, kind, value);
+  else if (kind === 'drag') {
+    const end = await findElement(s, { ...step, target: step.pointer?.to?.target, crop: undefined, pointer: { spot: step.pointer?.to?.spot } });
+    if (end.kind !== 'found') throw new Error(`Stopped: step ${step.n} drags to something that is not on the page`);
+    await input(s.tabId, ref, kind, undefined, { ...step.pointer, toRef: end.ref });
+  }
+  else await input(s.tabId, ref, kind, value, step.pointer);
   await settle(s.tabId, before);
   await after(before, ref);
   return 'next';

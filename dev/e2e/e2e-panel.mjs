@@ -182,6 +182,39 @@ await sleep(300);
 log(JSON.stringify(await panel.text()));
 check(!/· 0 steps/.test(await panel.text()), 'an empty recording leaves nothing behind');
 
+// ---------- a person on a canvas ----------
+{
+  await site.c.send('Page.navigate', { url: `${SITE}/pointer.html` });
+  await sleep(800);
+  await press('r');
+  check(await panel.until((t) => /Stop recording/.test(t), 2000), 'R starts recording on the pointer page');
+  const box = (id) => site.evaluate(`(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return { x: r.x, y: r.y }; })()`);
+  const mouse = (type, x, y, extra = {}) => site.c.send('Input.dispatchMouseEvent', { type, x, y, ...extra });
+  const b = await box('board');
+  await mouse('mouseMoved', b.x + 100, b.y + 60);
+  await mouse('mousePressed', b.x + 100, b.y + 60, { button: 'left', buttons: 1, clickCount: 1 });
+  await mouse('mouseReleased', b.x + 100, b.y + 60, { button: 'left', clickCount: 1 });
+  const c = await box('ctx');
+  await mouse('mousePressed', c.x + 5, c.y + 5, { button: 'right', buttons: 2, clickCount: 1 });
+  await mouse('mouseReleased', c.x + 5, c.y + 5, { button: 'right', clickCount: 1 });
+  const h = await box('handle');
+  await mouse('mouseMoved', h.x + 12, h.y + 12);
+  await mouse('mousePressed', h.x + 12, h.y + 12, { button: 'left', buttons: 1, clickCount: 1 });
+  for (let i = 1; i <= 5; i++) await mouse('mouseMoved', h.x + 12 + i * 20, h.y + 12, { button: 'left', buttons: 1 });
+  await mouse('mouseReleased', h.x + 112, h.y + 12, { button: 'left', clickCount: 1 });
+  await sleep(300);
+  check(/handle 100/.test(await site.text()), 'the page followed the drag');
+  await press('r');
+  await panel.until((t) => !/Stop recording/.test(t), 2000);
+  await sleep(300);
+  const events = await bg.evaluate(`chrome.storage.local.get('runs').then((s) => s.runs?.[0]?.events ?? [])`);
+  const seen = events.map((e) => `${e.action}${e.pointer?.button === 'right' ? ':right' : ''}${e.pointer?.spot ? ':spot' : ''}`).join(' ');
+  check(/click:spot click:right:spot drag:spot/.test(seen), `a click on a canvas, a right click and a drag are recorded: ${seen}`);
+  const k = events.find((e) => e.action === 'click')?.pointer?.spot;
+  check(k && Math.abs(k.x - 0.25) < 0.02 && Math.abs(k.y - 0.5) < 0.02, `with where on the canvas: ${JSON.stringify(k)}`);
+  check(events.find((e) => e.action === 'drag')?.pointer?.to?.target?.tag === 'div', 'and where the drag ended');
+}
+
 // ---------- account ----------
 await panel.click(panel.button('Account, Test'));
 check(await panel.until((t) => /test@example\.com/.test(t), 2000), 'the account button shows the email');

@@ -1,4 +1,4 @@
-import { isIrreversible, stripInvisible, type Locator, type PageFingerprint, type Viewport } from '@agentic-routines/core';
+import { isIrreversible, stripInvisible, type Locator, type PageFingerprint, type Pointer, type Spot, type Viewport } from '@agentic-routines/core';
 import { unmark } from './mark';
 import { ariaHidden, hiddenWhy } from './hidden';
 
@@ -344,17 +344,99 @@ function nativeSet(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElemen
   else el.value = value;
 }
 
-export function click(el: Element) {
-  (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' });
-  const r = el.getBoundingClientRect();
-  const opts = { bubbles: true, cancelable: true, composed: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2, button: 0 };
+/** A pointer step on its way to the page: the recorded part, and points in the page when an agent gave them. */
+export interface How extends Pointer {
+  at?: Point;
+  toRef?: string;
+  toAt?: Point;
+}
+export interface Point {
+  x: number;
+  y: number;
+}
+
+const held = (mods = '') => ({ ctrlKey: /ctrl/.test(mods), shiftKey: /shift/.test(mods), altKey: /alt/.test(mods), metaKey: /cmd/.test(mods) });
+const BUTTONS = { left: 0, middle: 1, right: 2 };
+
+// DOM events, for browsers without a DevTools session and for input that did not arrive.
+export function click(el: Element, how: How = {}) {
+  const p = aimAt(el, how);
+  const opts = { bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, button: BUTTONS[how.button ?? 'left'], ...held(how.mods) };
   el.dispatchEvent(new PointerEvent('pointerover', opts));
   el.dispatchEvent(new PointerEvent('pointerdown', opts));
   el.dispatchEvent(new MouseEvent('mousedown', opts));
   (el as HTMLElement).focus?.();
   el.dispatchEvent(new PointerEvent('pointerup', opts));
   el.dispatchEvent(new MouseEvent('mouseup', opts));
-  (el as HTMLElement).click();
+  if (how.button === 'right') return void el.dispatchEvent(new MouseEvent('contextmenu', opts));
+  // No point was asked for: the element's own click is what a label or a link answers to.
+  if (how.at || how.spot || how.mods) el.dispatchEvent(new MouseEvent('click', opts));
+  else (el as HTMLElement).click();
+  if (how.count === 2) el.dispatchEvent(new MouseEvent('dblclick', opts));
+}
+
+export function hover(el: Element, how: How = {}) {
+  const p = aimAt(el, how);
+  const opts = { bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y };
+  for (const t of ['pointerover', 'pointerenter', 'pointermove']) el.dispatchEvent(new PointerEvent(t, opts));
+  for (const t of ['mouseover', 'mouseenter', 'mousemove']) el.dispatchEvent(new MouseEvent(t, opts));
+}
+
+export function drag(el: Element, how: How) {
+  const from = aimAt(el, how);
+  const to = how.toAt ?? whereOn(byRef(how.toRef!), how.to?.spot);
+  const end = document.elementFromPoint(to.x, to.y) ?? el;
+  const opts = (p: Point, buttons: number) => ({ bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, button: 0, buttons });
+  el.dispatchEvent(new PointerEvent('pointerdown', opts(from, 1)));
+  el.dispatchEvent(new MouseEvent('mousedown', opts(from, 1)));
+  const data = new DataTransfer();
+  if ((el as HTMLElement).draggable) el.dispatchEvent(new DragEvent('dragstart', { ...opts(from, 1), dataTransfer: data }));
+  end.dispatchEvent(new PointerEvent('pointermove', opts(to, 1)));
+  end.dispatchEvent(new MouseEvent('mousemove', opts(to, 1)));
+  if ((el as HTMLElement).draggable) {
+    for (const t of ['dragenter', 'dragover', 'drop']) end.dispatchEvent(new DragEvent(t, { ...opts(to, 0), dataTransfer: data }));
+    el.dispatchEvent(new DragEvent('dragend', { ...opts(to, 0), dataTransfer: data }));
+  }
+  end.dispatchEvent(new PointerEvent('pointerup', opts(to, 0)));
+  end.dispatchEvent(new MouseEvent('mouseup', opts(to, 0)));
+}
+
+/** What holds the scrolling at a point: the nearest thing that scrolls, else the page. */
+function scroller(el: Element | null): Element {
+  for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+    const s = getComputedStyle(e);
+    if (/auto|scroll|overlay/.test(s.overflowY + s.overflowX) && (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth)) return e;
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
+export function scrollPos(p: Point) {
+  const s = scroller(document.elementFromPoint(p.x, p.y));
+  const page = document.scrollingElement ?? document.documentElement;
+  return { key: [s.scrollLeft, s.scrollTop, page.scrollLeft, page.scrollTop].join(), top: Math.round(s.scrollTop), height: s.scrollHeight - s.clientHeight };
+}
+
+export function scrollBy(p: Point, by: Point) {
+  scroller(document.elementFromPoint(p.x, p.y)).scrollBy({ left: by.x, top: by.y, behavior: 'instant' as ScrollBehavior });
+}
+
+/** What a point in the page lands on: the control it is part of, else whatever is drawn there and where on it. */
+export function pointAt(x: number, y: number): { ref: string; spot?: Spot } {
+  const top = document.elementFromPoint(x, y);
+  if (!top) throw new Error('That point is outside the page. Coordinates are pixels in your last screenshot.');
+  const control = top.closest(INTERACTIVE);
+  const el = control && visible(control) ? control : top;
+  const r = el.getBoundingClientRect();
+  // Anywhere on a button is the same click. On a slider, a canvas or something large it is not.
+  const exact = el !== control || el.matches('input[type=range],[role=slider],canvas,svg') || r.width * r.height > 90_000;
+  return { ref: refOf(el), ...(exact ? { spot: spotOn(el, x, y) } : {}) };
+}
+
+/** Where on an element a point is, as fractions of its box. */
+export function spotOn(el: Element, x: number, y: number): Spot {
+  const r = el.getBoundingClientRect();
+  const part = (n: number, of: number) => (of ? Math.round(Math.min(1, Math.max(0, n / of)) * 1000) / 1000 : 0.5);
+  return { x: part(x - r.x, r.width), y: part(y - r.y, r.height) };
 }
 
 /** Whether a click on `top` is a click on `el`: a span inside a button, a label over its hidden input, a wrapper drawn around it. */
@@ -370,8 +452,35 @@ function partOf(el: Element, top: Element | null) {
 
 const point = (r: DOMRect, fx: number, fy: number) => ({ x: r.x + r.width * fx, y: r.y + r.height * fy });
 
+const offScreen = (p: Point) => p.x < 0 || p.y < 0 || p.x >= innerWidth || p.y >= innerHeight;
+const whatIs = (top: Element | null) => (top && top !== document.documentElement && top !== document.body ? accessibleName(top) || top.tagName.toLowerCase() : undefined);
+
+/** A place on an element, where it is now, without moving the page. */
+export function whereOn(el: Element, spot?: Spot): Point & { off: boolean } {
+  const p = point(el.getBoundingClientRect(), spot?.x ?? 0.5, spot?.y ?? 0.5);
+  return { ...p, off: offScreen(p) };
+}
+
+/** A place on an element, brought on screen. */
+function aimAtSpot(el: Element, spot: Spot) {
+  let p = whereOn(el, spot);
+  if (p.off) {
+    (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
+    p = whereOn(el, spot);
+  }
+  // Larger than the window: the point itself goes to the middle.
+  if (p.off) {
+    window.scrollBy({ left: p.x - innerWidth / 2, top: p.y - innerHeight / 2, behavior: 'instant' as ScrollBehavior });
+    p = whereOn(el, spot);
+  }
+  const top = document.elementFromPoint(p.x, p.y);
+  return { x: p.x, y: p.y, hit: partOf(el, top), over: partOf(el, top) ? undefined : whatIs(top) };
+}
+
 /** Where a person would click this element, and whether that reaches it. Scrolls it into view first. */
-export function aimAt(el: Element): { x: number; y: number; hit: boolean; over?: string } {
+export function aimAt(el: Element, how: How = {}): { x: number; y: number; hit: boolean; over?: string } {
+  if (how.at) return { ...how.at, hit: true };
+  if (how.spot) return aimAtSpot(el, how.spot);
   (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
   const r = el.getBoundingClientRect();
   const centre = point(r, 0.5, 0.5);
@@ -382,20 +491,20 @@ export function aimAt(el: Element): { x: number; y: number; hit: boolean; over?:
     if (p.x < 0 || p.y < 0 || p.x >= innerWidth || p.y >= innerHeight) continue;
     if (partOf(el, document.elementFromPoint(p.x, p.y))) return { ...p, hit: true };
   }
-  const top = document.elementFromPoint(centre.x, centre.y);
-  return { ...centre, hit: false, over: top && top !== document.documentElement && top !== document.body ? accessibleName(top) || top.tagName.toLowerCase() : undefined };
+  return { ...centre, hit: false, over: whatIs(document.elementFromPoint(centre.x, centre.y)) };
 }
 
 // Whether the input sent since the last watch reached the element. Only the browser can make an event that isTrusted.
 let watching: { el: Element; landed: boolean; stop: () => void } | undefined;
-export function watchLanding(el: Element) {
+export function watchLanding(el: Element, moving = false) {
   watching?.stop();
   const on = (e: Event) => {
     const at = e.composedPath()[0];
     if (e.isTrusted && watching && at instanceof Element && partOf(el, at)) watching.landed = true;
   };
-  for (const t of ['pointerdown', 'mousedown', 'click']) window.addEventListener(t, on, true);
-  watching = { el, landed: false, stop: () => { for (const t of ['pointerdown', 'mousedown', 'click']) window.removeEventListener(t, on, true); } };
+  const kinds = moving ? ['pointermove', 'mousemove', 'mouseover'] : ['pointerdown', 'mousedown', 'click'];
+  for (const t of kinds) window.addEventListener(t, on, true);
+  watching = { el, landed: false, stop: () => { for (const t of kinds) window.removeEventListener(t, on, true); } };
 }
 export function landed() {
   const out = !!watching?.landed;
@@ -506,13 +615,18 @@ export function attach(el: Element, files: File[]): 'input' | 'drop' {
   return 'drop';
 }
 
-export function press(key: string) {
-  const el = (document.activeElement as HTMLElement) ?? document.body;
-  const init = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true };
-  const down = el.dispatchEvent(new KeyboardEvent('keydown', init));
-  el.dispatchEvent(new KeyboardEvent('keypress', init));
-  el.dispatchEvent(new KeyboardEvent('keyup', init));
-  if (down && key === 'Enter' && el instanceof HTMLInputElement && el.form) el.form.requestSubmit();
+/** Keys, separated by spaces. Each is a name, or names joined by +: ctrl+a. */
+export function press(keys: string) {
+  for (const combo of keys.split(/\s+/).filter(Boolean)) {
+    const parts = combo.split('+').filter(Boolean);
+    const key = parts.pop() ?? combo;
+    const el = (document.activeElement as HTMLElement) ?? document.body;
+    const init = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true, ...held(parts.join('+').toLowerCase().replace('control', 'ctrl').replace(/meta|command/, 'cmd')) };
+    const down = el.dispatchEvent(new KeyboardEvent('keydown', init));
+    el.dispatchEvent(new KeyboardEvent('keypress', init));
+    el.dispatchEvent(new KeyboardEvent('keyup', init));
+    if (down && key === 'Enter' && el instanceof HTMLInputElement && el.form) el.form.requestSubmit();
+  }
 }
 
 export function fieldKind(el: Element): 'text' | 'password' | 'file' | 'select' | 'other' {

@@ -1,6 +1,7 @@
-import type { Locator, PageFingerprint, RecordedEvent, Viewport } from '@agentic-routines/core';
-import { areaBase64, cropHash, markedPng, pngBase64, type Rect } from '../replay/crop';
+import type { Locator, PageFingerprint, Pointer, RecordedEvent, Spot, Viewport } from '@agentic-routines/core';
+import { areaBase64, cropHash, markedPng, pngBase64, pngSize, regionBase64, type Frame, type Rect } from '../replay/crop';
 import { MAX_MARKS, type Mark } from '../replay/annotate';
+import type { How, Point } from '../page/dom';
 import { perform } from '../page/input';
 import * as llm from '../page/llm';
 import * as native from './native';
@@ -132,7 +133,33 @@ function takeMarks(session: string | undefined, tabId: number, url: string): Mar
   return m && m.tabId === tabId && m.url === url ? m.marks : [];
 }
 
-async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}, mk?: { on: boolean; note?: string }) {
+// What the last screenshot showed. Coordinates are read off the picture, so they mean nothing once the page has moved.
+const pictures = new Map<string, Frame & { tabId: number; url: string; moved?: boolean }>();
+
+function keepPicture(session: string | undefined, tabId: number, url: string, frame: Frame, w: number, h: number) {
+  pictures.set(session ?? 'user', { ...frame, tabId, url });
+  return ` The picture is ${w}×${h}: x and y for click, hover, drag, scroll and region are pixels in it.`;
+}
+
+/** A point read off the last screenshot, as a point in the page. With no screenshot of this tab, they are page pixels already. */
+async function pagePoint(session: string | undefined, tabId: number, x: number, y: number): Promise<Point> {
+  const f = pictures.get(session ?? 'user');
+  if (!f || f.tabId !== tabId) return { x, y };
+  if (f.moved || f.url !== (await browser.tabs.get(tabId)).url) throw new Error('The page has moved since your last screenshot, so that point is out of date. Take another.');
+  return { x: f.x + x * f.sx, y: f.y + y * f.sy };
+}
+
+/** Where a pointer tool is aimed: an element by ref, or a point read off the last screenshot. */
+async function aimed(session: string | undefined, tabId: number, ref: string | undefined, x: number | undefined, y: number | undefined): Promise<{ ref: string; spot?: Spot; at?: Point }> {
+  if (ref) return { ref };
+  if (x === undefined || y === undefined) throw new Error('Pass a ref, or x and y from a screenshot.');
+  const at = await pagePoint(session, tabId, x, y);
+  return { ...(await ask<{ ref: string; spot?: Spot }>(tabId, { t: 'at', ...at })), at };
+}
+
+const pressedHow = (p: any): Pointer => ({ ...(p.button && p.button !== 'left' ? { button: p.button } : {}), ...(p.count > 1 ? { count: p.count } : {}), ...(p.modifiers ? { mods: p.modifiers } : {}) });
+
+async function act(source: string, session: string | undefined, tabId: number, ref: string, action: RecordedEvent['action'], value?: string, extra: Partial<RecordedEvent> = {}, mk?: { on: boolean; note?: string }, how?: How) {
   const d = await ask<Described>(tabId, { t: 'describe', ref });
   const crop = d.field === 'password' ? undefined : await cropHash(tabId, d.rect);
   const before = (await browser.tabs.get(tabId)).url ?? '';
@@ -141,7 +168,7 @@ async function act(source: string, session: string | undefined, tabId: number, r
   let note: string | undefined;
   if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!);
   else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
-  else note = await perform(tabId, ref, action, value);
+  else note = await perform(tabId, ref, action, value, how);
   const after = await settle(tabId, before);
   // A new address can reuse refs for other elements.
   if (after === before) lastActed.set(session ?? 'user', { tabId, ref });
@@ -208,8 +235,48 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.click': {
       const tabId = await working(p?.session, p.tab_id);
-      const { d, after, changed, note } = await act(source, p?.session, tabId, p.ref, 'click', undefined, {}, { on: !!p.mark, note: p.note });
+      const { ref, spot, at } = await aimed(p?.session, tabId, p.ref, p.x, p.y);
+      const pointer = { ...pressedHow(p), ...(spot ? { spot } : {}) };
+      const { d, after, changed, note } = await act(source, p?.session, tabId, ref, 'click', undefined, Object.keys(pointer).length ? { pointer } : {}, { on: !!p.mark, note: p.note }, { ...pointer, at });
       return `Clicked “${d.label || d.loc.name || d.loc.tag}”.${changed ? ` Now at ${after}` : ''}${note ? ` ${note}` : ''}`;
+    }
+    case 'browser.hover': {
+      const tabId = await working(p?.session, p.tab_id);
+      const { ref, spot, at } = await aimed(p?.session, tabId, p.ref, p.x, p.y);
+      const { d, note } = await act(source, p?.session, tabId, ref, 'hover', undefined, spot ? { pointer: { spot } } : {}, undefined, { spot, at });
+      return `Pointing at “${d.label || d.loc.name || d.loc.tag}”.${note ? ` ${note}` : ''}`;
+    }
+    case 'browser.drag': {
+      const tabId = await working(p?.session, p.tab_id);
+      const from = await aimed(p?.session, tabId, p.ref, p.x, p.y);
+      const to = await aimed(p?.session, tabId, p.to_ref, p.to_x, p.to_y);
+      const end = await ask<Described>(tabId, { t: 'describe', ref: to.ref });
+      const pointer: Pointer = { ...(from.spot ? { spot: from.spot } : {}), to: { target: end.loc, ...(to.spot ? { spot: to.spot } : {}) } };
+      const { d, note } = await act(source, p?.session, tabId, from.ref, 'drag', undefined, { pointer }, undefined, { ...pointer, at: from.at, toRef: to.ref, toAt: to.at });
+      return `Dragged “${d.label || d.loc.name || d.loc.tag}” to “${end.label || end.loc.name || end.loc.tag}”.${note ? ` ${note}` : ''}`;
+    }
+    case 'browser.scroll': {
+      const tabId = await working(p?.session, p.tab_id);
+      const f = pictures.get(p?.session ?? 'user');
+      const aim = p.ref || p.x !== undefined ? await aimed(p?.session, tabId, p.ref, p.x, p.y) : undefined;
+      const by: Point | undefined = p.direction ? { x: (p.direction === 'right' ? 1 : p.direction === 'left' ? -1 : 0) * (p.amount ?? 3) * 100, y: (p.direction === 'down' ? 1 : p.direction === 'up' ? -1 : 0) * (p.amount ?? 3) * 100 } : undefined;
+      if (!by && !aim) throw new Error('Pass a direction, or the ref of an element to bring into view.');
+      const pointer: Pointer = { ...(aim?.spot ? { spot: aim.spot } : {}), ...(by ? { by } : {}) };
+      if (!aim) {
+        const url = (await browser.tabs.get(tabId)).url ?? '';
+        const note = await perform(tabId, undefined, 'scroll', undefined, pointer);
+        await runs.record(source, { action: 'scroll', url, ts: Date.now(), pointer }, p?.session);
+        if (f?.tabId === tabId) f.moved = true;
+        return note;
+      }
+      const { note } = await act(source, p?.session, tabId, aim.ref, 'scroll', undefined, { pointer }, undefined, { ...pointer, at: aim.at });
+      if (f?.tabId === tabId) f.moved = true;
+      return note;
+    }
+    case 'browser.wait': {
+      await working(p?.session, p.tab_id);
+      await new Promise((r) => setTimeout(r, p.seconds * 1000));
+      return `Waited ${p.seconds} s.`;
     }
     case 'browser.type': {
       const tabId = await working(p?.session, p.tab_id);
@@ -231,10 +298,11 @@ export async function handle(method: string, p: any): Promise<unknown> {
     case 'browser.press': {
       const tabId = await working(p?.session, p.tab_id);
       const before = (await browser.tabs.get(tabId)).url ?? '';
-      await perform(tabId, undefined, 'press', p.key);
+      const keys = Array<string>(p.repeat ?? 1).fill(p.key).join(' ');
+      await perform(tabId, undefined, 'press', keys);
       const after = await settle(tabId, before);
-      await runs.record(source, { action: 'press', url: before, value: p.key, ts: Date.now(), navigatedTo: after !== before ? after : undefined }, p?.session);
-      return `Pressed ${p.key}.`;
+      await runs.record(source, { action: 'press', url: before, value: keys, ts: Date.now(), navigatedTo: after !== before ? after : undefined }, p?.session);
+      return `Pressed ${p.key}${p.repeat > 1 ? ` ${p.repeat} times` : ''}.`;
     }
     case 'browser.screenshot': {
       const tabId = await working(p?.session, p.tab_id);
@@ -243,13 +311,24 @@ export async function handle(method: string, p: any): Promise<unknown> {
         const e = await ask<Described>(tabId, { t: 'describe', ref: p.ref });
         addMark(p?.session, tabId, url, e, p.note, true);
       }
+      if (p.region) {
+        const [a, b] = [await pagePoint(p?.session, tabId, p.region[0], p.region[1]), await pagePoint(p?.session, tabId, p.region[2], p.region[3])];
+        if (b.x <= a.x || b.y <= a.y) throw new Error('A region is left, top, right, bottom, with right above left and bottom above top.');
+        const { data, frame, w, h } = await regionBase64(tabId, { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y });
+        return { data, note: `That region.${keepPicture(p?.session, tabId, url, frame, w, h)}` };
+      }
       const marks = takeMarks(p?.session, tabId, url);
-      if (p.full) return { data: marks.length ? await markedPng(tabId, marks) : await pngBase64(tabId), note: 'The whole tab.' };
+      if (p.full) {
+        const data = marks.length ? await markedPng(tabId, marks) : await pngBase64(tabId);
+        const { w, h } = pngSize(data);
+        const view = await ask<Viewport>(tabId, { t: 'viewport' });
+        return { data, note: `The whole tab.${keepPicture(p?.session, tabId, url, { x: 0, y: 0, sx: view.w / w, sy: view.h / h }, w, h)}` };
+      }
       const last = lastActed.get(p?.session ?? 'user');
       const ref: string | undefined = p.ref ?? (last?.tabId === tabId ? last.ref : undefined);
       const d = ref ? await ask<Described>(tabId, { t: 'describe', ref }).catch((e) => { if (p.ref) throw e; }) : undefined;
-      const { data, area } = await areaBase64(tabId, d?.rect, marks);
-      return { data, note: area ? `The area around “${d!.label || d!.loc.name || d!.loc.tag}”. Pass full: true for the whole tab.` : 'The whole tab at half size, as no element was acted on here. Pass full: true for full size.' };
+      const { data, area, frame, w, h } = await areaBase64(tabId, d?.rect, marks);
+      return { data, note: `${area ? `The area around “${d!.label || d!.loc.name || d!.loc.tag}”. Pass full: true for the whole tab.` : 'The whole tab at half size, as no element was acted on here. Pass full: true for full size.'}${keepPicture(p?.session, tabId, url, frame, w, h)}` };
     }
     case 'runs.get':
       return runs.get(p?.run_id, p?.session);

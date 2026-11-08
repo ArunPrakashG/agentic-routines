@@ -1,6 +1,6 @@
 import { CONFIG_FILE, ConfigError, MAX_CONFIG, formatProblem, isRepoPath, parseConfigRoutine, siteListed, type RepoConfig, type RepoRoutine } from './config-routine.ts';
 import { lintForPublish, parseRoutineMd, stringifyRoutineMd } from './routine-md.ts';
-import type { Action, Routine, Step } from './types.ts';
+import type { Action, Pointer, Routine, Spot, Step } from './types.ts';
 import { checkUrls, deriveUrls } from './urls.ts';
 
 // Where routines come from besides the person's own recordings. A source has one job: list what it
@@ -69,7 +69,7 @@ export interface Source {
 
 const MAX_FILE = 256 * 1024;
 const MAX_STEPS = 200;
-const ACTIONS: Action[] = ['navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read'];
+const ACTIONS: Action[] = ['navigate', 'click', 'type', 'clear', 'select', 'upload', 'press', 'wait', 'read', 'hover', 'drag', 'scroll'];
 const STEPS_BLOCK = /\n```steps\r?\n([\s\S]*?)\r?\n```\s*$/;
 export const FILE_PATH = /^routines\/[a-z0-9][a-z0-9-]{1,62}\.md$/;
 /** A routine on its own in the root of a repository. */
@@ -112,11 +112,24 @@ export function checkFetched(r: Routine): string[] {
     for (const u of [s.url, s.page?.url]) if (u) urls.push(u);
     if (s.value && SECRET_SHAPE.test(s.value)) out.push(`Step ${s.n} contains what looks like a secret.`);
     if (s.url && !/^https:\/\//i.test(s.url)) out.push(`Step ${s.n} opens an address that is not https.`);
+    if (s.pointer && !sanePointer(s.pointer)) out.push(`Step ${s.n} has a pointer this app does not understand.`);
   }
   for (const i of lintForPublish(r.meta, urls)) out.push(i.message);
   out.push(...checkPlaceholders(r));
   for (const p of r.meta.pauses) if (!Number.isInteger(p) || p < 1 || p > r.steps.length) out.push('A pause points at a step that is not there.');
   return [...new Set(out)].slice(0, 8);
+}
+
+const saneSpot = (p?: Spot) => !p || (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1);
+
+/** Values a routine from elsewhere gives the mouse: places on the element, the usual buttons, nothing else. */
+function sanePointer(p: Pointer): boolean {
+  if (!saneSpot(p.spot) || !saneSpot(p.to?.spot)) return false;
+  if (p.button && !['left', 'right', 'middle'].includes(p.button)) return false;
+  if (p.count !== undefined && ![1, 2, 3].includes(p.count)) return false;
+  if (p.mods !== undefined && !/^(ctrl|shift|alt|cmd)(\+(ctrl|shift|alt|cmd))*$/.test(p.mods)) return false;
+  if (p.by && !(Math.abs(p.by.x) <= 100_000 && Math.abs(p.by.y) <= 100_000)) return false;
+  return true;
 }
 
 const PLACEHOLDER = /\{\{(secret:)?([a-z0-9_]+)\}\}/g;

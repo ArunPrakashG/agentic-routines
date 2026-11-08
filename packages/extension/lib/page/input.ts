@@ -1,5 +1,6 @@
 import { platform } from '../platform';
 import type { Send } from '../platform/types';
+import type { How, Point } from './dom';
 import { ask, draw, sleep } from './tabs';
 
 // Real input. Through a DevTools session a click, a key and typed text reach the page the way a person's do, so a site
@@ -60,16 +61,21 @@ for (let i = 1; i <= 12; i++) KEYS[`f${i}`] = { key: `F${i}`, code: `F${i}`, vk:
 const MODS: Record<string, number> = { alt: 1, ctrl: 2, control: 2, cmd: 4, meta: 4, command: 4, win: 4, windows: 4, shift: 8 };
 const COMMANDS: Record<string, string> = { a: 'selectAll', c: 'copy', x: 'cut', v: 'paste', z: 'undo' };
 
-/** A key is one name, or names joined by +: Enter, a, ctrl+a, shift+Tab. */
-export async function pressKey(tabId: number, send: Send, combo: string) {
-  const parts = combo.split('+').filter(Boolean);
-  const name = parts.pop() ?? combo;
+function modifiersOf(names: string[]) {
   let modifiers = 0;
-  for (const m of parts) {
+  for (const m of names) {
     const bit = MODS[m.toLowerCase()];
     if (bit === undefined) throw new Error(`“${m}” is not a modifier. Use ctrl, shift, alt or cmd.`);
     modifiers |= bit;
   }
+  return modifiers;
+}
+
+/** A key is one name, or names joined by +: Enter, a, ctrl+a, shift+Tab. */
+export async function pressKey(tabId: number, send: Send, combo: string) {
+  const parts = combo.split('+').filter(Boolean);
+  const name = parts.pop() ?? combo;
+  const modifiers = modifiersOf(parts);
   const named = KEYS[name.toLowerCase()];
   if (!named && name.length !== 1) throw new Error(`“${name}” is not a key this tool knows. Use a single character or a name like Enter, Tab, Escape, ArrowDown, Backspace, F5.`);
   const upper = name.toUpperCase();
@@ -100,20 +106,114 @@ interface Aim {
   over?: string;
 }
 
+const mouseOpts = (how: How): MouseOpts => ({ button: how.button, count: how.count, modifiers: modifiersOf((how.mods ?? '').split('+').filter(Boolean)) });
+
+/** Whether the input just sent reached what it was aimed at. A page that left, or went away, took it with it. */
+async function arrived(tabId: number, before?: string) {
+  for (const end = Date.now() + LAND_MS; Date.now() < end; await sleep(50)) {
+    if (await ask<boolean>(tabId, { t: 'landed' }).catch(() => true)) return true;
+    if ((await browser.tabs.get(tabId)).url !== before) return true;
+  }
+  return false;
+}
+
+/** Aim at an element, with the check that nothing is on top of it. A place on the element is exact or it is nothing. */
+async function aimFor(tabId: number, ref: string, action: string, how: How) {
+  const a = await ask<Aim>(tabId, { t: 'aim', ref, action, spot: how.spot, at: how.at, moving: action === 'hover', quick: await behind(tabId) });
+  if (!a.hit && how.spot) throw new Error(`“${a.over ?? 'Something else'}” is drawn over that place, so the ${action} was not made.`);
+  return a;
+}
+
 /** Click an element for real. Says what was on top of it, if something was. */
-async function realClick(tabId: number, ref: string, o: MouseOpts = {}): Promise<{ done: boolean; note?: string }> {
-  const a = await ask<Aim>(tabId, { t: 'aim', ref, action: 'click', quick: await behind(tabId) });
+async function realClick(tabId: number, ref: string, how: How): Promise<{ done: boolean; note?: string }> {
+  const a = await aimFor(tabId, ref, 'click', how);
   if (!a.hit) return { done: false, note: a.over ? `“${a.over}” is drawn over it, so a person could not have clicked it; check the page took it.` : undefined };
   return platform.cdp!(tabId, async (send) => {
     const before = (await browser.tabs.get(tabId)).url;
-    await mouseClick(tabId, send, a.x, a.y, o);
-    // A page that left, or went away, took the click with it.
-    for (const end = Date.now() + LAND_MS; Date.now() < end; await sleep(50)) {
-      if (await ask<boolean>(tabId, { t: 'landed' }).catch(() => true)) return { done: true };
-      if ((await browser.tabs.get(tabId)).url !== before) return { done: true };
-    }
-    return { done: false };
+    await mouseClick(tabId, send, a.x, a.y, mouseOpts(how));
+    return { done: await arrived(tabId, before) };
   });
+}
+
+/** Leave the pointer over an element. What opens under it opens on its next frame. */
+async function realHover(tabId: number, ref: string, how: How) {
+  const a = await aimFor(tabId, ref, 'hover', how);
+  if (!a.hit) return false;
+  return platform.cdp!(tabId, async (send) => {
+    const before = (await browser.tabs.get(tabId)).url;
+    await sendInput(tabId, send, 'Input.dispatchMouseEvent', { x: a.x, y: a.y, type: 'mouseMoved', button: 'none', buttons: 0 });
+    const done = await arrived(tabId, before);
+    draw(tabId, send);
+    return done;
+  });
+}
+
+const DRAG_MOVES = 8;
+
+/** Press on one place, move in steps as a hand would, let go on another. Both have to be on screen. */
+async function realDrag(tabId: number, ref: string, how: How) {
+  const from = await aimFor(tabId, ref, 'drag', how);
+  const to = how.toAt ?? (await ask<Point & { off: boolean }>(tabId, { t: 'where', ref: how.toRef!, spot: how.to?.spot }));
+  if ('off' in to && to.off) throw new Error('The place to drag to is not on screen from there. Scroll so both ends show first.');
+  if (!from.hit) return false;
+  return platform.cdp!(tabId, async (send) => {
+    const before = (await browser.tabs.get(tabId)).url;
+    const mouse = (type: string, p: Point, extra: object) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type, x: p.x, y: p.y, ...extra });
+    await mouse('mouseMoved', from, { button: 'none', buttons: 0 });
+    await mouse('mousePressed', from, { button: 'left', buttons: 1, clickCount: 1 });
+    if (!(await arrived(tabId, before))) return false;
+    for (let i = 1; i <= DRAG_MOVES; i++) {
+      const k = i / DRAG_MOVES;
+      await mouse('mouseMoved', { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k }, { button: 'left', buttons: 1 });
+    }
+    await mouse('mouseReleased', to, { button: 'left', buttons: 0, clickCount: 1 });
+    draw(tabId, send);
+    return true;
+  });
+}
+
+const SCROLL_MS = 600;
+
+/** Scroll what is at a place, with the wheel where that can be trusted. Says where that got to. */
+async function realScroll(tabId: number, p: Point, by: Point) {
+  const pos = () => ask<{ key: string; top: number; height: number }>(tabId, { t: 'scrollpos', p });
+  const start = await pos();
+  const moved = async () => (await pos()).key !== start.key;
+  const wheel = async () => {
+    if (!platform.cdp) return;
+    await platform.cdp(tabId, (send) => sendInput(tabId, send, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: p.x, y: p.y, deltaX: by.x, deltaY: by.y, button: 'none', buttons: 0 })).catch(() => {});
+    for (const end = Date.now() + SCROLL_MS; Date.now() < end; await sleep(50)) if (await moved()) break;
+  };
+  // A tab behind another aims the wheel with what it last drew, which may be from before the page moved. There the
+  // wheel is only for a page that scrolls on its own terms and ignores being asked.
+  if (await behind(tabId)) {
+    await ask(tabId, { t: 'scrollby', p, by });
+    if (!(await moved())) await wheel();
+  } else {
+    await wheel();
+    if (!(await moved())) await ask(tabId, { t: 'scrollby', p, by });
+  }
+  // It may still be gliding.
+  await sleep(150);
+  const end = await pos();
+  return end.key === start.key ? 'Nothing moved: it is already at that end.' : `Scrolled to ${end.top} of ${end.height} px.`;
+}
+
+async function scrollNote(tabId: number, ref: string | undefined, how: How) {
+  // No distance: bring the element into view.
+  if (!how.by) {
+    await ask(tabId, { t: 'aim', ref: ref!, action: 'scroll', spot: how.spot, quick: await behind(tabId) });
+    return 'It is on screen now.';
+  }
+  if (how.at) return realScroll(tabId, how.at, how.by);
+  if (!ref) {
+    const view = await ask<{ w: number; h: number }>(tabId, { t: 'viewport' });
+    return realScroll(tabId, { x: view.w / 2, y: view.h / 2 }, how.by);
+  }
+  // The wheel only turns something the pointer is over.
+  const where = () => ask<Point & { off: boolean }>(tabId, { t: 'where', ref, spot: how.spot });
+  if ((await where()).off) await ask(tabId, { t: 'aim', ref, action: 'scroll', spot: how.spot, quick: await behind(tabId) });
+  return realScroll(tabId, await where(), how.by);
 }
 
 /** Type for real: focus the field, select what is in it, and put the text in as an input method would. */
@@ -144,24 +244,29 @@ async function realPress(tabId: number, ref: string | undefined, keys: string) {
  * Do something to the page. Real input where the browser has it, and DOM events otherwise or when it did not arrive.
  * What comes back, if anything, is for the agent to hear.
  */
-export async function perform(tabId: number, ref: string | undefined, action: string, value?: string): Promise<string | undefined> {
+export async function perform(tabId: number, ref: string | undefined, action: string, value?: string, how: How = {}): Promise<string | undefined> {
+  if (action === 'scroll') return scrollNote(tabId, ref, how);
   let note: string | undefined;
   if (platform.cdp) {
     try {
       if (action === 'click' && ref) {
-        const r = await realClick(tabId, ref);
+        const r = await realClick(tabId, ref, how);
         if (r.done) return;
         note = r.note;
+      } else if (action === 'hover' && ref) {
+        if (await realHover(tabId, ref, how)) return;
+      } else if (action === 'drag' && ref) {
+        if (await realDrag(tabId, ref, how)) return;
       } else if ((action === 'type' || action === 'clear') && ref) {
         if (await realType(tabId, ref, action === 'clear' ? '' : (value ?? ''))) return;
       } else if (action === 'press') {
         if (await realPress(tabId, ref, value ?? 'Enter')) return;
       }
     } catch (e) {
-      // A key the agent got wrong is its to hear. Anything else is the session: the page still takes DOM events.
-      if (/is not a (modifier|key)|is gone from the page/.test((e as Error).message)) throw e;
+      // A mistake is the agent's to hear. Anything else is the session: the page still takes DOM events.
+      if (/is not a (modifier|key)|is gone from the page|was not made|not on screen/.test((e as Error).message)) throw e;
     }
   }
-  await ask(tabId, { t: 'act', ref, action, value, quick: await behind(tabId) });
+  await ask(tabId, { t: 'act', ref, action, value, how, quick: await behind(tabId) });
   return note;
 }
