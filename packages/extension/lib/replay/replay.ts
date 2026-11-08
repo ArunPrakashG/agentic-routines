@@ -52,6 +52,8 @@ export interface ReplayState {
   viewportNote?: string;
   /** The picture check is off for this run because of it. */
   relaxCrop?: boolean;
+  /** A step did not match while the person was looking at something else. */
+  hiddenNote?: string;
   /** Steps that paused only because they look irreversible. */
   forcedPauses: number[];
   /** The step an agent chose another element for, which waits for the person when that element looks irreversible. */
@@ -132,6 +134,7 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     read: Object.keys(s.read).length ? s.read : undefined,
     approved_in_panel: s.approvedInPanel.length ? s.approvedInPanel : undefined,
     viewport_note: s.viewportNote,
+    hidden_note: s.hiddenNote,
     forced_pauses: s.forcedPauses.length ? s.forcedPauses : undefined,
     outcome: s.outcome,
     step_ms: s.stepMs,
@@ -213,6 +216,11 @@ async function fitWindow(s: ReplayState) {
       s.viewportNote = `The window is ${win.state}, so it was not resized to match the recorded ${want.w}px. ${s.viewportNote ?? ''}`.trim();
       return;
     }
+    // The person's own tabs are in this window, and a run does not move things under them.
+    if ((await browser.tabs.query({ windowId: win.id })).length > 1) {
+      s.viewportNote = `The window has other tabs in it, so it was not resized to match the recorded ${want.w}px. ${s.viewportNote ?? ''}`.trim();
+      return;
+    }
     s.windowWas = { id: win.id!, width: win.width, height: win.height, left: win.left, top: win.top };
     await browser.windows.update(win.id!, { width: Math.max(300, win.width + (want.w - now.w)), height: Math.max(300, win.height + (want.h - now.h)) });
     await sleep(400);
@@ -254,6 +262,18 @@ async function waitForPage(tabId: number, want?: PageFingerprint): Promise<void>
     await sleep(250);
   }
   // Advisory: the element check decides.
+}
+
+/** Is the tab where the person can see it? If not, a page that only finishes drawing in front could be why a step did not match. */
+async function noteHidden(s: ReplayState, step: Step) {
+  try {
+    const tab = await browser.tabs.get(s.tabId);
+    const win = await browser.windows.get(tab.windowId);
+    if (tab.active && win.state !== 'minimized') return;
+    s.hiddenNote = `Step ${step.n} ran in a tab behind another (tab ${s.tabId}). Some pages only finish drawing or loading in front. If the page looks unfinished with read_page, ask the user to bring that tab forward and try again.`;
+  } catch {
+    // The tab is gone, and the run will say so.
+  }
 }
 
 async function findElement(s: ReplayState, step: Step): Promise<Found> {
@@ -455,6 +475,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
   if (!ref) {
     const found = await findElement(s, step);
     if (found.kind !== 'found') {
+      await noteHidden(s, step);
       s.status = 'needs_choice';
       s.candidates = (found.candidates ?? []).map(({ rect: _r, ...c }) => c);
       return 'stop';

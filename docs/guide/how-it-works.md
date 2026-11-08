@@ -40,6 +40,12 @@ In Chromium browsers clicks, typing and keys go through the browser's debugging 
 
 After a click the extension checks it reached the element. If something is drawn on top, the agent is told what, since a person could not have clicked it either.
 
+### Behind your tabs
+
+A replay runs in the agent's own tab, opened behind what you are looking at, or in a window of its own when another agent is working. It does not switch your tab, take your focus or use your keyboard. A pause waits in the side panel and puts a badge on the toolbar icon; the page does not come forward. Input goes through the browser's debugging connection, so pages get it without being in front.
+
+Some pages only finish drawing or loading in front. If a step does not match while its tab is behind another, the result says so, and the agent can ask you to bring it forward. The picture check needs the tab in front, so behind another tab the page structure and the element decide. In a browser without a debugging connection, input is less reliable behind another tab.
+
 ### Several agents at once
 
 Each agent session works in a tab of its own and holds it, so two agents never click in the same page. A lone agent works in the tab you are looking at. When a second one starts, it gets a window of its own rather than yours or the first agent's. A tab one agent holds is locked to the others: they get an error that names who has it, and `tabs` lists each tab's holder. A tab is let go when its agent disconnects, or after 15 minutes without a call. The same routine runs once at a time, so a second call waits for the first and gives up after two minutes, saying who has it. Pictures for the checks are taken one at a time, whichever session asks.
@@ -78,4 +84,4 @@ A routine records the size of the page it was recorded on (width, height and pix
 - One band over and close in width, the replay goes on as usual.
 - Very different, say a phone-sized window for a routine recorded on a desktop: the layout can differ, so the result and the side panel say so, the picture check is switched off for that run, and the page structure and the element decide. The stored picture is not rewritten, so a later run at the right size still uses it.
 
-`routine_run` with `match_viewport: true` resizes the window to the recorded size first, when it is a normal window, and puts it back when the run ends. Routines saved before this was added have no size and replay as before.
+`routine_run` with `match_viewport: true` resizes the window to the recorded size first, when it is a normal window, and puts it back when the run ends. It leaves the window alone when other tabs are in it, and says so. Routines saved before this was added have no size and replay as before.

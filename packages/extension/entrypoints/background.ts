@@ -69,7 +69,7 @@ export default defineBackground(() => {
   let reviewing: NonNullable<PanelState['hooksReview']> & { hash: string } | undefined;
 
   function badge() {
-    browser.action.setBadgeText({ text: recording ? 'REC' : (publishing && !publishing.card.done) || installing || scripting ? '1' : '' });
+    browser.action.setBadgeText({ text: recording ? 'REC' : (publishing && !publishing.card.done) || installing || scripting || replay.current()?.status === 'paused' ? '1' : '' });
   }
 
   // An agent's script runs with everything the page can reach, so the person says which sites. An agent can ask; only the panel can answer.
@@ -302,7 +302,10 @@ export default defineBackground(() => {
   browser.windows.onFocusChanged.addListener((id) => {
     if (id !== browser.windows.WINDOW_ID_NONE) native.emit('profile.focus');
   });
-  replay.onReplay((s) => noteRun(s).then(push));
+  replay.onReplay((s) => {
+    badge();
+    return noteRun(s).then(push);
+  });
 
   async function setRecording(on: boolean) {
     if (on) {
