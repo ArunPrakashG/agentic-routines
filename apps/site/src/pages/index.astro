@@ -61,7 +61,7 @@ const ld = {
 ---
 <Base
   title="Agentic Routines"
-  description="Agentic Routines is the cache for your agent’s browser navigation. It remembers how your agent did a task, then replays it without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less."
+  description="Agentic Routines is the cache for your agent’s browser navigation. It remembers how your agent did a long task, then replays it without asking the model again. Long chores run up to 3.5 times faster and cost up to 83% less."
   path="/"
   jsonLd={ld}
   dark
@@ -71,7 +71,7 @@ const ld = {
       <div class="hero-copy">
         <span class="mono kicker">The cache for your agent’s browser navigation</span>
         <h1>Stop paying your agent to figure out the same website twice.</h1>
-        <p class="sub">Agentic Routines remembers how your agent did a task in the browser, then replays it next time without asking the model again. Repeat chores run up to 3.5 times faster and cost up to 83% less.</p>
+        <p class="sub">Agentic Routines remembers how your agent did a long chore in the browser, then replays it next time without asking the model again. Long chores run up to 3.5 times faster and cost up to 83% less.</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="#install">Install, it’s free</a>
           <a class="btn btn-secondary btn-lg" href="#numbers">See the numbers</a>
@@ -103,7 +103,7 @@ const ld = {
           <div><dt>time</dt><dd class="hstat">−66%</dd></div>
           <div><dt>cost</dt><dd class="hstat">−81%</dd></div>
         </dl>
-        <p class="fine">Cost of one YouTube description edit, 21 cents by hand and 4 cents replayed, times 30. Run 1 is your agent at full price. Tokens, time and cost for one run are medians of 5 runs with Claude Sonnet 5.5.</p>
+        <p class="fine">Cost of one YouTube description edit, 21 cents by hand and 4 cents replayed, times 30. Run 1 is your agent at full price, and the chart leaves out saving the routine, which took about 2.3 times one run by hand (median of 6 tasks). Tokens, time and cost for one run are medians of 5 runs with Claude Sonnet 5.5.</p>
       </figure>
     </div>
   </section>
@@ -111,13 +111,13 @@ const ld = {
   <section class="sec">
     <div class="wrap stack">
       <div class="head">
-        <h2 class="h2">Made for the chores your agent repeats.</h2>
+        <h2 class="h2">Made for the long chores your agent repeats.</h2>
         <p class="lede">The first run is your agent, as usual. Every run after that replays what it learned: no reading the page again, no thinking, no waiting.</p>
       </div>
       <div class="cols3">
-        <div class="col"><span class="mono k">Once</span><h3>A task you do one time.</h3><p>Just ask your agent. It decides this one is not worth keeping, and nothing is lost.</p></div>
-        <div class="col on"><span class="mono k">Again and again</span><h3>A chore you repeat.</h3><p>Shipping a release, exporting a report, adding a record in a console. Your agent saves it, and it costs almost nothing on every run after the first.</p></div>
-        <div class="col"><span class="mono k">Everyone</span><h3>A chore your whole team does.</h3><p>Your agent can share it, so no other agent has to work it out again.</p></div>
+        <div class="col"><span class="mono k">Once</span><h3>A task you do once, or a quick lookup.</h3><p>Just ask your agent. It decides this one is not worth keeping, and nothing is lost.</p></div>
+        <div class="col on"><span class="mono k">Again and again</span><h3>A long chore you repeat.</h3><p>Shipping a release, filling in a long form, adding records to a portal with no API. Your agent saves it. Next time it is one call, or one call for a whole list.</p></div>
+        <div class="col"><span class="mono k">Everyone</span><h3>A chore other people do too.</h3><p>Someone may have saved it already. Installing their routine skips the recording, which is the most expensive run.</p></div>
       </div>
     </div>
   </section>
@@ -196,7 +196,7 @@ click     Next
       ))}
       <div class="notes">
         <p>A button was renamed since the recording. That added 12 to 15 seconds and 1 to 2 cents: your agent fixed that one step and the fix was saved.</p>
-        <p>Best for chores you repeat. The first run still goes through your agent, and a task you do once is just as quick to ask for.</p>
+        <p>Length decides it. The 30-step form used 78% fewer tokens. A one-step lookup on GitHub used 70% more, because your agent still has to find the routine, call it and read the answer off the page. Saving a routine also costs more than doing the task, so a short task may never earn that back.</p>
         <p class="fine">Claude Sonnet 5.5 through Claude in Chrome, against the saved routine, on one machine. Median of 5 runs each, a small sample. Costs are what Claude Code reported at list prices. The YouTube task ran on real YouTube; the other two on a replica of a store console. Token totals include context read back from cache.</p>
       </div>
     </div>
@@ -225,7 +225,7 @@ click     Next
       <div class="split">
         <div class="head">
           <h2 class="h2">Routines other people keep working.</h2>
-          <p class="lede">Publish a routine, or install one someone else maintains. Every routine is read by a person before it is listed, and you see each step before it installs.</p>
+          <p class="lede">Install a routine someone else maintains and your agent never pays to record it. Every routine is read by a person before it is listed, and you see each step before it installs.</p>
         </div>
         <div class="split-cta">
           <a class="btn btn-primary btn-lg" href="/directory">Browse the directory</a>

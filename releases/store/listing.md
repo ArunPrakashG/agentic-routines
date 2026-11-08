@@ -8,7 +8,7 @@ Agentic Routines
 
 ## Short description (132 characters or fewer)
 
-A cache for your agent's browser work. Repeat tasks replay as one tool call, with no model.
+A cache for your agent's long browser chores. Repeat tasks replay as one tool call, with no model.
 
 ## Single purpose
 
@@ -23,6 +23,9 @@ Agentic Routines is the cache for that work. It sits behind your agent's browser
 It is made for agents, not people. You do not record or manage anything: your agent decides which tasks are worth keeping, tidies them (a direct address instead of a click-through, typed values as parameters) and looks for a saved routine before it does a task by hand.
 
 - Works with Claude Code, Codex, GitHub Copilot and OpenCode.
+- Made for long chores you repeat on sites with no API: releases, long forms, admin portals. A quick lookup is not worth saving, and your agent leaves it alone.
+- Runs the same steps for every value in a list or every row on a page.
+- Install routines other people maintain, so your agent skips the recording.
 - Checks the page before each step. If a step clearly changed, your agent fixes just that step.
 - Pauses before steps that cannot be undone, such as submit, publish, pay or delete.
 - Never stores secrets. Recordings stay on your computer.
