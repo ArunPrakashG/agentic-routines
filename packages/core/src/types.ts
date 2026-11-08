@@ -104,6 +104,14 @@ export interface ParamSpec {
 export type Surface = 'browser' | 'desktop';
 export const SURFACES: Surface[] = ['browser', 'desktop'];
 
+/** The longest a routine's check on its result can be, each part. */
+export const MAX_EXPECT = 300;
+
+export interface Expect {
+  text?: string;
+  url?: string;
+}
+
 export interface RoutineMeta {
   name: string;
   owner?: string;
@@ -126,6 +134,8 @@ export interface RoutineMeta {
   viewport?: Viewport;
   /** Text for the agent from the routine's author: what to check, what to avoid. Untrusted when the author is someone else. */
   instructions?: string;
+  /** How the page looks when the task worked. Every step can run and the task still not have happened. Text the page shows, part of the address; both can use {{params}}. */
+  expect?: Expect;
   /** The repository the routine came from and what its config.routine tells the agent about the repository as a whole. */
   repo?: { name: string; instructions?: string };
   /** Code that runs on events during a replay, in a sandbox, and answers with directives. Off until the person approves it. */
@@ -211,6 +221,10 @@ export interface RunResult {
   final_url?: string;
   /** Present when the routine has hooks: whether they ran, and what they did. */
   hooks?: HookReport;
+  /** The routine's own check on how a finished run looks. Absent when it has none or steps were skipped. */
+  outcome?: { ok: boolean; wanted: string };
+  /** How long each step took, by step number. */
+  step_ms?: Record<number, number>;
   /** Notes the author left on the steps the run stopped at or changed, for the agent. */
   step_notes?: { n: number; label: string; text: string }[];
 }

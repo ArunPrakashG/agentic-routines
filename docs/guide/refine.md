@@ -36,6 +36,7 @@ A real case: publishing to a testing track shows a dialog offering to go back to
 | `note` | Text for the agent that runs the routine: what to check at this step. |
 | `first_in_list` | A click that takes whatever is first in the list next time. |
 | `describe` | Change the name, description or "do not use for". |
+| `expect` | What the page shows once the task has worked: `text` it shows, part of the `url`. Can use `{{name}}`. Empty clears it. |
 | `undo`, `reset` | Back one edit, or back to the proposal. |
 
 ## What the extension refuses
@@ -54,3 +55,19 @@ The agent does not enforce these. The extension does, whatever the agent asks fo
 A draft that replaces a saved routine (`from_routine`) can only be saved after its latest edit tested well. A step that fails only because it follows a skipped one does not count against it, and the result says which steps were not checked.
 
 People who record a demo in the side panel still get the automatic compile: the Save view shows the result and they approve it.
+
+## Did it work?
+
+A replay checks every step, and every step can still pass without the task having happened: a form that quietly rejects a value, a list that did not take the new row. In the benchmarks this was the worst kind of failure, because the run reported success.
+
+A routine that has an `expect` looks for it after the last step, for up to five seconds. If the page does not show it, the result says all the steps ran and this may not have worked, and tells the agent not to report success until it has looked. `routine_test` fails on it, and skips the check when it skipped a paused step, since the task has not finished then.
+
+## Routines that tidy themselves
+
+Each routine keeps a record of its runs on this computer, in `.stats.json` in its folder: whether it finished, which steps had to be fixed, which steps were slow. Nothing is sent anywhere. The result of a run uses it:
+
+- A step that no longer matched and needed a choice is named, with how to refine it.
+- A step that took over five seconds in each of the last three runs is named, in case a direct address can replace the way there.
+- A routine whose last three runs failed or needed a fix is **stale**. `routines_list`, `routine_describe` and the result all say so, and search ranks it lower.
+
+Saving a refined version clears the mark, because the runs before it say nothing about the routine as it is now. A refined version has to pass `routine_test` like any other.

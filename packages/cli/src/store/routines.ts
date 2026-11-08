@@ -34,15 +34,38 @@ export interface Listed {
 /** Efficiency of a routine as the agent has run it. Kept in the routine's folder, never sent anywhere. */
 export interface Stats {
   runs: number;
-  /** The last STATS_WINDOW finished runs, newest last. */
-  recent: { ok: boolean; calls: number; ms: number; at: number }[];
+  /** The last STATS_KEPT finished runs, newest last. */
+  recent: RunStat[];
   last?: { at: number; ok: boolean };
+  /** When the routine was last deliberately refined. Runs before it say nothing about the routine as it is now. */
+  refined?: number;
 }
 
+export interface RunStat {
+  ok: boolean;
+  calls: number;
+  ms: number;
+  at: number;
+  /** Steps whose element had to be chosen again. */
+  fixed?: number[];
+  /** The slowest steps, when any took long. */
+  slow?: { n: number; ms: number }[];
+  /** All the steps ran and the page did not show what the routine expects. */
+  unconfirmed?: boolean;
+}
+
+const STATS_KEPT = 200;
 const STATS_WINDOW = 20;
+/** Runs in a row that were not clean before a routine is marked stale. */
+export const STALE_AFTER = 3;
+export const SLOW_STEP_MS = 5000;
 
 export interface StatsView {
   runs: number;
+  /** Its last STALE_AFTER runs since it was refined all failed or needed a fix. */
+  stale: boolean;
+  /** A step that was slow in each of those runs. */
+  slowStep?: { n: number; ms: number };
   /** Over the recent runs, 0 to 1. */
   success: number;
   /** Model calls per run over the recent runs. */
@@ -53,11 +76,16 @@ export interface StatsView {
 
 export function viewStats(s?: Stats): StatsView | undefined {
   if (!s?.recent.length) return undefined;
-  const r = s.recent;
+  const r = s.recent.slice(-STATS_WINDOW);
+  const tail = r.filter((x) => x.at > (s.refined ?? 0)).slice(-STALE_AFTER);
+  const full = tail.length === STALE_AFTER;
+  const slowStep = full ? tail[0].slow?.filter((a) => tail.every((x) => x.slow?.some((b) => b.n === a.n))).sort((a, b) => b.ms - a.ms)[0] : undefined;
   const ms = r.map((x) => x.ms).sort((a, b) => a - b);
   const mid = Math.floor(ms.length / 2);
   return {
     runs: s.runs,
+    stale: full && tail.every((x) => !x.ok || x.calls > 0 || !!x.fixed?.length),
+    ...(slowStep ? { slowStep } : {}),
     success: r.filter((x) => x.ok).length / r.length,
     calls: r.reduce((n, x) => n + x.calls, 0) / r.length,
     medianMs: ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2,
@@ -67,19 +95,32 @@ export function viewStats(s?: Stats): StatsView | undefined {
 
 /** Higher is better: finishes reliably and needs the model rarely. A routine never run has no say either way. */
 export function efficiency(v?: StatsView): number {
-  return v ? v.success - 0.15 * Math.min(v.calls, 4) : 0.4;
+  return v ? v.success - 0.15 * Math.min(v.calls, 4) - (v.stale ? 0.3 : 0) : 0.4;
 }
 
 /** Count one finished run of a routine. Paused runs are not counted until they end. */
-export async function recordRun(id: string, r: { ok: boolean; calls: number; ms: number }): Promise<void> {
+export async function recordRun(id: string, r: Omit<RunStat, 'at'>): Promise<void> {
   const [owner, name] = await locate(id);
   const f = join(dir(owner, name), '.stats.json');
   const s = (await readJson<Stats>(f)) ?? { runs: 0, recent: [] };
   const at = Date.now();
   s.runs += 1;
-  s.recent = [...s.recent, { ...r, at }].slice(-STATS_WINDOW);
+  s.recent = [...s.recent, { ...r, at }].slice(-STATS_KEPT);
   s.last = { at, ok: r.ok };
   await atomicWrite(f, JSON.stringify(s) + '\n');
+}
+
+/** A deliberate new version: what went wrong before it no longer counts against it. */
+export async function markRefined(id: string): Promise<void> {
+  const [owner, name] = await locate(id);
+  const f = join(dir(owner, name), '.stats.json');
+  const s = await readJson<Stats>(f);
+  if (s) await atomicWrite(f, JSON.stringify({ ...s, refined: Date.now() }) + '\n');
+}
+
+export async function statsOf(id: string): Promise<Stats | undefined> {
+  const [owner, name] = await locate(id);
+  return readJson<Stats>(join(dir(owner, name), '.stats.json'));
 }
 
 function dir(owner: string, name: string) {

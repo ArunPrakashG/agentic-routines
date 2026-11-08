@@ -76,6 +76,13 @@ type routineMeta struct {
 	Instructions string `json:"instructions,omitempty"`
 	// Code on events, run by the extension in a sandbox with no network. Event name to source.
 	Hooks map[string]string `json:"hooks,omitempty"`
+	// How the page looks when the task worked.
+	Expect *expectIn `json:"expect,omitempty"`
+}
+
+type expectIn struct {
+	Text string `json:"text,omitempty"`
+	URL  string `json:"url,omitempty"`
 }
 
 // hookEvents is the list the extension and the CLI accept (packages/core/src/hooks.ts).
@@ -268,6 +275,14 @@ func (r *routineIn) placeholdersOK() bool {
 	for _, s := range m.Secrets {
 		declared[s] = true
 	}
+	if e := m.Expect; e != nil {
+		// A check never reads a secret or a file: only values the person gave.
+		for _, ref := range placeRef.FindAllStringSubmatch(e.Text+" "+e.URL, -1) {
+			if p, ok := m.Params[ref[2]]; ref[1] != "" || !ok || p.Type == "file" {
+				return false
+			}
+		}
+	}
 	for i := range r.Steps {
 		s := &r.Steps[i]
 		if s.Action == "upload" {
@@ -366,6 +381,9 @@ func (r *routineIn) check(name string) string {
 		if n < 1 || n > len(r.Steps) {
 			return "bad_pauses"
 		}
+	}
+	if e := m.Expect; e != nil && (len(e.Text) > 300 || len(e.URL) > 300) {
+		return "bad_expect"
 	}
 	for i, s := range r.Steps {
 		if s.N != i+1 || !actions[s.Action] || len(s.Label) > 300 || (s.Value != nil && len(*s.Value) > 4096) || len(s.Crop) > 32 {

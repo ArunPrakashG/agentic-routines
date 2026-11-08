@@ -3,7 +3,8 @@ import { checkHooks } from './hooks.ts';
 import { onSite } from './routine-md.ts';
 import { deriveUrls } from './urls.ts';
 import { pageSimilarity, SAME_PAGE, urlPattern } from './match.ts';
-import type { ParamSpec, RecordedEvent, Routine, RoutineMeta, Run, Step } from './types.ts';
+import { MAX_EXPECT } from './types.ts';
+import type { Expect, ParamSpec, RecordedEvent, Routine, RoutineMeta, Run, Step } from './types.ts';
 
 // A draft is a run on its way to becoming a routine: every recorded step, numbered, nothing dropped
 // until the agent says so. The hints say what could go; the edits are checked here, not trusted.
@@ -24,6 +25,7 @@ interface Snapshot {
   steps: DraftStep[];
   params: Record<string, ParamSpec>;
   secrets: string[];
+  expect?: Expect;
 }
 
 export interface Draft extends Snapshot {
@@ -250,6 +252,7 @@ function buildFromRoutine(r: Routine & { owner?: string }, meta: { name?: string
     steps,
     params: structuredClone(r.meta.params),
     secrets: [...r.meta.secrets],
+    expect: r.meta.expect,
     history: [],
     initial: undefined as unknown as Snapshot,
     createdAt: now(),
@@ -360,9 +363,10 @@ export function renderStep(s: DraftStep, d?: Draft): string {
 export function renderDraft(d: Draft, opts: { hints?: boolean } = {}): string {
   const lines = [`Draft ${d.id} · ${d.name} · ${d.steps.length} steps on ${d.site}${d.base ? ` · refines v${d.base.version}` : ''}`, ''];
   for (const s of d.steps) lines.push(renderStep(s, d));
-  const params = Object.entries(d.params).filter(([k]) => d.steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`)));
+  const params = Object.entries(d.params).filter(([k]) => d.steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`)) || d.expect?.text?.includes(`{{${k}}}`) || d.expect?.url?.includes(`{{${k}}}`));
   if (params.length) lines.push('', 'Asks each run for: ' + params.map(([k, p]) => `${k}${p.example ? ` (recorded: ${clip(p.example, 40)})` : ''}`).join(', '));
   if (d.secrets.length) lines.push(`Secrets (never kept): ${d.secrets.join(', ')}`);
+  if (d.expect) lines.push(`A finished run should show: ${[d.expect.text, d.expect.url && `an address with ${d.expect.url}`].filter(Boolean).join(' and ')}`);
   if (opts.hints !== false) {
     const hs = hints(d);
     if (hs.length) {
@@ -387,13 +391,14 @@ export type Op =
   | { op: 'note'; step: number; text: string }
   | { op: 'first_in_list'; step: number }
   | { op: 'describe'; name?: string; description?: string; do_not_use_for?: string }
+  | { op: 'expect'; text?: string; url?: string }
   | { op: 'undo' }
   | { op: 'reset' };
 
 const MAX_NOTE = 1000;
 
 function snapshot(d: Draft): Snapshot {
-  return structuredClone({ name: d.name, description: d.description, doNotUse: d.doNotUse, steps: d.steps, params: d.params, secrets: d.secrets });
+  return structuredClone({ name: d.name, description: d.description, doNotUse: d.doNotUse, steps: d.steps, params: d.params, secrets: d.secrets, expect: d.expect });
 }
 
 function renumber(d: Draft) {
@@ -533,6 +538,19 @@ function applyOne(d: Draft, op: Op): string {
       if (op.do_not_use_for !== undefined) d.doNotUse = op.do_not_use_for.trim() || undefined;
       return 'Updated the description.';
     }
+    case 'expect': {
+      const text = op.text?.trim();
+      const url = op.url?.trim();
+      for (const v of [text, url]) {
+        if ((v?.length ?? 0) > MAX_EXPECT) throw new EditError(`What a run should show is at most ${MAX_EXPECT} characters.`);
+        for (const ref of (v ?? '').matchAll(/\{\{(secret:)?([a-z0-9_]+)\}\}/g)) {
+          if (ref[1]) throw new EditError('A result to look for cannot use a secret.');
+          if (!d.params[ref[2]]) throw new EditError(`{{${ref[2]}}} is not a parameter. Declare it with { "op": "param", "name": "${ref[2]}" } first.`);
+        }
+      }
+      d.expect = text || url ? { ...(text ? { text } : {}), ...(url ? { url } : {}) } : undefined;
+      return d.expect ? `After the last step a run looks for ${[text && `“${text}”`, url && `an address with ${url}`].filter(Boolean).join(' and ')}.` : 'A run no longer looks for a result.';
+    }
     case 'reset': {
       Object.assign(d, structuredClone(d.initial));
       return 'Back to the proposal.';
@@ -582,6 +600,8 @@ export function validateRoutine(r: Routine): { problems: string[]; warnings: str
   else if (!m.site.includes('.') || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(m.site)) warnings.push(`The directory would not accept the site “${m.site}”.`);
   if (r.body.length > 20 << 10) problems.push('The notes are over 20 KB.');
   if ((m.instructions?.length ?? 0) > 4000) problems.push('The notes for the agent are over 4000 characters.');
+  if ((m.expect?.text?.length ?? 0) > MAX_EXPECT || (m.expect?.url?.length ?? 0) > MAX_EXPECT) problems.push(`What a run should show is over ${MAX_EXPECT} characters.`);
+  for (const ref of `${m.expect?.text ?? ''} ${m.expect?.url ?? ''}`.matchAll(/\{\{(secret:)?([a-z0-9_]+)\}\}/g)) if (ref[1] || !m.params[ref[2]]) problems.push(`What a run should show uses {{${ref[1] ?? ''}${ref[2]}}}, which is not a parameter.`);
   problems.push(...checkHooks(m.hooks));
   if (!r.steps.length || r.steps.length > 300) problems.push('A routine has 1 to 300 steps.');
   if (Object.keys(m.params).length > 30 || m.secrets.length > 10 || (m.returns?.length ?? 0) > 512) problems.push('Too many parameters or secrets.');
@@ -608,7 +628,7 @@ export function finalize(d: Draft, draftedBy?: string): { routine: Routine; pinn
     const { at: _a, navigatedTo: _n, effect: _e, ...rest } = s;
     return { ...rest, n: i + 1 };
   });
-  const used = (k: string) => steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`));
+  const used = (k: string) => steps.some((s) => s.value?.includes(`{{${k}}}`) || s.url?.includes(`{{${k}}}`)) || !!d.expect?.text?.includes(`{{${k}}}`) || !!d.expect?.url?.includes(`{{${k}}}`);
   const params = Object.fromEntries(Object.entries(d.params).filter(([k]) => used(k)));
   const secrets = d.secrets.filter((k) => steps.some((s) => s.value?.includes(`{{secret:${k}}}`)));
   const routine: Routine = {
@@ -622,6 +642,7 @@ export function finalize(d: Draft, draftedBy?: string): { routine: Routine; pinn
       pauses: steps.filter((s) => s.pause).map((s) => s.n),
       urls: d.keep?.urls ?? deriveUrls(steps, d.site),
       ...(d.viewport ? { viewport: d.viewport } : {}),
+      ...(d.expect ? { expect: d.expect } : {}),
       drafted_by: draftedBy,
       ...Object.fromEntries(Object.entries(d.keep ?? {}).filter(([, v]) => v !== undefined)),
     },
