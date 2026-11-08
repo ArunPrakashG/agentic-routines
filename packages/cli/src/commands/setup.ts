@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline/promises';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { BROWSERS, hostManifest, type Browser, type OS } from '@agentic-routines/browsers';
+import { launcher } from '../update.ts';
 import { HOST_NAME, LEGACY_HOST_NAME, paths } from '../paths.ts';
 import { claudeGuidance, claudeRemove, codexGuidance, codexRemove, copilotGuidance, copilotRemove, loc, onPath, opencodeGuidance, opencodeRemove, readState, save, type Line, type Mode } from './agents.ts';
 import { addClient, agentFlags, callingClient, CLIENTS, entryByHand, lastPicked, pickClients, rememberPicked, removeClient, tomlAdd, tomlDrop, type Client } from './clients.ts';
@@ -23,6 +24,9 @@ const tilde = (p: string) => (p.startsWith(H) ? '~' + p.slice(H.length) : p);
 
 function mcpCommand(): string[] {
   const script = realpathSync(process.argv[1]);
+  // Installed: the one command that always starts the current version.
+  const installed = launcher();
+  if (installed) return [installed, 'mcp'];
   if (script.includes(`${'_npx'}`)) return ['npx', '-y', 'agentic-routines', 'mcp'];
   return [process.execPath, script, 'mcp'];
 }
@@ -30,6 +34,13 @@ function mcpCommand(): string[] {
 async function writeHostWrapper(): Promise<string> {
   await mkdir(paths.bin(), { recursive: true, mode: 0o700 });
   const node = process.execPath;
+  const installed = launcher();
+  if (installed) {
+    const p = join(paths.bin(), platform() === 'win32' ? 'host.bat' : 'host');
+    await writeFile(p, platform() === 'win32' ? `@echo off\r\ncall "${installed}" %*\r\n` : `#!/bin/sh\nexec "${installed}" "$@"\n`);
+    if (platform() !== 'win32') await chmod(p, 0o755);
+    return p;
+  }
   // A copy of its own, as npx can prune the cache this script runs from. Running setup again updates it.
   const script = join(paths.bin(), 'host.cjs');
   await copyFile(join(dirname(realpathSync(process.argv[1])), 'host-main.cjs'), script);
@@ -299,7 +310,7 @@ async function chooseClients(flags: ReturnType<typeof agentFlags>, cmd: string[]
   }
   // No terminal and nothing says which agent asked: touch no config, and say how to go on.
   console.log(`Nothing says which agent this is for, so no agent config was changed.\n\nAdd this to your agent's MCP settings:\n${entryByHand(cmd)}\n`);
-  if (found.length) console.log(`Or connect one you have:\n${found.map((c) => `  npx agentic-routines setup --agent ${c.id}`).join('\n')}\n`);
+  if (found.length) console.log(`Or connect one you have:\n${found.map((c) => `  ${launcher() ? '' : 'npx '}agentic-routines setup --agent ${c.id}`).join('\n')}\n`);
   return null;
 }
 

@@ -95,6 +95,7 @@ export class Bridge {
   private told = !!process.env.AGENTIC_ROUTINES_PROFILE;
   private note?: string;
   private nextId = 1;
+  private usedAt = 0;
   /** MCP client name, e.g. "claude-code". */
   agent?: string;
   private own = randomUUID();
@@ -232,8 +233,14 @@ export class Bridge {
     return sock;
   }
 
+  /** Something is being answered, or was a moment ago. */
+  busy(): boolean {
+    return this.waiting.size > 0 || Date.now() - this.usedAt < 5 * 60_000;
+  }
+
   async call<T = unknown>(method: string, params?: unknown, timeoutMs = 60_000): Promise<T> {
     const t = Date.now();
+    this.usedAt = t;
     const call = current.getStore();
     const note = (ok: boolean, out?: string) => debugOn() && record({ kind: 'bridge', call, agent: this.agent, name: method, args: redact(params, '', method), ms: Date.now() - t, ok, out: out ? out.slice(0, 300) : undefined });
     return this.send<T>(method, params, timeoutMs).then(

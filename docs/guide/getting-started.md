@@ -14,6 +14,20 @@ Install it from the store for your browser: Chrome, Edge or Firefox. Brave, Arc 
 npx agentic-routines setup
 ```
 
+That needs Node. Without it, or for a copy that keeps itself up to date, use the install script instead, which brings its own:
+
+```bash
+curl -fsSL https://agenticroutines.arunprakashg.com/install | sh
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://agenticroutines.arunprakashg.com/install.ps1 | iex
+```
+
+It checks the download against the size and checksum the release lists, puts everything in `~/.agentic-routines/app` and one command in `~/.local/bin`, then runs `setup`. It is a folder holding Node and the CLI, about 50 MB to download, not a single file. [Updates](cli.md#updates) says how it stays current.
+
 Use `pnpm dlx`, `bunx` or `yarn dlx` in place of `npx` if you prefer. The command asks which of the agents it found to connect, from 30 it knows (Claude Code, Codex, VS Code with Copilot, OpenCode, Cursor, Windsurf, Gemini CLI, Zed and more), adds the Agentic Routines tool server to each one's config, and registers the native host with every browser it finds. It also tells each agent to use Agentic Routines for all browser work and to try a saved routine first ([how agents choose](/docs/agents)). Run it with `--dry-run` first to see what it would write.
 
 Restart your agent afterwards so it loads the new tools. Then check everything is connected:

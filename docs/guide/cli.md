@@ -10,6 +10,8 @@ npx agentic-routines <command>
 | `setup --exclusive` | The same, and turns off other browser tools in those agents. `--no-exclusive` turns them back on. |
 | `setup --agent <name> ...` | Those agents only, found or not. `--all-agents` or `--yes` is every agent found, without asking. Without any of these it asks in a terminal, connects the calling agent when an agent runs it, and otherwise prints the entry to add by hand. So does `--agent none`, or a name setup does not know. |
 | `setup --remove` | Takes it all back out: tool server, guidance, plugin, hooks and the browser connection. Saved routines stay. |
+| `update` | Looks for a new version now and installs it. `update status` says how it stands, `update off` and `update on` decide whether it does this by itself. Only a copy from the install script updates. |
+| `tools` | Lists every tool an agent has. Each one is a command too, as below. |
 | `doctor` | Checks what is connected and what is not, including the guidance and exclusive mode. |
 | `stats` | What the routines on this computer have saved: this week, per routine and per agent. What was measured and what was estimated is labelled, and it says how the estimate is made. Reads local files only. |
 | `profiles` | Lists the browser profiles with the extension that are open now, numbered. `profiles name <number> <name>` gives one a name an agent can use to pick it (`browser_profile`, or `AGENTIC_ROUTINES_PROFILE`). |
@@ -27,6 +29,34 @@ npx agentic-routines <command>
 | `export <routine>` | Prints a routine as one file, ready to commit under a repository's `routines/` folder. `--playwright` prints it as a Playwright script instead. |
 | `mcp` | Runs the tool server. Your agent starts this. |
 | `host` | Runs the native host. Your browser starts this. |
+
+
+## Every tool is a command
+
+Whatever an agent can do, you or a script can do from a terminal:
+
+```bash
+agentic-routines navigate https://example.com
+agentic-routines read_page
+agentic-routines click --ref e12
+agentic-routines type --ref e14 --text "hello" --submit
+agentic-routines read_page --json '{"filter": "interactive"}'
+agentic-routines navigate --help
+```
+
+A value the tool needs can go without its flag, in order. Dashes and underscores both work, so `read-page` is `read_page`. An image goes to a temporary file, and the command prints where. It exits 1 when the tool failed.
+
+Each command is its own process, so they share a named session to keep their tabs between them. It is called `cli` unless you say `--session <name>` or set `AGENTIC_ROUTINES_SESSION`. `session_delete cli` closes its tabs and forgets it.
+
+## Updates
+
+A copy from the install script looks for a new version about once an hour, and only while nothing has asked the browser for anything in five minutes. It installs beside the running version and switches one file, so what is running carries on with the version it started with until it restarts. It keeps the version that was running and removes the others.
+
+It only takes a version newer than its own, from a manifest signed with the release key built into it, and each download has to match the size and checksum in that manifest. A failed try changes nothing, and `doctor` and `update status` show it. A build with no release key does not update by itself. Neither does a copy from `npx` or a checkout.
+
+`update off` stops it, and so does setting `AGENTIC_ROUTINES_NO_UPDATE=1`. Those two commands only work in a terminal and there is no tool for them, so an agent does not decide this for you in the ordinary way. An agent with a shell could still edit the file they write, as it could any file of yours. The extension is separate, and updates through its store.
+
+The install script itself checks the size and checksum, which catches a damaged download. The signature is only checked by the updater, so a first install trusts HTTPS and wherever you got the command from, as any `curl | sh` does.
 
 ## When something is missing
 
