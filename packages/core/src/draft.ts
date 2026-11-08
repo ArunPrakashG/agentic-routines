@@ -33,6 +33,8 @@ interface Snapshot {
 
 export interface Draft extends Snapshot {
   id: string;
+  /** How many times the run went through execute, which left no steps here. */
+  outside?: number;
   rev: number;
   /** The site the routine works on. */
   site: string;
@@ -165,7 +167,7 @@ function newLandmarks(before?: Step['page'], after?: Step['page']) {
 
 /** A draft of everything the run did, one step per event. */
 export function draftFromRun(run: Run, meta: { name: string; description: string; doNotUse?: string }): Draft {
-  return withInitial(buildFromRun(run, meta));
+  return withInitial({ ...buildFromRun(run, meta), outside: run.outside?.length || undefined });
 }
 
 function withInitial(d: Draft): Draft {
@@ -379,6 +381,7 @@ export function renderStep(s: DraftStep, d?: Draft): string {
 export function renderDraft(d: Draft, opts: { hints?: boolean } = {}): string {
   const lines = [`Draft ${d.id} · ${d.name} · ${d.steps.length} steps on ${d.site}${d.base ? ` · refines v${d.base.version}` : ''}`, ''];
   for (const s of d.steps) lines.push(renderStep(s, d));
+  if (d.outside) lines.push('', `Not in these steps: the run also used execute ${d.outside === 1 ? 'once' : `${d.outside} times`}, and that cannot become a routine. A replay will not do it. Do that part with the step tools and propose again.`);
   const params = Object.entries(d.params).filter(([k]) => d.steps.some((s) => asksFor(s, k)) || d.expect?.text?.includes(`{{${k}}}`) || d.expect?.url?.includes(`{{${k}}}`));
   if (params.length) lines.push('', 'Asks each run for: ' + params.map(([k, p]) => `${k}${p.example ? ` (recorded: ${clip(p.example, 40)})` : ''}`).join(', '));
   if (d.secrets.length) lines.push(`Secrets (never kept): ${d.secrets.join(', ')}`);

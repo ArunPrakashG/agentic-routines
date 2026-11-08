@@ -200,6 +200,8 @@ export interface Run {
   source: string;
   startedAt: number;
   events: RecordedEvent[];
+  /** What went through execute, which is no step and cannot be replayed. */
+  outside?: { ts: number; url?: string; did: string[] }[];
 }
 
 export type RunStatus = 'done' | 'paused' | 'needs_choice' | 'failed';

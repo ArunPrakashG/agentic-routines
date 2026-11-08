@@ -83,6 +83,18 @@ An agent's tabs normally belong to its server, and close when it stops. A named 
 
 A session stays in the browser profile it started in. If that profile is closed the agent is told, and nothing moves to another one. Start a server in a session with `AGENTIC_ROUTINES_SESSION=<name>`.
 
+### Playwright code on the page
+
+| Tool | What it does |
+|---|---|
+| `execute` | Runs Playwright code against the session's page. `page` and `context` are there, with `console`, timers and `files.write`. `return` gives a value back. |
+
+Prefer the step tools on a page you have not seen. You cannot write code for a page you have not read, and looking costs a call either way. `execute` pays off for many small actions on a page you already know, such as reading a long table.
+
+It runs in a V8 context on a thread of its own, without Node, network modules or `import`. Playwright's objects come through wrappers that refuse what would touch a file, start a browser or send requests from outside the page: a `path` option, `setInputFiles`, `route`, `browser()`, `storageState`. `files.write(name, data)` is the only way to a file, in a new folder for each call. Code that holds on for 2 seconds without yielding is stopped, as a whole call is after `timeout_seconds` (30 by default, 300 at most). What was already done stays done.
+
+What it does is recorded with the run and listed in the result, with the values left out. It cannot become a routine, as a replay has no steps for it, and `routine_propose` says so.
+
 ### A DevTools address, for Playwright
 
 | Tool | What it does |
