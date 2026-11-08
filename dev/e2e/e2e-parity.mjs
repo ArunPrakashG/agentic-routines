@@ -299,6 +299,8 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await call('navigate', { url: `${SITE}/fields.html` });
   const code = await call('type_secret', { ref: refFor(await read(), /textbox “Name”/), name: 'site_code' });
   check(!code.error, 'a one-time code goes in by name');
+  const day = await call('type_secret', { ref: refFor(await read(), /“Day”/), name: 'site_pw' });
+  check(day.error && /not typed text/.test(day.text) && !day.text.includes(value), `a field that takes a date refuses it and says so: ${day.text.slice(0, 160)}`);
   check(/^\d{6}$/.test(totp('JBSWY3DPEHPK3PXP')) && totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 59_000) === '287082', 'and is the code an authenticator would show');
 
   const run = await call('routine_propose', { name: 'sign-in-with-secret', description: 'Fill the field. Use when testing secrets.' });
@@ -467,7 +469,7 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await session();
   await call('navigate', { url: `${SITE}/chores.html` });
   const title = await call('execute', { code: `console.log('hello'); return { title: await page.title(), n: await page.locator('button').count() };` });
-  check(/"title":"[^"]*Chores"/.test(title.text) && /hello/.test(title.text), 'code runs on the page, and says what it returned and logged');
+  check(/"title":"Chores"/.test(title.text) && /hello/.test(title.text), `code runs on the page, sees the page's own title, and says what it returned and logged: ${title.text.slice(0, 200)}`);
 
   const bare = await call('execute', { code: `return [typeof process, typeof require, typeof fetch, typeof Buffer].join();` });
   check(/undefined,undefined,undefined,undefined/.test(bare.text), 'it has no Node');

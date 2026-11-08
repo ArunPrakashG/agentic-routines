@@ -194,6 +194,20 @@ let meterParam;
 
   const panel = await (await fetch(`${CDP}/json/new?chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo/sidepanel.html`, { method: 'PUT' })).json();
   await sleep(1000);
+  // A request for the person shows before anyone signs in.
+  await call('navigate', { url: CHORES });
+  const asked = call('javascript', { code: 'document.title' });
+  let card = '';
+  for (let i = 0; i < 20 && !/wants to run a script/.test(card); i++) {
+    await sleep(500);
+    card = String(await evalIn(`document.body.innerText`, 'sidepanel.html'));
+  }
+  check(/wants to run a script/.test(card) && !/Continue with Google/.test(card), `a signed-out panel shows a script waiting for the person: ${card.replace(/\s+/g, ' ').slice(0, 200)}`);
+  await evalIn(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'No')?.click(), true`, 'sidepanel.html');
+  const no = await asked;
+  check(no.error, `and the answer reaches the agent: ${no.text.slice(0, 120)}`);
+  await sleep(500);
+  check(!/wants to run a script/.test(String(await evalIn(`document.body.innerText`, 'sidepanel.html'))), 'then the card goes');
   // Signed in, as the panel shows nothing else to someone who is not.
   await evalIn(`chrome.storage.local.set({ session: { account: { email: 'test@example.com', name: 'Test' }, access: 'x', accessExp: Date.now() + 3600000, refresh: 'x' } }).then(() => true)`, 'sidepanel.html');
   await sleep(1500);

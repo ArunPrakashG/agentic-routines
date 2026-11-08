@@ -887,10 +887,15 @@ export function press(keys: string) {
 const masked = new WeakSet<Element>();
 export function maskField(el: Element) {
   if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el as HTMLElement).isContentEditable)) throw new Error('A secret can only go in a field you can type in.');
-  if (fieldKind(el) === 'file' || fieldKind(el) === 'select') throw new Error('A secret can only go in a field you can type in.');
+  if (fieldKind(el) !== 'text' && fieldKind(el) !== 'password') throw new Error('A secret can only go in a field you can type in.');
+  // A date or a colour is not typed, and a secret put in one would just be dropped.
+  if (takesValue(el)) throw new Error(`That field takes ${VALUE_FORMS[(el as HTMLInputElement).type]}, not typed text, so the secret was not used.`);
   masked.add(el);
   (el as HTMLElement).style.setProperty('-webkit-text-security', 'disc', 'important');
 }
+
+/** How much a field holds, so a secret can be checked as kept without anyone reading it. */
+export const heldLength = (el: Element) => (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value.length : (el.textContent ?? '').length);
 
 export function fieldKind(el: Element): 'text' | 'password' | 'file' | 'select' | 'other' {
   if (el instanceof HTMLInputElement) {

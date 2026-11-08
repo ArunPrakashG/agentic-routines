@@ -4,7 +4,7 @@ import { challengeHere } from '../lib/page/challenge';
 import { hiddenWhy } from '../lib/page/hidden';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { maskField, accessibleName, aimAt, allShadowRoots, attach, busyWhy, clickedThing, closestDeep, deepAll, deepPoint, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
+import { heldLength, maskField, accessibleName, aimAt, allShadowRoots, attach, busyWhy, clickedThing, closestDeep, deepAll, deepPoint, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
@@ -22,6 +22,7 @@ export type ContentMsg =
   | { t: 'describe'; ref: string }
   | { t: 'rendering' }
   | { t: 'secretField'; ref: string; origin: string }
+  | { t: 'heldLength'; ref: string }
   | { t: 'act'; ref?: string; action: string; value?: string; how?: How; quick?: boolean }
   | { t: 'aim'; ref: string; action: string; spot?: Spot; at?: Point; moving?: boolean; quick?: boolean }
   | { t: 'at'; x: number; y: number }
@@ -305,6 +306,10 @@ export default defineContentScript({
             if (location.origin !== msg.origin) throw new Error(`This field is on ${location.origin}, not ${msg.origin}, so the secret was not used.`);
             maskField(byRef(msg.ref));
             send({ ok: true });
+            break;
+          }
+          case 'heldLength': {
+            send({ ok: heldLength(byRef(msg.ref)) });
             break;
           }
           case 'act': {
