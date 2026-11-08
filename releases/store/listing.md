@@ -28,7 +28,8 @@ It is made for agents, not people. You do not record or manage anything: your ag
 - Install routines other people maintain, so your agent skips the recording.
 - Checks the page before each step. If a step clearly changed, your agent fixes just that step.
 - Pauses before steps that cannot be undone, such as submit, publish, pay or delete.
-- Keeps no secrets unless you save one yourself, on your computer, for a single site. Agents only see its name. Recordings stay on your computer.
+- Keeps no secrets unless you save one yourself, on your computer, for a single site. Agents only see its name. Recordings stay on your computer, or on the one running your agent if you connect to it.
+- Your agent can run on another computer of yours. That computer needs your agent, and this one only the extension. You connect them in Settings, with an address and a one-time code.
 - Free and open source.
 
 Needs one free command to connect your browser and your agent: `npx agentic-routines setup`.
@@ -40,7 +41,8 @@ Developer Tools
 ## Privacy practices (Chrome Web Store form)
 
 - Collects, only if the user signs in with Google or publishes a routine: personally identifiable information (email, name, picture, account id), authentication information (a session token, stored as a hash) and website content (the steps and pages of a routine the user chooses to publish).
-- Does not collect: health, financial, personal communications, location or user activity. Recordings stay on the user's device unless the user publishes.
+- Website content and user activity (pages, addresses, what is typed, clicks) leave the device only if the user connects the extension to another computer of their own, by entering its address and a one-time code. They go to that computer only, with no server of ours in the middle, and we never receive them.
+- Does not collect: health, financial, personal communications or location. We do not receive user activity. Recordings stay on the user's device unless the user publishes, or connects to another computer, where they are kept.
 - All three certifications apply: not sold, not used outside the single purpose, not used for credit or lending.
 - Remote code: none. Everything runs from the package. The store build has no eval and no hook sandbox.
 - Privacy policy: https://agenticroutines.arunprakashg.com/privacy

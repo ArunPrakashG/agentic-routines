@@ -12,7 +12,7 @@ export const pages = [
   { slug: 'hooks', title: 'Hooks and instructions', summary: 'Notes for the agent, and code that runs on events during a replay, with what it may do and how it is approved.' },
   { slug: 'tools', title: 'Agent tools', summary: 'Every tool the MCP server gives your agent.' },
   { slug: 'safety', title: 'Untrusted content', summary: 'What an agent should not trust, and what the extension enforces.' },
-  { slug: 'remote', title: 'A browser on another machine', summary: 'The agent on a server, the browser on your computer, and what the link does not protect.' },
+  { slug: 'remote', title: 'A browser on another computer', summary: 'The agent on a server, only the browser and the extension on your computer, and what the link does not protect.' },
   { slug: 'cli', title: 'Command line', summary: 'setup, doctor, sources and export.' },
   { slug: 'repositories', title: 'Routine repositories', summary: 'config.routine: what a Git repository of routines says about itself, with a full example.' },
   { slug: 'sharing', title: 'Sharing and publishing', summary: 'The directory, GitHub repositories and what review involves.' },

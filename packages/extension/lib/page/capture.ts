@@ -46,24 +46,24 @@ const toRecorder = async <T = unknown>(msg: object): Promise<T> => {
 // ---------- files ----------
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-const write = (name: string, data: string, base64: boolean) => native.call<{ path: string; bytes: number }>('fs.capture', { name, data, base64 });
+const write = (name: string, data: string, base64: boolean, tab: number) => native.call<{ path: string; bytes: number }>('fs.capture', { name, data, base64 }, { tab });
 
 // Pieces of one video, in order, whichever message brings them.
-const files = new Map<string, { name: string; chain: Promise<unknown>; path?: string; bytes: number }>();
+const files = new Map<string, { name: string; tab: number; chain: Promise<unknown>; path?: string; bytes: number }>();
 export function videoPiece(id: string, data: string) {
   const f = files.get(id);
   if (!f) return;
   f.chain = f.chain.then(async () => {
-    const r = await write(f.name, data, true);
+    const r = await write(f.name, data, true, f.tab);
     f.path = r.path;
     f.bytes = r.bytes;
   });
 }
 
-async function openVideo(id: string, format: 'webm' | 'mp4', kind: string) {
+async function openVideo(id: string, format: 'webm' | 'mp4', kind: string, tab: number) {
   needDebugger();
   await ensureOffscreen();
-  files.set(id, { name: `${kind}-${stamp()}-${id}.${format}`, chain: Promise.resolve(), bytes: 0 });
+  files.set(id, { name: `${kind}-${stamp()}-${id}.${format}`, tab, chain: Promise.resolve(), bytes: 0 });
   await toRecorder({ t: 'rec.start', id, format });
 }
 
@@ -96,7 +96,7 @@ export async function startRecording(tabId: number, o: { format?: 'webm' | 'mp4'
   if (recordings.has(tabId)) throw new Error('This tab is already being recorded. Stop it first.');
   const id = crypto.randomUUID().slice(0, 8);
   const format = o.format ?? 'webm';
-  await openVideo(id, format, 'recording');
+  await openVideo(id, format, 'recording', tabId);
   const rec: Recording = { id, format, cursor: !!o.cursor, startedAt: Date.now(), frames: 0, stop: () => {} };
   recordings.set(tabId, rec);
   if (!rec.cursor) await veil(tabId, true);
@@ -122,7 +122,7 @@ export async function stopRecording(tabId: number, cancel = false) {
   if (!rec.cursor) await veil(tabId, false);
   const out = await closeVideo(rec.id).catch((e) => (cancel ? undefined : Promise.reject(e)));
   if (cancel) {
-    if (out) await native.call('fs.captureRemove', { path: out.path }).catch(() => {});
+    if (out) await native.call('fs.captureRemove', { path: out.path }, { tab: tabId }).catch(() => {});
     return { cancelled: true };
   }
   return { ...out, frames: rec.frames, seconds: Math.round((Date.now() - rec.startedAt) / 1000), broke: rec.broke };
@@ -175,13 +175,14 @@ export const flightStatus = (tabId: number) => {
 };
 
 /** The last minute as a video. A person reads it faster than it happened, so it plays that way, and it does not take a minute to make. */
-export async function saveFlight(tabId: number) {
+export async function saveFlight(tabId: number, session?: string) {
+  native.noteTab(tabId, session);
   const f = flights.get(tabId);
   if (!f) throw new Error('The flight recorder is not on for this tab. Start it before what you want to catch.');
   if (!f.frames.length) throw new Error('The flight recorder has no pictures yet.');
   const id = crypto.randomUUID().slice(0, 8);
   const frames = [...f.frames];
-  await openVideo(id, 'webm', 'flight');
+  await openVideo(id, 'webm', 'flight', tabId);
   for (const data of frames) {
     await toRecorder({ t: 'rec.frame', id, data });
     await sleep(1000 / (FLIGHT_FPS * FLIGHT_SPEEDUP));
@@ -313,6 +314,6 @@ export async function stopNetwork(tabId: number, cancel = false) {
   if (!c) throw new Error('This tab is not being captured.');
   captures.delete(tabId);
   if (cancel) return { cancelled: true };
-  const out = await write(`network-${stamp()}-${crypto.randomUUID().slice(0, 8)}.har`, JSON.stringify(toHar(c), null, 1), false);
+  const out = await write(`network-${stamp()}-${crypto.randomUUID().slice(0, 8)}.har`, JSON.stringify(toHar(c), null, 1), false, tabId);
   return { ...out, requests: c.entries.size };
 }

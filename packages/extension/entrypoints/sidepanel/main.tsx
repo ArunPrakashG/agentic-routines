@@ -9,6 +9,7 @@ import './panel.css';
 import { addSavings, compileRun, HOW_ESTIMATED, noSavings, roughTime, savingsOf, savingsText, siteOf, type ParamSpec } from '@agentic-routines/core';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { onPrivateNetwork } from '../../lib/agent/link';
 import type { Account as AccountInfo } from '../../lib/remote/auth';
 import type { LiveRoutine, Submission } from '../../lib/remote/directory';
 import type { GitCard, SourceEntries, SourcesData } from '../../lib/remote/git';
@@ -150,7 +151,7 @@ function GoogleG() {
   );
 }
 
-function SignIn() {
+function SignIn({ s }: { s: PanelState }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   async function go() {
@@ -180,6 +181,10 @@ function SignIn() {
             That didn't work. Try again.
           </p>
         )}
+        <details>
+          <summary>My agent is on another computer</summary>
+          <LinkSettings s={s} />
+        </details>
       </main>
       <footer class="signin-foot">Passwords you type are never saved.</footer>
     </div>
@@ -265,6 +270,63 @@ function Toggle({ label, on, set }: { label: string; on: boolean; set: (v: boole
   );
 }
 
+/** The way to an agent on another computer. Only the person, here, can make one. */
+function LinkSettings({ s }: { s: PanelState }) {
+  const [address, setAddress] = useState('');
+  const [code, setCode] = useState('');
+  const [anyway, setAnyway] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const open = useMemo(() => {
+    try {
+      return !!address.trim() && !onPrivateNetwork(address);
+    } catch {
+      return false;
+    }
+  }, [address]);
+  const run = (p: Promise<unknown>) => {
+    setBusy(true);
+    setError('');
+    return p.then(() => setCode(''), (e) => setError(e.message)).finally(() => setBusy(false));
+  };
+  if (s.link) {
+    return (
+      <section class="stack" style={{ gap: '8px' }} aria-label="Another computer">
+        <span class="label">Another computer</span>
+        <p>{s.link.connected ? `Connected to ${s.link.computer}. Agents there can use this browser with your sign-ins.` : `Not connected to ${s.link.computer}. Trying again.`}</p>
+        {s.link.error && !s.link.connected && <div class="warnbox bad" role="alert">{s.link.error}</div>}
+        <button class="btn" type="button" disabled={busy} onClick={() => void run(send({ t: 'linkForget' }))}>
+          Disconnect
+        </button>
+      </section>
+    );
+  }
+  return (
+    <form class="stack" style={{ gap: '8px' }} aria-label="Another computer" onSubmit={(e) => { e.preventDefault(); void run(send({ t: 'linkPair', address, code, acceptOpen: anyway })); }}>
+      <span class="label">Another computer</span>
+      <p>If your agent runs on another computer, ask it for an address and a code. It can then use this browser with your sign-ins, so connect only to a computer of your own.</p>
+      <label class="field">
+        <span class="label">Address</span>
+        <input class="input" value={address} autocomplete="off" spellcheck={false} onInput={(e) => setAddress(e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span class="label">Code</span>
+        <input class="input" value={code} autocomplete="off" spellcheck={false} onInput={(e) => setCode(e.currentTarget.value)} />
+      </label>
+      {open && (
+        <div class="warnbox" role="note">
+          <p>This address is not on a private network. Pages, what you type and your agent's commands could be read and changed on the way. Use Tailscale or an SSH tunnel instead.</p>
+          <Toggle label="Connect anyway" on={anyway} set={setAnyway} />
+        </div>
+      )}
+      {error && <div class="warnbox bad" role="alert">{error}</div>}
+      <button class="btn btn-primary" type="submit" disabled={busy || !address.trim() || !code.trim() || (open && !anyway)}>
+        {busy ? 'Connecting…' : 'Connect'}
+      </button>
+    </form>
+  );
+}
+
 function SettingsView({ s, back }: { s: PanelState; back: () => void }) {
   const c = s.settings;
   const set = (change: Partial<PanelState['settings']>) => void send({ t: 'setting', change });
@@ -283,6 +345,7 @@ function SettingsView({ s, back }: { s: PanelState; back: () => void }) {
         <Toggle label="Show the agent's cursor on the page" on={c.agentCursor} set={(agentCursor) => set({ agentCursor })} />
         <Toggle label="Notify me when an agent hands me a tab" on={c.handoffNotifications} set={(handoffNotifications) => set({ handoffNotifications })} />
         <Toggle label="Move and type at a person's pace" on={c.humanInput} set={(humanInput) => set({ humanInput })} />
+        <LinkSettings s={s} />
       </main>
     </div>
   );
@@ -575,6 +638,10 @@ function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
           <h2>Connect your agent</h2>
           <p>Run this once in a terminal. It sets up every agent it finds.</p>
         </div>
+        <details>
+          <summary>My agent is on another computer</summary>
+          <LinkSettings s={s} />
+        </details>
         <div class="cmd">
           <span>
             <span style={{ color: 'var(--text-3)' }}>$ </span>
@@ -1429,7 +1496,7 @@ function App() {
     );
   }
 
-  if (!s.account) return <SignIn />;
+  if (!s.account) return <SignIn s={s} />;
   if (s.install) return <InstallGit card={s.install} />;
   if (s.hooksReview) return <HooksReview r={s.hooksReview} />;
 

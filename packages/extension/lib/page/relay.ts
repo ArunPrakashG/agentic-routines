@@ -64,6 +64,7 @@ async function refusal(session: string, tabId: number, method: string, params: a
   }
   // The host checks a path the same way for this as for the upload tool. One it will not hand over does not get to the page.
   if (method === 'DOM.setFileInputFiles') {
+    if (native.linked({ session })) return 'The browser is on another computer, so it cannot read a path on this one. Use the upload tool, which sends the file over.';
     const refused = await native.call('host.allowFiles', { paths: params?.files ?? [] }).then(() => undefined, (e: Error) => e.message);
     if (refused) return refused;
   }
@@ -214,20 +215,22 @@ export function watchRelay() {
   platform.onEvent?.((tabId, method, params, child) => {
     if (!relayed.has(tabId)) return;
     if (method === 'detached') {
+      const session = relayed.get(tabId);
       relayed.delete(tabId);
-      native.emit('cdp.gone', { tabId });
+      native.emit('cdp.gone', { tabId }, { session });
       return;
     }
-    native.emit('cdp.event', { tabId, child, method, params: scrub(params) });
+    native.emit('cdp.event', { tabId, child, method, params: scrub(params) }, { session: relayed.get(tabId) });
   });
   browser.tabs.onRemoved.addListener((tabId) => {
-    if (relayed.delete(tabId)) native.emit('cdp.gone', { tabId });
+    const session = relayed.get(tabId);
+    if (relayed.delete(tabId)) native.emit('cdp.gone', { tabId }, { session });
   });
   // A tab the session has just got: a popup its page opened, or one a tool opened for it.
   browser.tabs.onCreated.addListener((t) => {
     if (t.id === undefined || !relayed.size) return;
     setTimeout(() => {
-      for (const session of new Set(relayed.values())) if (isOwnTab(session, t.id!)) native.emit('cdp.tab', { session, tabId: t.id });
+      for (const session of new Set(relayed.values())) if (isOwnTab(session, t.id!)) native.emit('cdp.tab', { session, tabId: t.id }, { session });
     }, 100);
   });
 }

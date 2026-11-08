@@ -17,6 +17,7 @@ import { noteTyped, refuseScript, secretForField } from '../page/secrets';
 import { changeSettings, settings } from '../page/settings';
 import { adopt, agentTabId, ask, cleanUp, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, lentTabs, nameSession, noteSession, onItsSites, openTab, releaseSession, sessionTabs, settle, takePopupRefused, takeSpawned, waitLoaded } from '../page/tabs';
 import { listed, notListed, policyOf, setPolicy, takeRefused } from '../page/policy';
+import { getDownload, listDownloads } from '../page/downloads';
 
 // The browser tools agents call. Each call is done and recorded.
 
@@ -87,13 +88,15 @@ const acceptsFile = (accept: string, name: string) =>
  * The host checks each path first, so a missing, unreadable, forbidden or too large file is said clearly before anything moves.
  * With a DevTools session the browser reads the paths itself; without one the files stream through the host.
  */
-export async function uploadFile(tabId: number, ref: string, value: string): Promise<{ names: string[]; warnings: string[] }> {
+export async function uploadFile(tabId: number, ref: string, value: string, session?: string): Promise<{ names: string[]; warnings: string[] }> {
+  const via = { session };
   const files = pathsOf(value);
   if (!files.length) throw new Error('No file path was given.');
   const infos = [];
-  for (const path of files) infos.push(await native.call<{ name: string; size: number; tooBigToStream: boolean; label: string; limit: string }>('fs.info', { path }));
+  for (const path of files) infos.push(await native.call<{ name: string; size: number; tooBigToStream: boolean; label: string; limit: string }>('fs.info', { path }, via));
   const warnings: string[] = [];
-  const mark = platform.cdp ? await ask<false | { multiple: boolean; accept: string }>(tabId, { t: 'markUpload', ref }) : false;
+  // A browser on another computer cannot read a path on the agent's, so the file goes over the link in pieces.
+  const mark = platform.cdp && !native.linked(via) ? await ask<false | { multiple: boolean; accept: string }>(tabId, { t: 'markUpload', ref }) : false;
   if (mark) {
     try {
       if (files.length > 1 && !mark.multiple) throw new Error('That file input takes one file. Upload them one at a time, or pass the ref of an input that allows several.');
@@ -112,6 +115,7 @@ export async function uploadFile(tabId: number, ref: string, value: string): Pro
   // No DevTools session, or a drop zone with no input behind it: the pieces go through the host.
   const big = infos.find((i) => i.tooBigToStream);
   const total = infos.reduce((n, i) => n + i.size, 0);
+  if (big && native.linked(via)) throw new Error(`${big.name} is ${big.label}. The browser is on another computer, and the most that crosses the link is ${big.limit}. Copy the file to that computer and ask the person to attach it.`);
   if (big) throw new Error(`${big.name} is ${big.label}. This browser cannot send a file over ${big.limit}; use a Chromium browser, or a smaller file.`);
   if (total > 25 * 1024 * 1024) throw new Error(`Together the files are ${(total / 1048576).toFixed(0)} MB, over the 25 MB this browser can send at once. Upload them in smaller groups.`);
   const out: { name: string; type: string; b64: string }[] = [];
@@ -119,7 +123,7 @@ export async function uploadFile(tabId: number, ref: string, value: string): Pro
     const parts: string[] = [];
     let offset = 0;
     for (;;) {
-      const c = await native.call<{ name: string; size: number; data: string }>('fs.readChunk', { path, offset });
+      const c = await native.call<{ name: string; size: number; data: string }>('fs.readChunk', { path, offset }, via);
       parts.push(c.data);
       offset += (c.data.length * 3) / 4 - (c.data.endsWith('==') ? 2 : c.data.endsWith('=') ? 1 : 0);
       if (offset >= c.size || !c.data) break;
@@ -189,13 +193,13 @@ async function act(source: string, session: string | undefined, tabId: number, r
   if (mk?.on && d.field !== 'password') addMark(session, tabId, before, d, mk.note, false);
   let uploaded: Awaited<ReturnType<typeof uploadFile>> | undefined;
   let note: string | undefined;
-  if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!);
+  if (action === 'upload') uploaded = await uploadFile(tabId, ref, value!, session);
   else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
   else {
     // Asked for at the last moment, for this field, and kept nowhere. What is recorded is the name.
     const stored = /^\{\{secret:([a-z0-9_]+)\}\}$/.exec(value ?? '')?.[1];
     if (d.field === 'password' && value && !stored) noteTyped(value);
-    note = await perform(tabId, ref, action, stored ? await secretForField(tabId, ref, stored) : value, how);
+    note = await perform(tabId, ref, action, stored ? await secretForField(tabId, ref, stored, session) : value, how);
   }
   const after = await settle(tabId, before);
   // A click on a tick is kept as what it came to, or a replay would untick what is already ticked.
@@ -249,7 +253,7 @@ let mayRunScript: (site: string, code: string, by: string) => Promise<void> = as
 export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
 
 // All a read-only session may call. Anything added later stays refused until someone decides otherwise.
-const READ_ONLY = new Set(['browser.recording', 'browser.flight_recorder', 'browser.network_capture', 'browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
+const READ_ONLY = new Set(['browser.downloads', 'browser.download_get', 'browser.recording', 'browser.flight_recorder', 'browser.network_capture', 'browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
 
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
@@ -263,8 +267,13 @@ export async function handle(method: string, p: any): Promise<unknown> {
       if (p.policy?.name) nameSession(p.target, p.policy.name);
       return true;
     }
+    case 'browser.downloads':
+      return listDownloads(p?.session);
+    case 'browser.download_get':
+      return getDownload(p?.session, p.id);
     case 'browser.recording': {
       const tabId = await working(p?.session, p.tab_id);
+      native.noteTab(tabId, p?.session);
       if (p.action === 'start') return startRecording(tabId, p);
       if (p.action === 'stop') return stopRecording(tabId);
       if (p.action === 'cancel') return stopRecording(tabId, true);
@@ -272,6 +281,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.flight_recorder': {
       const tabId = await working(p?.session, p.tab_id);
+      native.noteTab(tabId, p?.session);
       if (p.action === 'start') return startFlight(tabId);
       if (p.action === 'save_last') return saveFlight(tabId);
       if (p.action === 'cancel') {
@@ -282,6 +292,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
     }
     case 'browser.network_capture': {
       const tabId = await working(p?.session, p.tab_id);
+      native.noteTab(tabId, p?.session);
       if (p.action === 'start') return startNetwork(tabId);
       if (p.action === 'stop') return stopNetwork(tabId);
       if (p.action === 'cancel') return stopNetwork(tabId, true);

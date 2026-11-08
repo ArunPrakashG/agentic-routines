@@ -551,7 +551,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     // The file is the person's to give: a path written into the routine, or set by a hook, is never read.
     const param = /^\{\{([a-z0-9_]+)\}\}$/.exec(step.value ?? '')?.[1];
     if (!param || s.routine.meta.params[param]?.type !== 'file') throw new Error(`Stopped: step ${step.n} uploads a file the routine picks`);
-    await uploadFile(s.tabId, ref, fill(step.value, s.params)!);
+    await uploadFile(s.tabId, ref, fill(step.value, s.params)!, s.session);
   }
   else if (kind === 'read') s.read[s.loop ? `${step.label} (${s.loop.pass})` : step.label] = await ask<string>(s.tabId, { t: 'act', ref, action: 'read' });
   else if (kind === 'drag') {
@@ -560,7 +560,7 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     await input(s.tabId, ref, kind, undefined, { ...step.pointer, toRef: end.ref });
   }
   else {
-    if (fromStore) value = await secretForField(s.tabId, ref, fromStore);
+    if (fromStore) value = await secretForField(s.tabId, ref, fromStore, s.session);
     await input(s.tabId, ref, kind, value, step.pointer);
   }
   await settle(s.tabId, before);
@@ -744,7 +744,7 @@ async function ended(s: ReplayState) {
   if (s.ended || !s.started) return;
   s.ended = true;
   if (flightOn(s.tabId)) {
-    if (s.status === 'failed') s.flightRecording = await saveFlight(s.tabId).then((f) => f.path, () => undefined);
+    if (s.status === 'failed') s.flightRecording = await saveFlight(s.tabId, s.session).then((f) => f.path, () => undefined);
     if (s.flightForRun) stopFlight(s.tabId);
   }
   await hook(s, 'run.end', undefined, { detail: { status: s.status, error: s.error } }).catch(() => ({}));

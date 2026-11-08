@@ -74,7 +74,7 @@ Your own numbers will differ. Only the agent's runs count, not the ones you star
 
 ## What stays on your computer
 
-Routines, recordings and screenshot crops live in `~/.agentic-routines` on your machine. Crops are never published. See the [privacy page](/privacy) for the full list of what is sent when you sign in or publish.
+Routines, recordings and screenshot crops live in `~/.agentic-routines` on your machine. Crops are never published. With a browser on [another computer](remote.md), they live on the agent's computer. See the [privacy page](/privacy) for the full list of what is sent when you sign in, publish or connect to another computer.
 
 ## Window size
 

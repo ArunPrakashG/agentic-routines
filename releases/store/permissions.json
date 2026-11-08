@@ -8,6 +8,8 @@
   "webNavigation": "Lists the frames in a tab, so an agent can read and act inside an embedded form or editor the same way a person does, and leave out frames a person cannot see.",
   "webRequest": "Reads which address a page was really loaded from, only while a tab is in a session the user limited to named sites, so that a listed site that turns out to live on a private address is left at once. Nothing is changed or blocked through this permission and nothing is sent anywhere.",
   "declarativeNetRequestWithHostAccess": "Stops a tab in a session the user limited to named sites from going to any other site, including through a redirect. Each rule covers one tab and is removed when the session lets go of it.",
+  "alarms": "Wakes the extension about once a minute to reconnect to the user's agent on another computer, only after the user connected one in Settings. A socket alone does not wake a service worker.",
+  "downloads": "Lets an agent see what the browser downloaded while it was working and get the file, when the user asks it to work with one. It sees nothing from before that agent started.",
   "notifications": "Tells the person when an agent hands them a tab for a login, a code or a payment, if they keep that setting on. Clicking it goes to the tab.",
   "offscreen": "Makes a video from pictures of a tab, when the person or their agent asks to record it. A service worker has no canvas to do that on. The video is written to a folder on this computer and sent nowhere.",
   "tabGroups": "Puts the tab an agent is working in into a group named for that agent, so the person can see which tabs are in use and by whom. The tab leaves the group when the agent is done. Tabs already in one of the person's own groups are left alone.",
