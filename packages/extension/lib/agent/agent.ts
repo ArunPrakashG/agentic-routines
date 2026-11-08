@@ -16,6 +16,8 @@ interface Described {
   loc: Locator;
   rect: Rect;
   field: RecordedEvent['field'];
+  /** Ticked or not, for what can be. */
+  state?: boolean;
   label: string;
   page: PageFingerprint;
   view?: Viewport;
@@ -170,6 +172,16 @@ async function act(source: string, session: string | undefined, tabId: number, r
   else if (action === 'click' && d.field === 'file') throw new Error('That is a file input: clicking it opens the file picker, which nobody can answer. Call upload with this ref and the absolute path of the file instead.');
   else note = await perform(tabId, ref, action, value, how);
   const after = await settle(tabId, before);
+  // A click on a tick is kept as what it came to, or a replay would untick what is already ticked.
+  if (action === 'click' && d.state !== undefined && after === before && !how?.button && !how?.count) {
+    const now = await ask<Described>(tabId, { t: 'describe', ref }).then((x) => x.state, () => undefined);
+    if (now !== undefined) {
+      action = 'set';
+      value = String(now);
+      const { pointer: _p, ...rest } = extra;
+      extra = rest;
+    }
+  }
   // A new address can reuse refs for other elements.
   if (after === before) lastActed.set(session ?? 'user', { tabId, ref });
   else lastActed.delete(session ?? 'user');
@@ -232,6 +244,19 @@ export async function handle(method: string, p: any): Promise<unknown> {
       const tabId = await working(p?.session, p.tab_id);
       const out = await llm.find(tabId, { scope: p.scope, full: p.full, maxBytes: p.max_bytes });
       return { ...out, page: (await browser.tabs.get(tabId)).url };
+    }
+    case 'browser.find': {
+      const tabId = await working(p?.session, p.tab_id);
+      return { ...(await ask<{ lines: string[]; total: number }>(tabId, { t: 'find', query: p.query })), url: (await browser.tabs.get(tabId)).url };
+    }
+    case 'browser.text': {
+      const tabId = await working(p?.session, p.tab_id);
+      return ask(tabId, { t: 'pagetext' });
+    }
+    case 'browser.form_input': {
+      const tabId = await working(p?.session, p.tab_id);
+      const { d, note } = await act(source, p?.session, tabId, p.ref, 'set', String(p.value), {}, { on: !!p.mark, note: p.note });
+      return `Set “${d.label || d.loc.name || d.loc.tag}”${d.field === 'password' ? '' : ` to ${p.value}`}.${note ? ` ${note}` : ''}`;
     }
     case 'browser.click': {
       const tabId = await working(p?.session, p.tab_id);

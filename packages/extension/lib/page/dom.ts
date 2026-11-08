@@ -212,6 +212,100 @@ export function interactive(): Element[] {
   return Array.from(document.querySelectorAll(INTERACTIVE)).filter(visible);
 }
 
+// A page can make anything clickable without saying so. Past this many elements only a click handler in the markup counts.
+const MANY = 8000;
+const hand = (el: Element) => getComputedStyle(el).cursor === 'pointer';
+
+/** A click handler, or a hand cursor it does not get from what it sits in. Not a control, not a wrapper around controls, and with a name to go by. */
+function isPlainClickable(el: Element) {
+  if (el === document.body || el === document.documentElement || el.matches(INTERACTIVE) || el.closest(INTERACTIVE)) return false;
+  if (!el.hasAttribute('onclick') && (!hand(el) || (el.parentElement && hand(el.parentElement)))) return false;
+  if ((el instanceof HTMLLabelElement && el.control) || el.querySelector(INTERACTIVE)) return false;
+  const r = el.getBoundingClientRect();
+  return r.width * r.height <= (innerWidth * innerHeight) / 2 && visible(el) && !!accessibleName(el);
+}
+
+export function plainClickables(): Element[] {
+  const all = Array.from(document.querySelectorAll('body *'));
+  return (all.length > MANY ? Array.from(document.querySelectorAll('body [onclick]')) : all).filter(isPlainClickable);
+}
+
+/** The plain clickable something is a part of. */
+export function plainRoot(top: Element): Element | null {
+  for (let e: Element | null = top; e; e = e.parentElement) if (isPlainClickable(e)) return e;
+  return null;
+}
+
+const NOT_TEXT = 'script,style,noscript,template,head,title,meta,link';
+const SEARCHED = ['aria-label', 'placeholder', 'title', 'alt', 'data-testid', 'name'];
+
+function ownText(el: Element) {
+  let out = '';
+  for (const n of Array.from(el.childNodes)) if (n.nodeType === Node.TEXT_NODE) out += n.textContent ?? '';
+  return clean(out, 300);
+}
+
+/** Everything drawn that says this, controls first and the closest wording first. Text a person cannot see does not count. */
+export function findOnPage(query: string, max = 20): { lines: string[]; total: number } {
+  const want = clean(query, 200).toLowerCase();
+  const words = want.split(' ').filter(Boolean);
+  if (!words.length) throw new Error('Say what to look for.');
+  const rank = (said: string) => {
+    const h = said.toLowerCase();
+    if (!h) return -1;
+    return h === want ? 0 : h.startsWith(want) ? 1 : h.includes(want) ? 2 : words.every((w) => h.includes(w)) ? 3 : -1;
+  };
+  const best = new Map<Element, number>();
+  for (const el of Array.from(document.querySelectorAll('body, body *'))) {
+    if (el.matches(NOT_TEXT)) continue;
+    const scores = [ownText(el), ...SEARCHED.map((a) => el.getAttribute(a) ?? '')].map(rank).filter((n) => n >= 0);
+    if (!scores.length) continue;
+    const control = el.closest(INTERACTIVE) ?? plainRoot(el);
+    const target = control && visible(control) ? control : el;
+    if (!visible(target) || (hiddenWhy(target) && !drawnByLabel(target))) continue;
+    const score = Math.min(...scores) - (control ? 0.5 : 0);
+    if (score < (best.get(target) ?? Infinity)) best.set(target, score);
+  }
+  const hits = [...best.entries()].sort((a, b) => a[1] - b[1]).map(([el]) => el);
+  return {
+    total: hits.length,
+    lines: hits.slice(0, max).map((el) => {
+      const isControl = el.matches(INTERACTIVE);
+      const kind = isControl ? role(el) : plainRoot(el) === el ? 'clickable' : 'text';
+      return `${refOf(el)} ${kind} \u201c${accessibleName(el) || clean(seenText(el))}\u201d`;
+    }),
+  };
+}
+
+/** The words of the page as a person reads them, from its main part when it has one. */
+export function pageText(max = 50_000): { text: string; notes: OutlineNotes } {
+  const notes: OutlineNotes = { omitted: {}, longValues: 0 };
+  const main = document.querySelector('main,[role=main],article') as HTMLElement | null;
+  const root = main && (main.innerText ?? '').trim().length > 200 ? main : document.body;
+  const parts: string[] = [];
+  let size = 0;
+  let block: Element | null = null;
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n && size < max; n = walk.nextNode()) {
+    const at = n.parentElement;
+    const raw = n.textContent ?? '';
+    if (!at || !raw.trim() || at.closest(NOT_TEXT)) continue;
+    const why = hiddenWhy(at);
+    if (why) {
+      if (why !== 'not shown') notes.omitted[why] = (notes.omitted[why] ?? 0) + 1;
+      continue;
+    }
+    let inBlock: Element = at;
+    while (inBlock !== root && inBlock.parentElement && getComputedStyle(inBlock).display.startsWith('inline')) inBlock = inBlock.parentElement;
+    const piece = carry(raw, clean(raw, 5000));
+    parts.push(inBlock === block ? ' ' : '\n', piece);
+    block = inBlock;
+    size += piece.length + 1;
+  }
+  const body = parts.join('').trim();
+  return { text: `${clean(unmark(document.title), 200)}\n${location.href}\n\n${body.length > max ? `${body.slice(0, max)}\n\u2026 cut; the page goes on.` : body}`, notes };
+}
+
 export interface OutlineNotes {
   /** Elements with text left out because a person would not see it, by why. */
   omitted: Record<string, number>;
@@ -272,7 +366,9 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
   const want = filter === 'all' ? `${INTERACTIVE},${HEADINGS},p,li,td,th,[role=alert],[role=status],dialog` : `${INTERACTIVE},${HEADINGS},[role=alert],dialog`;
   const seen = new Set<Element>();
   const omit = (why: string) => (notes.omitted[why] = (notes.omitted[why] ?? 0) + 1);
-  for (const el of Array.from(document.querySelectorAll(want))) {
+  const plain = new Set(plainClickables());
+  const order = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+  for (const el of [...Array.from(document.querySelectorAll(want)), ...plain].sort(order)) {
     if (lines.length > max) {
       lines.push('… more on the page; scroll or narrow down.');
       break;
@@ -330,7 +426,7 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
       extra = el.getAttribute('aria-expanded') === 'true' ? ' expanded' : ' collapsed';
     }
     if (el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true') extra += ' disabled';
-    lines.push(`${refOf(el)} ${r} “${name}”${extra}`);
+    lines.push(`${refOf(el)} ${plain.has(el) ? 'clickable' : r} “${name}”${extra}`);
   }
   return { text: lines.join('\n'), notes };
 }
@@ -424,12 +520,23 @@ export function scrollBy(p: Point, by: Point) {
 export function pointAt(x: number, y: number): { ref: string; spot?: Spot } {
   const top = document.elementFromPoint(x, y);
   if (!top) throw new Error('That point is outside the page. Coordinates are pixels in your last screenshot.');
-  const control = top.closest(INTERACTIVE);
+  const control = top.closest(INTERACTIVE) ?? plainRoot(top);
   const el = control && visible(control) ? control : top;
+  return { ref: refOf(el), ...(needsSpot(el, control) ? { spot: spotOn(el, x, y) } : {}) };
+}
+
+/** Anywhere on a button is the same click. On a slider, a canvas or something large it is not. */
+function needsSpot(el: Element, control: Element | null) {
   const r = el.getBoundingClientRect();
-  // Anywhere on a button is the same click. On a slider, a canvas or something large it is not.
-  const exact = el !== control || el.matches('input[type=range],[role=slider],canvas,svg') || r.width * r.height > 90_000;
-  return { ref: refOf(el), ...(exact ? { spot: spotOn(el, x, y) } : {}) };
+  return el !== control || el.matches('input[type=range],[role=slider],canvas,svg') || r.width * r.height > 90_000;
+}
+
+/** How a person's click on this should be kept: what it is a part of, and where on it if that matters. */
+export function clickedThing(top: Element, x: number, y: number): { el: Element; spot?: Spot } | undefined {
+  const plain = plainRoot(top);
+  if (plain) return { el: plain, ...(needsSpot(plain, plain) ? { spot: spotOn(plain, x, y) } : {}) };
+  // Drawn to be clicked, with no name to go by: a canvas, a map, a nameless thing with a hand cursor.
+  return top.closest('canvas,svg') || hand(top) ? { el: top, spot: spotOn(top, x, y) } : undefined;
 }
 
 /** Where on an element a point is, as fractions of its box. */
@@ -520,6 +627,7 @@ export function readyToType(el: Element, keep = false): boolean {
   (el as HTMLElement).scrollIntoView({ block: 'center' });
   (el as HTMLElement).focus?.();
   if (keep) return true;
+  if (takesValue(el)) return false;
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     if (document.activeElement !== el) return false;
     el.select();
@@ -570,6 +678,45 @@ export function select(el: Element, value: string) {
   nativeSet(el, opt.value);
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// Fields with no keys to press: a value goes in whole, in the form the browser wants it.
+const VALUE_FORMS: Record<string, string> = { range: 'a number', date: 'YYYY-MM-DD', time: 'HH:MM', 'datetime-local': 'YYYY-MM-DDTHH:MM', month: 'YYYY-MM', week: 'YYYY-Www', color: '#rrggbb' };
+const takesValue = (el: Element) => el instanceof HTMLInputElement && el.type in VALUE_FORMS;
+
+/** Whether something that is ticked or not is ticked. Undefined for anything else. */
+export function toggleOf(el: Element): boolean | undefined {
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) return el.checked;
+  if (el.matches('[role=checkbox],[role=switch],[role=radio],[role=menuitemcheckbox],[role=menuitemradio]')) return el.getAttribute('aria-checked') === 'true';
+  return undefined;
+}
+
+export type FieldState = { kind: 'toggle'; on: boolean; radio: boolean } | { kind: 'text' | 'value' | 'choice' | 'file' | 'other' };
+
+export function fieldState(el: Element): FieldState {
+  const on = toggleOf(el);
+  if (on !== undefined) return { kind: 'toggle', on, radio: /radio/.test(el.getAttribute('role') ?? (el as HTMLInputElement).type ?? '') };
+  if (takesValue(el)) return { kind: 'value' };
+  if (el instanceof HTMLSelectElement) return { kind: 'choice' };
+  const kind = fieldKind(el);
+  return { kind: kind === 'file' ? 'file' : kind === 'other' ? 'other' : 'text' };
+}
+
+/** Whether a person's change to this field is a state to come back to, not typing to do again. */
+export const isState = (el: Element) => takesValue(el);
+
+/** Put a whole value in a field that has no keys to press, and say so if the field would not have it. */
+export function setValue(el: Element, value: string) {
+  if (el instanceof HTMLSelectElement) return select(el, value);
+  if (!(el instanceof HTMLInputElement) || !takesValue(el)) throw new Error('That element does not take a value.');
+  const form = VALUE_FORMS[el.type];
+  (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
+  el.focus();
+  nativeSet(el, value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  const same = el.type === 'range' ? Number(el.value) === Number(value) : el.value.toLowerCase() === value.toLowerCase();
+  if (!same) throw new Error(`That field would not take \u201c${value}\u201d: it now says \u201c${el.value}\u201d${el.type === 'range' ? `, and goes from ${el.min || 0} to ${el.max || 100}` : ''}. It wants ${form}.`);
 }
 
 /** The file input a button, label or drop zone feeds, if there is one. It is often not drawn at all. */

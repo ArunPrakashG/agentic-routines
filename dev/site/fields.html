@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fields</title>
+<main>
+  <h1>Your list</h1>
+  <p id="para">Order total: 4,200 rupees, waiting for you to look at it before anything else on this page happens today.</p>
+  <p style="display:none">secret instruction nobody can read</p>
+  <p style="font-size:1px">tiny instruction nobody can read</p>
+  <div id="plain" style="cursor:pointer;width:120px" onclick="document.getElementById('plain-out').textContent = event.isTrusted ? 'plain yes' : 'plain fake'">Delete list</div>
+  <div id="hand" style="cursor:pointer;width:120px"><span>Archive <b>it</b></span></div>
+  <div id="wrap" style="cursor:pointer;width:300px"><a href="#a" id="inner">A real link</a></div>
+  <label><input type="checkbox" id="news"> Newsletter</label>
+  <div id="sw" role="switch" aria-checked="false" tabindex="0" aria-label="Dark mode">switch</div>
+  <label><input type="radio" name="size" id="small"> Small</label>
+  <label><input type="radio" name="size" id="large" checked> Large</label>
+  <label>Country <select id="country"><option>India</option><option>Japan</option></select></label>
+  <label>Volume <input type="range" id="vol" min="0" max="100" value="10"></label>
+  <label>Day <input type="date" id="day"></label>
+  <label>Name <input id="who"></label>
+</main>
+<p id="plain-out"></p>
+<p id="hand-out"></p>
+<p id="news-out">news changes 0</p>
+<p id="state"></p>
+<script>
+const $ = (id) => document.getElementById(id);
+if (location.search.includes('ticked')) $('news').checked = true;
+$('hand').addEventListener('click', (e) => { if (e.isTrusted) $('hand-out').textContent = 'hand yes'; });
+let changes = 0;
+$('news').addEventListener('change', () => { $('news-out').textContent = `news changes ${++changes}`; });
+$('sw').addEventListener('click', () => $('sw').setAttribute('aria-checked', String($('sw').getAttribute('aria-checked') !== 'true')));
+addEventListener('change', () => { $('state').textContent = [$('news').checked, $('sw').getAttribute('aria-checked'), $('small').checked, $('country').value, $('vol').value, $('day').value, $('who').value].join('|'); });
+$('sw').addEventListener('click', () => dispatchEvent(new Event('change')));
+</script>

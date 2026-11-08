@@ -19,6 +19,9 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `wait` | Wait some seconds. `read_page` with `wait` is usually better: it stops when the page is quiet. |
 | `type` | Type into a field by ref. Replaces what is there. `submit` presses Enter after. |
 | `select` | Pick an option in a select, by label or value. |
+| `form_input` | Bring a field to a value: a checkbox, switch or radio (`true` or `false`), a select, a slider, a date, a time, a colour, or text. What is ticked already stays ticked. |
+| `find` | Look for words on the page, with no model. Gives refs, controls first, including things a page made clickable without saying so. |
+| `get_page_text` | The words of the page as a person reads them, for an article or a long result. |
 | `upload` | Attach files from this machine. Pass the `ref` of the file input, or of the button, label or drop zone in front of it, and an absolute `path` (or `paths` for several). See below. |
 | `press` | Press keys in the focused element: Enter, Escape, ArrowDown, `ctrl+a`. Several, separated by spaces, go one after another; `repeat` presses it that many times. |
 | `screenshot` | The area around the last element, or the whole tab with `full: true`, or part of the last picture enlarged with `region`. `read_page` costs less. |
