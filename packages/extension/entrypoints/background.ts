@@ -1,4 +1,4 @@
-import { compileRun, hookHash, type CompileOptions, type Routine } from '@agentic-routines/core';
+import { compileRun, hookHash, type CompileOptions, type PageFingerprint, type Routine, type Viewport } from '@agentic-routines/core';
 import * as agent from '../lib/agent/agent';
 import * as auth from '../lib/remote/auth';
 import * as directory from '../lib/remote/directory';
@@ -9,7 +9,7 @@ import * as native from '../lib/agent/native';
 import { platform } from '../lib/platform';
 import * as replay from '../lib/replay/replay';
 import * as runs from '../lib/agent/runs';
-import { ask, releaseSession } from '../lib/page/tabs';
+import { ask, releaseSession, tellAll } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
 // When each routine last ran and which steps changed then, by owner/name.
@@ -262,10 +262,10 @@ export default defineBackground(() => {
       const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
       if (!tab?.id) return;
       recording = { runId: await runs.startHuman(), tabId: tab.id };
-      await ask(tab.id, { t: 'record', on: true }).catch(() => {});
+      await tellAll(tab.id, { t: 'record', on: true });
       badge();
     } else if (recording) {
-      await ask(recording.tabId, { t: 'record', on: false }).catch(() => {});
+      await tellAll(recording.tabId, { t: 'record', on: false });
       recording = undefined;
       badge();
     }
@@ -379,9 +379,13 @@ export default defineBackground(() => {
   });
 
   // ---------- human demos ----------
-  browser.runtime.onMessage.addListener((msg: any, sender) => {
+  browser.runtime.onMessage.addListener((msg: any, sender, send) => {
+    if (msg?.t === 'recording?') return void send(!!recording && sender.tab?.id === recording.tabId);
     if (msg?.t !== 'human' || !recording || sender.tab?.id !== recording.tabId) return;
-    runs.record('You', msg.event);
+    if (!sender.frameId) return void runs.record('You', msg.event);
+    // A step happens on the page the tab is on, whichever document in it was touched.
+    const tabId = recording.tabId;
+    void Promise.all([browser.tabs.get(tabId), ask<PageFingerprint>(tabId, { t: 'fingerprint' }).catch(() => undefined), ask<Viewport>(tabId, { t: 'viewport' }).catch(() => undefined)]).then(([tab, page, view]) => runs.record('You', { ...msg.event, url: tab.url ?? msg.event.url, page: page ?? msg.event.page, view: view ?? msg.event.view }));
   });
   browser.tabs.onUpdated.addListener((tabId, info) => {
     if (!recording || tabId !== recording.tabId) return;

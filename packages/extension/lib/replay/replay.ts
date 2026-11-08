@@ -2,6 +2,7 @@ import { compareViewport, CROP_DRIFT, fill, hashDistance, isIrreversible, onSite
 import { uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
+import { resolveInTab } from '../page/frames';
 import { perform as input } from '../page/input';
 import { platform } from '../platform';
 import { agentTabId, ask, glow, settle, sleep, waitLoaded, wake } from '../page/tabs';
@@ -254,7 +255,7 @@ async function findElement(s: ReplayState, step: Step): Promise<Found> {
   let res: Found = { kind: 'missing' };
   while (Date.now() < end) {
     const fix = s.fixes[step.n];
-    res = await ask<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target!, wide: !!step.pointer?.spot || step.action === 'hover' || step.action === 'drag' || step.action === 'scroll' });
+    res = await resolveInTab<Found>(s.tabId, step.pick === 'first' && !fix ? { t: 'first', target: step.target! } : { t: 'resolve', target: fix ?? step.target!, wide: !!step.pointer?.spot || step.action === 'hover' || step.action === 'drag' || step.action === 'scroll' });
     noteViewport(s, res.view);
     // A button can stay disabled for a moment after the step before it, and a click on it does nothing.
     if (res.kind === 'found' && !res.disabled) break;
@@ -430,6 +431,8 @@ async function runStep(s: ReplayState, step: Step, ref?: string, ov: Outcome = {
     await input(s.tabId, undefined, 'scroll', undefined, step.pointer);
     return 'next';
   }
+  // A routine from someone else stays on its site inside the page too: a frame from elsewhere is someone else's form.
+  if (s.foreign && step.target?.frame && !onSite(step.target.frame, s.routine.meta.site)) throw offSite(s, step.target.frame, 'This step works in a frame from');
   await waitForPage(s.tabId, step.page);
   if (!ref) {
     const found = await findElement(s, step);
@@ -682,7 +685,7 @@ export async function resume(p: { run_id: string; approve?: boolean; choice?: st
       notify(s);
       return result(s);
     }
-    const d = await ask<{ loc: Locator; rect: Rect }>(s.tabId, { t: 'describe', ref: p.choice });
+    const d = await ask<{ loc: Locator }>(s.tabId, { t: 'describe', ref: p.choice });
     const step = s.routine.steps[s.i];
     // An element picked in place of the recorded one gets the same look a recorded step does.
     if (!step.pause && isIrreversible({ action: step.action, target: d.loc })) s.chosenAt = step.n;

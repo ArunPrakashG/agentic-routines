@@ -145,6 +145,7 @@ type locator struct {
 	CSS   string            `json:"css"`
 	Near  string            `json:"near,omitempty"`
 	Modal string            `json:"modal,omitempty"`
+	Frame string            `json:"frame,omitempty"`
 }
 
 type fingerprint struct {

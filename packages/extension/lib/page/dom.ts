@@ -12,6 +12,87 @@ const HEADINGS = 'h1,h2,h3,h4,h5,h6,[role=heading],legend';
 // recorded name and a live one still match and an agent never reads what a person cannot.
 const clean = (s: string | null | undefined, max = 80) => stripInvisible(s ?? '').text.replace(/\s+/g, ' ').trim().slice(0, max);
 
+// ---------- going into shadow roots ----------
+
+/** A shadow root, open or closed. A page cannot see into a closed one; an extension can. */
+export function rootOf(el: Element): ShadowRoot | null {
+  if (el.shadowRoot) return el.id === 'agentic-routines-overlay' ? null : el.shadowRoot;
+  if (!(el instanceof HTMLElement) || el.id === 'agentic-routines-overlay') return null;
+  try {
+    const dom = (globalThis as unknown as { chrome?: { dom?: { openOrClosedShadowRoot?(e: HTMLElement): ShadowRoot | null } } }).chrome?.dom;
+    return dom?.openOrClosedShadowRoot?.(el) ?? (el as unknown as { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** What an element sits in, through a shadow root. */
+const up = (el: Element): Element | null => el.parentElement ?? ((el.getRootNode() as ShadowRoot).host ?? null);
+
+export function closestDeep(el: Element, selector: string): Element | null {
+  for (let e: Element | null = el; e; ) {
+    const c = e.closest(selector);
+    if (c) return c;
+    e = ((e.getRootNode() as ShadowRoot).host as Element | undefined) ?? null;
+  }
+  return null;
+}
+
+function containsDeep(outer: Element, inner: Element) {
+  for (let e: Element | null = inner; e; e = up(e)) if (e === outer) return true;
+  return false;
+}
+
+const FRESH_MS = 300;
+let shadows = { at: 0, roots: [] as ShadowRoot[] };
+
+/** The shadow roots in this document, for a moment. Most pages have none. */
+export function allShadowRoots(): ShadowRoot[] {
+  if (Date.now() - shadows.at < FRESH_MS) return shadows.roots;
+  const roots: ShadowRoot[] = [];
+  const go = (r: ParentNode) => {
+    for (const el of Array.from(r.querySelectorAll('*'))) {
+      const s = rootOf(el);
+      if (s) {
+        roots.push(s);
+        go(s);
+      }
+    }
+  };
+  go(document);
+  shadows = { at: Date.now(), roots };
+  return roots;
+}
+
+/** Everything that matches, in shadow roots too, in the order it is drawn. */
+export function deepAll(selector: string): Element[] {
+  if (!allShadowRoots().length) return Array.from(document.querySelectorAll(selector));
+  const out: Element[] = [];
+  const go = (r: ParentNode) => {
+    for (const el of Array.from(r.querySelectorAll('*'))) {
+      if (el.matches(selector)) out.push(el);
+      const s = rootOf(el);
+      if (s) go(s);
+    }
+  };
+  go(document);
+  return out;
+}
+
+/** What is drawn at a point, inside any shadow root. */
+export function deepPoint(x: number, y: number): Element | null {
+  let el = document.elementFromPoint(x, y);
+  for (let s = el && rootOf(el); s; s = el && rootOf(el)) {
+    const inner = s.elementFromPoint(x, y);
+    if (!inner || inner === el) break;
+    el = inner;
+  }
+  return el;
+}
+
+/** The document or shadow root an element is in, for what can only be looked up there. */
+const homeOf = (el: Element) => el.getRootNode() as Document | ShadowRoot;
+
 /** The page size a step was seen at. */
 export function viewport(): Viewport {
   return { w: innerWidth, h: innerHeight, dpr: devicePixelRatio };
@@ -84,7 +165,7 @@ export function role(el: Element): string {
 function labelFor(el: Element): string {
   const id = el.id;
   if (id) {
-    const l = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+    const l = homeOf(el).querySelector(`label[for="${CSS.escape(id)}"]`);
     if (l) return clean(seenText(l));
   }
   const wrap = el.closest('label');
@@ -101,7 +182,7 @@ export function accessibleName(el: Element): string {
     const named = clean(
       by
         .split(/\s+/)
-        .map((i) => document.getElementById(i))
+        .map((i) => homeOf(el).getElementById(i))
         .map((n) => (n && !hiddenWhy(n) ? seenText(n) : ''))
         .join(' '),
     );
@@ -124,10 +205,14 @@ function wrappingLabel(el: Element): string {
 }
 
 function nearestHeading(el: Element): string {
-  let a: Element | null = el.parentElement;
-  for (let depth = 0; a && depth < 8; depth++, a = a.parentElement) {
-    const hs = Array.from(a.querySelectorAll(HEADINGS)).filter((h) => h !== el && h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+  let at = el;
+  for (let depth = 0; depth < 8; depth++) {
+    const a = up(at);
+    if (!a) break;
+    // Order means nothing across a shadow root, so what comes before the host is looked at from the host.
+    const hs = at.getRootNode() === a.getRootNode() ? Array.from(a.querySelectorAll(HEADINGS)).filter((h) => h !== at && h.compareDocumentPosition(at) & Node.DOCUMENT_POSITION_FOLLOWING) : [];
     if (hs.length) return clean(seenText(hs[hs.length - 1]));
+    at = a;
   }
   return '';
 }
@@ -162,8 +247,10 @@ export function describe(el: Element): Locator {
     }
   }
   const isField = /^(input|textarea|select)$/i.test(el.tagName);
-  const dialog = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true]');
+  const dialog = closestDeep(el, 'dialog,[role=dialog],[role=alertdialog],[aria-modal=true]');
   return {
+    // A blank frame has no address of its own to go by.
+    ...(window !== window.top ? { frame: location.protocol === 'about:' ? location.href : location.origin + location.pathname } : {}),
     tag: el.tagName.toLowerCase(),
     role: role(el),
     name: accessibleName(el) || undefined,
@@ -177,7 +264,7 @@ export function describe(el: Element): Locator {
 
 export function fingerprint(): PageFingerprint {
   const landmarks: string[] = [];
-  for (const el of Array.from(document.querySelectorAll('h1,h2,h3,[role=heading],label,legend,nav[aria-label],main[aria-label]'))) {
+  for (const el of deepAll('h1,h2,h3,[role=heading],label,legend,nav[aria-label],main[aria-label]')) {
     if (!visible(el)) continue;
     const t = clean(el.getAttribute('aria-label') || seenText(el), 60);
     if (t && !landmarks.includes(t)) landmarks.push(t);
@@ -209,7 +296,7 @@ export function byRef(ref: string): Element {
 }
 
 export function interactive(): Element[] {
-  return Array.from(document.querySelectorAll(INTERACTIVE)).filter(visible);
+  return deepAll(INTERACTIVE).filter(visible);
 }
 
 // A page can make anything clickable without saying so. Past this many elements only a click handler in the markup counts.
@@ -218,21 +305,22 @@ const hand = (el: Element) => getComputedStyle(el).cursor === 'pointer';
 
 /** A click handler, or a hand cursor it does not get from what it sits in. Not a control, not a wrapper around controls, and with a name to go by. */
 function isPlainClickable(el: Element) {
-  if (el === document.body || el === document.documentElement || el.matches(INTERACTIVE) || el.closest(INTERACTIVE)) return false;
-  if (!el.hasAttribute('onclick') && (!hand(el) || (el.parentElement && hand(el.parentElement)))) return false;
-  if ((el instanceof HTMLLabelElement && el.control) || el.querySelector(INTERACTIVE)) return false;
+  if (el === document.body || el === document.documentElement || closestDeep(el, INTERACTIVE)) return false;
+  const around = up(el);
+  if (!el.hasAttribute('onclick') && (!hand(el) || (around && hand(around)))) return false;
+  if ((el instanceof HTMLLabelElement && el.control) || el.querySelector(INTERACTIVE) || rootOf(el)?.querySelector(INTERACTIVE)) return false;
   const r = el.getBoundingClientRect();
   return r.width * r.height <= (innerWidth * innerHeight) / 2 && visible(el) && !!accessibleName(el);
 }
 
 export function plainClickables(): Element[] {
-  const all = Array.from(document.querySelectorAll('body *'));
-  return (all.length > MANY ? Array.from(document.querySelectorAll('body [onclick]')) : all).filter(isPlainClickable);
+  const all = deepAll('*');
+  return (all.length > MANY ? deepAll('[onclick]') : all).filter(isPlainClickable);
 }
 
 /** The plain clickable something is a part of. */
 export function plainRoot(top: Element): Element | null {
-  for (let e: Element | null = top; e; e = e.parentElement) if (isPlainClickable(e)) return e;
+  for (let e: Element | null = top; e; e = up(e)) if (isPlainClickable(e)) return e;
   return null;
 }
 
@@ -256,11 +344,11 @@ export function findOnPage(query: string, max = 20): { lines: string[]; total: n
     return h === want ? 0 : h.startsWith(want) ? 1 : h.includes(want) ? 2 : words.every((w) => h.includes(w)) ? 3 : -1;
   };
   const best = new Map<Element, number>();
-  for (const el of Array.from(document.querySelectorAll('body, body *'))) {
-    if (el.matches(NOT_TEXT)) continue;
+  for (const el of deepAll('*')) {
+    if (el.matches(NOT_TEXT) || el === document.documentElement) continue;
     const scores = [ownText(el), ...SEARCHED.map((a) => el.getAttribute(a) ?? '')].map(rank).filter((n) => n >= 0);
     if (!scores.length) continue;
-    const control = el.closest(INTERACTIVE) ?? plainRoot(el);
+    const control = closestDeep(el, INTERACTIVE) ?? plainRoot(el);
     const target = control && visible(control) ? control : el;
     if (!visible(target) || (hiddenWhy(target) && !drawnByLabel(target))) continue;
     const score = Math.min(...scores) - (control ? 0.5 : 0);
@@ -277,6 +365,17 @@ export function findOnPage(query: string, max = 20): { lines: string[]; total: n
   };
 }
 
+function* textNodes(root: Node): Generator<Text> {
+  for (const n of Array.from(root.childNodes)) {
+    if (n.nodeType === Node.TEXT_NODE) yield n as Text;
+    else if (n.nodeType === Node.ELEMENT_NODE) {
+      const s = rootOf(n as Element);
+      if (s) yield* textNodes(s);
+      yield* textNodes(n);
+    }
+  }
+}
+
 /** The words of the page as a person reads them, from its main part when it has one. */
 export function pageText(max = 50_000): { text: string; notes: OutlineNotes } {
   const notes: OutlineNotes = { omitted: {}, longValues: 0 };
@@ -285,11 +384,12 @@ export function pageText(max = 50_000): { text: string; notes: OutlineNotes } {
   const parts: string[] = [];
   let size = 0;
   let block: Element | null = null;
-  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let n = walk.nextNode(); n && size < max; n = walk.nextNode()) {
+  for (const n of textNodes(root)) {
+    if (size >= max) break;
     const at = n.parentElement;
     const raw = n.textContent ?? '';
-    if (!at || !raw.trim() || at.closest(NOT_TEXT)) continue;
+    // No boxes: not drawn, like the children of a shadow host with no slot for them.
+    if (!at || !raw.trim() || at.closest(NOT_TEXT) || !at.getClientRects().length) continue;
     const why = hiddenWhy(at);
     if (why) {
       if (why !== 'not shown') notes.omitted[why] = (notes.omitted[why] ?? 0) + 1;
@@ -367,8 +467,8 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
   const seen = new Set<Element>();
   const omit = (why: string) => (notes.omitted[why] = (notes.omitted[why] ?? 0) + 1);
   const plain = new Set(plainClickables());
-  const order = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-  for (const el of [...Array.from(document.querySelectorAll(want)), ...plain].sort(order)) {
+  const wanted = plain.size ? deepAll('*').filter((el) => plain.has(el) || el.matches(want)) : deepAll(want);
+  for (const el of wanted) {
     if (lines.length > max) {
       lines.push('… more on the page; scroll or narrow down.');
       break;
@@ -481,7 +581,7 @@ export function hover(el: Element, how: How = {}) {
 export function drag(el: Element, how: How) {
   const from = aimAt(el, how);
   const to = how.toAt ?? whereOn(byRef(how.toRef!), how.to?.spot);
-  const end = document.elementFromPoint(to.x, to.y) ?? el;
+  const end = deepPoint(to.x, to.y) ?? el;
   const opts = (p: Point, buttons: number) => ({ bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, button: 0, buttons });
   el.dispatchEvent(new PointerEvent('pointerdown', opts(from, 1)));
   el.dispatchEvent(new MouseEvent('mousedown', opts(from, 1)));
@@ -499,7 +599,7 @@ export function drag(el: Element, how: How) {
 
 /** What holds the scrolling at a point: the nearest thing that scrolls, else the page. */
 function scroller(el: Element | null): Element {
-  for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+  for (let e = el; e && e !== document.body && e !== document.documentElement; e = up(e)) {
     const s = getComputedStyle(e);
     if (/auto|scroll|overlay/.test(s.overflowY + s.overflowX) && (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth)) return e;
   }
@@ -507,20 +607,22 @@ function scroller(el: Element | null): Element {
 }
 
 export function scrollPos(p: Point) {
-  const s = scroller(document.elementFromPoint(p.x, p.y));
+  const s = scroller(deepPoint(p.x, p.y));
   const page = document.scrollingElement ?? document.documentElement;
   return { key: [s.scrollLeft, s.scrollTop, page.scrollLeft, page.scrollTop].join(), top: Math.round(s.scrollTop), height: s.scrollHeight - s.clientHeight };
 }
 
 export function scrollBy(p: Point, by: Point) {
-  scroller(document.elementFromPoint(p.x, p.y)).scrollBy({ left: by.x, top: by.y, behavior: 'instant' as ScrollBehavior });
+  scroller(deepPoint(p.x, p.y)).scrollBy({ left: by.x, top: by.y, behavior: 'instant' as ScrollBehavior });
 }
 
 /** What a point in the page lands on: the control it is part of, else whatever is drawn there and where on it. */
-export function pointAt(x: number, y: number): { ref: string; spot?: Spot } {
-  const top = document.elementFromPoint(x, y);
+export function pointAt(x: number, y: number): { ref: string; spot?: Spot; frame?: boolean } {
+  const top = deepPoint(x, y);
   if (!top) throw new Error('That point is outside the page. Coordinates are pixels in your last screenshot.');
-  const control = top.closest(INTERACTIVE) ?? plainRoot(top);
+  // Another document is drawn there, which only it can say anything about.
+  if (top.matches('iframe,frame')) return { ref: refOf(top), spot: spotOn(top, x, y), frame: true };
+  const control = closestDeep(top, INTERACTIVE) ?? plainRoot(top);
   const el = control && visible(control) ? control : top;
   return { ref: refOf(el), ...(needsSpot(el, control) ? { spot: spotOn(el, x, y) } : {}) };
 }
@@ -536,7 +638,7 @@ export function clickedThing(top: Element, x: number, y: number): { el: Element;
   const plain = plainRoot(top);
   if (plain) return { el: plain, ...(needsSpot(plain, plain) ? { spot: spotOn(plain, x, y) } : {}) };
   // Drawn to be clicked, with no name to go by: a canvas, a map, a nameless thing with a hand cursor.
-  return top.closest('canvas,svg') || hand(top) ? { el: top, spot: spotOn(top, x, y) } : undefined;
+  return closestDeep(top, 'canvas,svg') || hand(top) ? { el: top, spot: spotOn(top, x, y) } : undefined;
 }
 
 /** Where on an element a point is, as fractions of its box. */
@@ -549,9 +651,9 @@ export function spotOn(el: Element, x: number, y: number): Spot {
 /** Whether a click on `top` is a click on `el`: a span inside a button, a label over its hidden input, a wrapper drawn around it. */
 function partOf(el: Element, top: Element | null) {
   if (!top) return false;
-  if (top === el || el.contains(top)) return true;
-  if (top.closest('label')?.control === el) return true;
-  if (!top.contains(el)) return false;
+  if (top === el || containsDeep(el, top)) return true;
+  if ((closestDeep(top, 'label') as HTMLLabelElement | null)?.control === el) return true;
+  if (!containsDeep(top, el)) return false;
   // Everything sits inside something: only a wrapper about its own size counts, not the page around it.
   const [a, b] = [top.getBoundingClientRect(), el.getBoundingClientRect()];
   return a.width * a.height <= b.width * b.height * 4;
@@ -580,7 +682,7 @@ function aimAtSpot(el: Element, spot: Spot) {
     window.scrollBy({ left: p.x - innerWidth / 2, top: p.y - innerHeight / 2, behavior: 'instant' as ScrollBehavior });
     p = whereOn(el, spot);
   }
-  const top = document.elementFromPoint(p.x, p.y);
+  const top = deepPoint(p.x, p.y);
   return { x: p.x, y: p.y, hit: partOf(el, top), over: partOf(el, top) ? undefined : whatIs(top) };
 }
 
@@ -596,9 +698,9 @@ export function aimAt(el: Element, how: How = {}): { x: number; y: number; hit: 
   for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
     const p = point(r, fx, fy);
     if (p.x < 0 || p.y < 0 || p.x >= innerWidth || p.y >= innerHeight) continue;
-    if (partOf(el, document.elementFromPoint(p.x, p.y))) return { ...p, hit: true };
+    if (partOf(el, deepPoint(p.x, p.y))) return { ...p, hit: true };
   }
-  return { ...centre, hit: false, over: whatIs(document.elementFromPoint(centre.x, centre.y)) };
+  return { ...centre, hit: false, over: whatIs(deepPoint(centre.x, centre.y)) };
 }
 
 // Whether the input sent since the last watch reached the element. Only the browser can make an event that isTrusted.
@@ -606,7 +708,8 @@ let watching: { el: Element; landed: boolean; stop: () => void } | undefined;
 export function watchLanding(el: Element, moving = false) {
   watching?.stop();
   const on = (e: Event) => {
-    const at = e.composedPath()[0];
+    // A closed shadow root hides what was really hit from a listener out here, so it is looked up by the point.
+    const at = deepPoint((e as MouseEvent).clientX, (e as MouseEvent).clientY) ?? e.composedPath()[0];
     if (e.isTrusted && watching && at instanceof Element && partOf(el, at)) watching.landed = true;
   };
   const kinds = moving ? ['pointermove', 'mousemove', 'mouseover'] : ['pointerdown', 'mousedown', 'click'];
@@ -629,7 +732,7 @@ export function readyToType(el: Element, keep = false): boolean {
   if (keep) return true;
   if (takesValue(el)) return false;
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-    if (document.activeElement !== el) return false;
+    if (homeOf(el).activeElement !== el) return false;
     el.select();
     return true;
   }
@@ -725,7 +828,7 @@ export function fileInputFor(el: Element): HTMLInputElement | null {
   const label = el.closest('label');
   if (label?.control instanceof HTMLInputElement && label.control.type === 'file') return label.control;
   for (const id of (el.getAttribute('aria-controls') ?? '').split(/\s+/).filter(Boolean)) {
-    const c = document.getElementById(id);
+    const c = homeOf(el).getElementById(id);
     if (c instanceof HTMLInputElement && c.type === 'file') return c;
   }
   // A button drawn next to its input, the common way a custom picker is built.
@@ -742,7 +845,7 @@ export function fileInputFor(el: Element): HTMLInputElement | null {
     if (found.length === 1) return found[0] as HTMLInputElement;
     if (found.length > 1) return null;
   }
-  const all = document.querySelectorAll('input[type=file]');
+  const all = deepAll('input[type=file]');
   return all.length === 1 ? (all[0] as HTMLInputElement) : null;
 }
 
@@ -767,7 +870,8 @@ export function press(keys: string) {
   for (const combo of keys.split(/\s+/).filter(Boolean)) {
     const parts = combo.split('+').filter(Boolean);
     const key = parts.pop() ?? combo;
-    const el = (document.activeElement as HTMLElement) ?? document.body;
+    let el = (document.activeElement as HTMLElement) ?? document.body;
+    for (let s = rootOf(el); s?.activeElement; s = rootOf(el)) el = s.activeElement as HTMLElement;
     const init = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true, ...held(parts.join('+').toLowerCase().replace('control', 'ctrl').replace(/meta|command/, 'cmd')) };
     const down = el.dispatchEvent(new KeyboardEvent('keydown', init));
     el.dispatchEvent(new KeyboardEvent('keypress', init));

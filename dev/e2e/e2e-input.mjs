@@ -338,6 +338,70 @@ for (const where of ['behind another tab', 'in front']) {
   check((await say('plain-out', rm)) === 'plain yes', 'a replay clicks the plain clickable');
 }
 
+// ---------- frames and shadow roots (#114) ----------
+for (const where of ['behind another tab', 'in front']) {
+  await session();
+  await sleep(1000);
+  const m = where === 'in front' ? 'frames.html?front' : 'frames.html?behind';
+  let r = await call('navigate', { url: `${SITE}/${m}` });
+  const tab = Number(r.text.match(/\(tab (\d+)\)/)?.[1]);
+  if (where === 'in front') await toFront(m);
+  await sleep(500);
+  let page = await read({ tab_id: tab });
+  const ref = (re) => refFor(page, re);
+  check(/f\d+:ref_\d+ .*“Pay Same”/.test(page), `a frame on the same site is in the outline, ${where}: ${page.split('\n').filter((l) => /Pay|frame/.test(l)).join(' | ').slice(0, 300)}`);
+  check(/f\d+:ref_\d+ .*“Pay Cross”/.test(page), `so is a frame from another site, ${where}`);
+  check(/“Shadow go”/.test(page) && /“Shadow name”/.test(page) && /“Deep go”/.test(page), `so is what is in a closed shadow root, ${where}`);
+  check(!/Pay Off|Pay Tiny/.test(page), `a frame nobody can see is not, ${where}`);
+
+  await call('click', { ref: ref(/“Pay Same”/), tab_id: tab });
+  check((await say('same-out', m)) === 'same pay true', `clicks in a frame on the same site, ${where}: ${await say('same-out', m)}`);
+  await call('type', { ref: ref(/“Name Same”/), text: 'Asha', tab_id: tab });
+  check((await say('same-out', m)) === 'same typed Asha', `types in it, ${where}: ${await say('same-out', m)}`);
+  await call('click', { ref: ref(/“Shadow go”/), tab_id: tab });
+  check((await say('shadow-out', m)) === 'shadow go true', `clicks in a closed shadow root, ${where}: ${await say('shadow-out', m)}`);
+  await call('type', { ref: ref(/“Shadow name”/), text: 'Ravi', tab_id: tab });
+  check((await say('shadow-typed', m)) === 'typed Ravi', `types in it, ${where}: ${await say('shadow-typed', m)}`);
+  await call('click', { ref: ref(/“Deep go”/), tab_id: tab });
+  check((await say('shadow-out', m)) === 'shadow deep true', `clicks in a shadow root in a shadow root, ${where}`);
+  // Far down the page, and in another process: the page has to scroll it on screen for the frame.
+  await call('click', { ref: ref(/“Pay Cross”/), tab_id: tab });
+  check((await say('cross-out', m)) === 'cross pay true', `clicks in a frame from another site, off screen, ${where}: ${await say('cross-out', m)}`);
+  await call('type', { ref: ref(/“Name Cross”/), text: 'Mira', tab_id: tab });
+  check((await say('cross-out', m)) === 'cross typed Mira', `types in it, ${where}: ${await say('cross-out', m)}`);
+
+  r = await call('find', { query: 'Pay Cross', tab_id: tab });
+  check(/f\d+:ref_\d+/.test(r.text), `find looks in frames, ${where}: ${r.text.slice(0, 160)}`);
+  r = await call('find', { query: 'Shadow go', tab_id: tab });
+  check(/ref_\d+/.test(r.text), `and in shadow roots, ${where}`);
+  r = await call('get_page_text', { tab_id: tab });
+  check(/Words Same/.test(r.text) && /Words Cross/.test(r.text) && !/Words Off/.test(r.text), `a page's words include its frames, ${where}: ${r.text.slice(0, 200)}`);
+
+  // A point on a picture lands in the frame drawn there.
+  const shot = await call('screenshot', { tab_id: tab });
+  const size = shot.text.match(/picture is (\d+)×(\d+)/);
+  const b = await evalIn(`(() => { const r = document.getElementById('cross').getBoundingClientRect(); return { x: r.x, y: r.y, vw: innerWidth, vh: innerHeight }; })()`, m);
+  await evalIn(`document.getElementById('cross-out').textContent = 'cross nothing'`, m);
+  r = await call('click', { x: ((b.x + 4 + 50) * Number(size[1])) / b.vw, y: ((b.y + 4 + 30) * Number(size[2])) / b.vh, tab_id: tab });
+  check((await say('cross-out', m)) === 'cross pay true', `a point on a frame lands inside it, ${where}: ${await say('cross-out', m)} ${r.error ? r.text.slice(0, 160) : ''}`);
+
+  // And a replay finds each of them where it was recorded.
+  if (where === 'behind another tab') {
+    const d = await call('routine_propose', { name: 'frames-replay', description: 'Pay in every frame. Use when the user asks for this.' });
+    const id = d.text.match(/^Draft (d-\S+)/m)?.[1];
+    check(!!id, `proposes a routine of it: ${d.text.slice(0, 200)}`);
+    await call('routine_save', { draft_id: id });
+    await call('navigate', { url: `${SITE}/frames.html?replay`, tab_id: tab });
+    await sleep(500);
+    r = await call('routine_run', { name: 'frames-replay', params: { name: 'Asha' } });
+    check(/done|finished/i.test(r.text), `replays it: ${r.text.split('\n').slice(0, 2).join(' ').slice(0, 240)}`);
+    const rm = 'frames.html?replay';
+    check(/^same /.test(await say('same-out', rm)) && (await say('same-out', rm)) !== 'same nothing', `a replay works in the same-site frame: ${await say('same-out', rm)}`);
+    check((await say('cross-out', rm)) === 'cross pay true', `and in the frame from another site: ${await say('cross-out', rm)}`);
+    check(/^shadow /.test(await say('shadow-out', rm)) && (await say('shadow-out', rm)) !== 'shadow nothing', `and in the closed shadow root: ${await say('shadow-out', rm)}`);
+  }
+}
+
 await client.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

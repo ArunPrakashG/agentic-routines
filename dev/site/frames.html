@@ -1,0 +1,58 @@
+<!doctype html>
+<title>Frames and shadows</title>
+<style>
+  body { font: 15px system-ui; margin: 24px; }
+  iframe { display: block; width: 420px; height: 160px; border: 4px solid #999; margin: 12px 0; }
+  .far { height: 1400px; }
+</style>
+<h1>Checkout</h1>
+<p id="same-out">same nothing</p>
+<p id="cross-out">cross nothing</p>
+<p id="shadow-out">shadow nothing</p>
+<p id="shadow-typed">typed nothing</p>
+
+<iframe id="same" title="Same site" src="frame-inner.html?who=same"></iframe>
+
+<shadow-form id="host"></shadow-form>
+
+<iframe id="off" style="display:none" title="Not shown" src="frame-inner.html?who=off"></iframe>
+<iframe id="tiny" style="width:1px;height:1px;border:0" title="Tiny" src="frame-inner.html?who=tiny"></iframe>
+
+<div class="far"></div>
+<iframe id="cross" title="Another site"></iframe>
+
+<script>
+  // The address the page is not on is another site to the browser, so this frame runs in a process of its own.
+  document.getElementById('cross').src = `http://localhost:${location.port}/frame-inner.html?who=cross`;
+  addEventListener('message', (e) => {
+    const m = e.data;
+    if (m?.who && document.getElementById(`${m.who}-out`)) document.getElementById(`${m.who}-out`).textContent = `${m.who} ${m.what}`;
+  });
+  customElements.define(
+    'shadow-form',
+    class extends HTMLElement {
+      connectedCallback() {
+        // Closed: nothing outside can reach what is in it, not even with this.shadowRoot.
+        const root = this.attachShadow({ mode: 'closed' });
+        root.innerHTML = `<label for="hidden-name">Shadow name</label> <input id="hidden-name"><button id="hidden-go">Shadow go</button><inner-part></inner-part>`;
+        root.getElementById('hidden-go').addEventListener('click', (e) => {
+          document.getElementById('shadow-out').textContent = `shadow go ${e.isTrusted}`;
+        });
+        root.getElementById('hidden-name').addEventListener('input', (e) => {
+          document.getElementById('shadow-typed').textContent = `typed ${e.target.value}`;
+        });
+      }
+    },
+  );
+  customElements.define(
+    'inner-part',
+    class extends HTMLElement {
+      connectedCallback() {
+        this.attachShadow({ mode: 'open' }).innerHTML = `<button id="deep">Deep go</button>`;
+        this.shadowRoot.getElementById('deep').addEventListener('click', (e) => {
+          document.getElementById('shadow-out').textContent = `shadow deep ${e.isTrusted}`;
+        });
+      }
+    },
+  );
+</script>
