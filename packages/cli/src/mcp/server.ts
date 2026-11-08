@@ -379,7 +379,8 @@ export async function runMcp(): Promise<void> {
     if (Object.keys(fixes).length) {
       const steps = p.routine.steps.map((s) => (fixes[s.n] ? { ...s, target: fixes[s.n], crop: result.crops?.[s.n] ?? s.crop } : s));
       // Through the host, so the side panel and other agents hear about it.
-      const saved = await bridge.call<Routine>('store.write', { routine: { ...p.routine, steps }, owner: (p.routine as any).owner });
+      const fixed = { ...p.routine, steps };
+      const saved = bridge.remote ? await store.write(fixed, (p.routine as any).owner) : await bridge.call<Routine>('store.write', { routine: fixed, owner: (p.routine as any).owner });
       result.updated_to = saved.meta.version;
     }
     return result;
@@ -1197,6 +1198,8 @@ export async function runMcp(): Promise<void> {
         warnings: string[];
         pinned: string[];
       }>('draft.save', a);
+      // Saved by the browser, on its machine. The rt_ tools here read this one.
+      if (bridge.remote) await store.write(await bridge.call<Routine>('store.read', { id: r.saved.name }));
       scheduleRefresh();
       const x = r.saved;
       await store.noteSaved(x.name, { version: x.version, byHand: r.by_hand }).catch(() => {});
@@ -1314,7 +1317,7 @@ export async function runMcp(): Promise<void> {
       // Through the host when a browser is open, so its panel shows it at once.
       const origin = { kind: 'directory' as const, source: owner };
       const saved = await bridge.call<Routine>('store.write', { routine, owner, origin }).catch((e) => {
-        if (!(e instanceof NotConnected)) throw e;
+        if (!(e instanceof NotConnected) && !bridge.remote) throw e;
         return store.write(routine, owner, origin);
       });
       directory(`/routines/${owner}/${name}/installs`, { method: 'POST' }).catch(() => {});
