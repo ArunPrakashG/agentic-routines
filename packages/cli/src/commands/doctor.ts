@@ -3,6 +3,7 @@ import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { BROWSERS, type OS } from '@agentic-routines/browsers';
 import { agentStatus } from './agents.ts';
+import { clientStatus } from './clients.ts';
 import { debugOn } from '../debug.ts';
 import { hosts, profileLabel } from '../mcp/bridge.ts';
 import { HOST_NAME, paths } from '../paths.ts';
@@ -37,7 +38,7 @@ export async function runDoctor() {
     }
   }
 
-  for (const l of agentStatus()) (l.ok ? ok : no)(l.name, l.detail);
+  for (const l of [...agentStatus(), ...clientStatus()]) (l.ok ? ok : no)(l.name, l.detail);
 
   const running = existsSync(paths.hosts()) ? readdirSync(paths.hosts()).filter((f) => f.endsWith('.sock') && alive(Number(f.slice(0, -5)))) : [];
   if (running.length) ok('Extension', `${running.length} browser${running.length > 1 ? 's' : ''} talking to the host right now`);

@@ -6,7 +6,7 @@ A cache for your agent's browser work. Repeat tasks replay as one tool call, wit
 npx agentic-routines setup
 ```
 
-That one command connects every browser and agent it finds (Claude Code, Codex, GitHub Copilot, OpenCode; Chrome, Edge, Brave, Vivaldi, Firefox). Then install the extension and open its panel.
+That one command connects every browser and agent it finds (30 MCP clients, including Claude Code, Codex, VS Code with Copilot, OpenCode, Cursor, Windsurf, Gemini CLI and Zed; Chrome, Edge, Brave, Vivaldi, Firefox). Then install the extension and open its panel.
 
 ```
 npx agentic-routines doctor

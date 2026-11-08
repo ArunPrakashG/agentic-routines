@@ -6,8 +6,9 @@ npx agentic-routines <command>
 
 | Command | What it does |
 |---|---|
-| `setup [--dry-run]` | Connects your browsers and agents: Claude Code, Codex, GitHub Copilot and OpenCode. It also tells each agent to use Agentic Routines for the browser and to prefer a saved routine (see [How agents choose](/docs/agents)). `--dry-run` shows the changes without writing them. |
+| `setup [--dry-run]` | Connects your browsers and the agents you pick, from 30 MCP clients: Claude Code, Codex, VS Code with Copilot, OpenCode, Cursor, Windsurf, Gemini CLI, Zed, Goose and more. Each config is edited in place and what is already in it stays. Claude Code, Codex, Copilot and OpenCode also get written guidance; the others read the same advice from the server when they connect. It also tells each agent to use Agentic Routines for the browser and to prefer a saved routine (see [How agents choose](/docs/agents)). `--dry-run` shows the changes without writing them. |
 | `setup --exclusive` | The same, and turns off other browser tools in those agents. `--no-exclusive` turns them back on. |
+| `setup --agent <name> ...` | Those agents only, found or not. `--all-agents` or `--yes` is every agent found, without asking. Without any of these it asks in a terminal, connects the calling agent when an agent runs it, and otherwise prints the entry to add by hand. So does `--agent none`, or a name setup does not know. |
 | `setup --remove` | Takes it all back out: tool server, guidance, plugin, hooks and the browser connection. Saved routines stay. |
 | `doctor` | Checks what is connected and what is not, including the guidance and exclusive mode. |
 | `stats` | What the routines on this computer have saved: this week, per routine and per agent. What was measured and what was estimated is labelled, and it says how the estimate is made. Reads local files only. |

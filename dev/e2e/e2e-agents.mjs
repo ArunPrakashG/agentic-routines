@@ -39,7 +39,7 @@ writeFileSync(join(bin, 'claude'), `#!/bin/sh\necho "$@" >> '${join(home, 'claud
 chmodSync(join(bin, 'claude'), 0o755);
 const env = { HOME: home, AGENTIC_ROUTINES_HOME: store, PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin` };
 const run = (cmd, ...args) => spawnSync(process.execPath, [cmd, ...args], { env, encoding: 'utf8', input: '' });
-const setup = (...a) => run(CLI, 'setup', ...a);
+const setup = (...a) => run(CLI, 'setup', ...(a.includes('--remove') ? a : ['--yes', ...a]));
 const hook = (tool) => run(HOOK) && spawnSync(process.execPath, [HOOK], { env, input: JSON.stringify({ tool_name: tool }), encoding: 'utf8' }).stdout;
 const blocks = (s) => (s?.match(/agentic-routines:start/g) ?? []).length;
 
