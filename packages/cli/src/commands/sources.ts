@@ -1,4 +1,4 @@
-import { checkFetched, stringifyRoutineFile } from '@agentic-routines/core';
+import { toPlaywright, checkFetched, stringifyRoutineFile } from '@agentic-routines/core';
 import * as sources from '../store/sources.ts';
 import * as store from '../store/routines.ts';
 
@@ -44,8 +44,12 @@ export async function runSources(args: string[]): Promise<void> {
 
 /** Prints a routine as the one file a Git source holds, ready to commit under routines/. */
 export async function runExport(args: string[]): Promise<void> {
-  if (!args[0]) throw new Error('Usage: agentic-routines export <routine>');
-  const r = await store.read(args[0]);
+  const wantsCode = args.includes('--playwright');
+  const name = args.find((a) => !a.startsWith('--'));
+  if (!name) throw new Error('Usage: agentic-routines export <routine> [--playwright]');
+  const r = await store.read(name);
+  // Worked out from the steps. Secrets stay placeholders, and the script reads them from the environment when it runs.
+  if (wantsCode) return void process.stdout.write(toPlaywright(r));
   // The same checks the person who installs it will run, so a problem is found here first.
   const problems = checkFetched(r);
   if (problems.length) throw new Error(`Fix this first: ${problems.join(' ')}`);

@@ -42,7 +42,8 @@ const (
 	maxPerUser     = 100
 	maxPending     = 10
 	maxPerDay      = 30
-	maxPublishBody = 256 << 10
+	maxPublishBody = 768 << 10
+	maxPlaywright  = 512 << 10
 )
 
 type paramSpec struct {
@@ -307,6 +308,8 @@ type routineIn struct {
 	Meta  routineMeta `json:"meta"`
 	Body  string      `json:"body"`
 	Steps []step      `json:"steps"`
+	// The steps compiled to Playwright, to read. Nothing runs it: an install compiles its own from the steps.
+	Playwright string `json:"playwright"`
 }
 
 // siteOK says whether a site names one party: a registered name or a single tenant of a shared host.
@@ -442,6 +445,8 @@ func (r *routineIn) check(name string) string {
 		return "bad_description"
 	case !siteOK(m.Site):
 		return "bad_site"
+	case len(r.Playwright) > maxPlaywright:
+		return "playwright_too_long"
 	case len(r.Body) > 20<<10:
 		return "body_too_long"
 	case len(r.Steps) == 0 || len(r.Steps) > maxSteps:
@@ -540,9 +545,10 @@ type summary struct {
 
 type full struct {
 	summary
-	Meta  json.RawMessage `json:"meta"`
-	Body  string          `json:"body"`
-	Steps json.RawMessage `json:"steps"`
+	Meta       json.RawMessage `json:"meta"`
+	Body       string          `json:"body"`
+	Steps      json.RawMessage `json:"steps"`
+	Playwright string          `json:"playwright"`
 }
 
 func (s *store) setHandle(ctx context.Context, userID, handle string) error {
@@ -620,12 +626,12 @@ func (s *store) submit(ctx context.Context, ownerID, handle, name string, r rout
 		return
 	}
 	err = tx.QueryRow(ctx, `
-		INSERT INTO submissions (owner_id, name, site, description, version, body, meta, steps)
+		INSERT INTO submissions (owner_id, name, site, description, version, body, meta, steps, playwright)
 		VALUES ($1::uuid, $2, $3, $4,
 			greatest(coalesce((SELECT version FROM routines WHERE owner_id = $1::uuid AND name = $2), 0),
 			         coalesce((SELECT max(version) FROM submissions WHERE owner_id = $1::uuid AND name = $2), 0)) + 1,
-			$5, $6, $7)
-		RETURNING id::text, version`, ownerID, name, r.Meta.Site, r.Meta.Description, r.Body, meta, steps).Scan(&id, &version)
+			$5, $6, $7, $8)
+		RETURNING id::text, version`, ownerID, name, r.Meta.Site, r.Meta.Description, r.Body, meta, steps, r.Playwright).Scan(&id, &version)
 	if err != nil {
 		return
 	}
@@ -715,9 +721,9 @@ func (s *store) mine(ctx context.Context, ownerID string) ([]mineRow, error) {
 
 func (s *store) routine(ctx context.Context, owner, name string) (f full, err error) {
 	row := s.db.QueryRow(ctx, `
-		SELECT `+summaryCols+`, r.meta, r.body, r.steps FROM routines r JOIN users u ON u.id = r.owner_id
+		SELECT `+summaryCols+`, r.meta, r.body, r.steps, r.playwright FROM routines r JOIN users u ON u.id = r.owner_id
 		WHERE u.handle = $1 AND r.name = $2 AND `+liveOnly, owner, name)
-	f.summary, err = scanSummary(row, &f.Meta, &f.Body, &f.Steps)
+	f.summary, err = scanSummary(row, &f.Meta, &f.Body, &f.Steps, &f.Playwright)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errNotFound
 	}

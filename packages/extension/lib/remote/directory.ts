@@ -1,4 +1,4 @@
-import { deriveUrls, lintForPublish, type Routine } from '@agentic-routines/core';
+import { deriveUrls, lintForPublish, toPlaywright, type Routine } from '@agentic-routines/core';
 import * as auth from './auth';
 
 // Publishing to the directory. The extension holds the session, so every publish goes through here.
@@ -32,6 +32,7 @@ const MESSAGES: Record<string, string> = {
   body_too_long: 'The notes are too long.',
   bad_steps: 'The steps are not in a shape the directory takes.',
   bad_urls: 'The pages the routine applies to are not host-and-path patterns on its site.',
+  playwright_too_long: 'The routine is too long to send with its code.',
   bad_surface: 'Only browser routines can be published for now.',
   bad_hooks: 'The hooks or the notes for the agent are too long, or a hook is on an event that does not exist.',
   too_many_routines: 'You have reached the limit of published routines. Take one down first.',
@@ -65,7 +66,7 @@ function payload(r: Routine, agentRaw?: string) {
   const params = Object.fromEntries(Object.entries(r.meta.params).map(([k, p]) => [k, { type: p.type, description: p.description, accept: p.accept }]));
   const { name, site, description, secrets, pauses, returns, drafted_by, instructions, hooks, viewport } = r.meta;
   const urls = r.meta.urls ?? deriveUrls(r.steps, site);
-  return { meta: { name, site, urls, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw, instructions, hooks, viewport }, body: r.body, steps: r.steps };
+  return { meta: { name, site, urls, description, params, secrets, pauses, returns, drafted_by: drafted_by ?? agentRaw, instructions, hooks, viewport }, body: r.body, steps: r.steps, playwright: toPlaywright(r) };
 }
 
 /** Sends the routine for review. Nothing is public until a person approves it. */

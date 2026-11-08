@@ -57,7 +57,7 @@ import '../styles/directory.css';
         el('p', { class: 'lede' }, r.description.split('\n')[0] ?? ''),
         el('div', { class: 'facts mono' }, el('span', {}, r.site), el('span', {}, `v${r.version}`), el('span', {}, `${r.steps.length} steps`), el('span', {}, `${count(r.installs)} installs`), el('a', { href: `/u?h=${encodeURIComponent(r.owner)}` }, `by ${r.owner}`)),
       );
-      const main = el('div', {}, ...(r.body.trim() ? [el('h2', { class: 'sub-h' }, 'Notes'), el('p', { class: 'notes-body' }, r.body.trim())] : []), el('h2', { class: 'sub-h' }, 'Steps'), el('ol', { class: 'steps' }, ...r.steps.map((s) => stepRow(s, pauses))));
+      const main = el('div', {}, ...(r.body.trim() ? [el('h2', { class: 'sub-h' }, 'Notes'), el('p', { class: 'notes-body' }, r.body.trim())] : []), el('h2', { class: 'sub-h' }, 'Steps'), el('ol', { class: 'steps' }, ...r.steps.map((s) => stepRow(s, pauses))), ...(r.playwright ? [el('h2', { class: 'sub-h' }, 'As Playwright code'), el('p', { class: 'notes-body' }, 'To read. Nothing runs this copy: the extension compiles its own from the steps above, on your machine.'), el('details', {}, el('summary', {}, 'Show the code'), el('pre', { class: 'mono', style: 'overflow-x: auto; font-size: 13px' }, r.playwright))] : []));
       const side = el(
         'aside',
         { style: 'display: flex; flex-direction: column; gap: 16px' },

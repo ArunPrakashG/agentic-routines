@@ -473,19 +473,20 @@ type liveCopy struct {
 
 type detail struct {
 	submissionRow
-	Meta      json.RawMessage `json:"meta"`
-	Body      string          `json:"body"`
-	Steps     json.RawMessage `json:"steps"`
-	Checks    []checkResult   `json:"checks"`
-	Live      *liveCopy       `json:"live"`
-	Publisher publisherStats  `json:"publisher"`
+	Meta       json.RawMessage `json:"meta"`
+	Body       string          `json:"body"`
+	Steps      json.RawMessage `json:"steps"`
+	Playwright string          `json:"playwright"`
+	Checks     []checkResult   `json:"checks"`
+	Live       *liveCopy       `json:"live"`
+	Publisher  publisherStats  `json:"publisher"`
 }
 
 func (s *store) submission(ctx context.Context, id string) (d detail, ownerID string, err error) {
 	row := s.db.QueryRow(ctx, `
-		SELECT `+submissionCols+`, s.meta, s.body, s.steps, s.owner_id::text FROM submissions s JOIN users u ON u.id = s.owner_id
+		SELECT `+submissionCols+`, s.meta, s.body, s.steps, s.playwright, s.owner_id::text FROM submissions s JOIN users u ON u.id = s.owner_id
 		WHERE s.id = $1::uuid`, id)
-	d.submissionRow, err = scanSubmission(row, &d.Meta, &d.Body, &d.Steps, &ownerID)
+	d.submissionRow, err = scanSubmission(row, &d.Meta, &d.Body, &d.Steps, &d.Playwright, &ownerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errNotFound
 	}
@@ -591,12 +592,12 @@ func (s *store) approve(ctx context.Context, id, admin string) (owner, name stri
 		return "", "", 0, errInvalid
 	}
 	if _, err = tx.Exec(ctx, `
-		INSERT INTO routines (id, owner_id, name, site, description, version, body, meta, steps)
-		VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO routines (id, owner_id, name, site, description, version, body, meta, steps, playwright)
+		VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4, $5, $6, $7, $8, (SELECT playwright FROM submissions WHERE id = $9::uuid))
 		ON CONFLICT (owner_id, name) DO UPDATE SET site = EXCLUDED.site, description = EXCLUDED.description,
-			version = EXCLUDED.version, body = EXCLUDED.body, meta = EXCLUDED.meta, steps = EXCLUDED.steps,
+			version = EXCLUDED.version, body = EXCLUDED.body, meta = EXCLUDED.meta, steps = EXCLUDED.steps, playwright = EXCLUDED.playwright,
 			approved_at = now(), updated_at = now()`,
-		ownerID, name, in.Meta.Site, in.Meta.Description, version, in.Body, meta, steps); err != nil {
+		ownerID, name, in.Meta.Site, in.Meta.Description, version, in.Body, meta, steps, id); err != nil {
 		return
 	}
 	if _, err = tx.Exec(ctx, `UPDATE submissions SET status = 'approved', decided_at = now(), decided_by = $2 WHERE id = $1::uuid`, id, admin); err != nil {

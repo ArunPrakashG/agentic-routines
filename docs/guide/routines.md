@@ -61,6 +61,16 @@ Agents see only `name`, `description` and `params` up front. The body comes back
 
 Steps are declarative: navigate, click, type, select, upload, wait and read, and `each` and `if`, which repeat the steps after them or only run them sometimes ([Loops and branches](/docs/refine#loops-and-branches)). A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
 
+## As Playwright code
+
+A routine's steps compile to a Playwright script, with its parameters, loops and branches. It is worked out from the steps with no model, so it costs nothing to make and cannot drift from them. `routine_playwright` gives it to an agent, and `agentic-routines export <routine> --playwright` prints it. Secrets stay placeholders: the script reads them from the environment when it runs, and they are never written into it.
+
+`routine_run` with `fast: true` runs a routine through that code. It stops at every pause, and leaves steps that use a stored secret, hand over to a person, say yes to a dialog or only the replay can do to the replay. On any failure it carries on step by step from that step, with the usual checks. A routine with hooks always goes step by step.
+
+Fast run saves time, not tokens. A normal replay already calls no model. Whether it becomes the default depends on `dev/bench/fast.mjs`, which compares the two on the same routine. It stays off unless asked for, and it has not been measured yet.
+
+Agents should not reach for Playwright on a page they have not seen. It needs to know the page in advance, and a failure tells it little. The step tools tell an agent what each step did.
+
 ## Share a routine through Git
 
 A routine can live in a GitHub repository as one file: the notes first, then the steps in a fenced `steps` block. A `config.routine` in the repository root lists the files and says what each is for ([Routine repositories](/docs/repositories)); without one, the files go under `routines/`. Export one from your machine:

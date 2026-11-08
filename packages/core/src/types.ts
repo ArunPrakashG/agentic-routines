@@ -228,6 +228,8 @@ export interface RunResult {
   error?: string;
   /** Text read by "read" steps, keyed by label. */
   read?: Record<string, string>;
+  /** The part of the run that went through compiled code. */
+  fast?: { steps_run: number; ms: number; stopped_at?: number; why?: string };
   /** A failed run with the flight recorder on: the video of its last minute. */
   flight_recording?: string;
   updated_to?: number;
