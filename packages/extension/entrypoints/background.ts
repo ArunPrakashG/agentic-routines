@@ -13,6 +13,7 @@ import { watchDialogs } from '../lib/page/dialogs';
 import { watchLogs } from '../lib/page/logs';
 import { fromCard, fromToolbar, handedOver, watchHandoffs } from '../lib/page/handoff';
 import { policyOf } from '../lib/page/policy';
+import { changeSettings, onSettingsChanged, settings } from '../lib/page/settings';
 import { ask, heldBy, isLent, lend, lentTabs, releaseSession, takeBack, tellAll, watchTabs } from '../lib/page/tabs';
 import type { PanelCommand, PanelState } from '../lib/panel/types';
 
@@ -53,6 +54,14 @@ export default defineBackground(() => {
     const owner = (r as Routine & { owner?: string }).owner ?? r.meta.owner ?? 'local';
     return !!routines.find((x) => x.name === r.meta.name && x.owner === owner)?.origin;
   }
+
+  onSettingsChanged(() => push());
+  browser.notifications?.onClicked.addListener((id) => {
+    const tabId = Number(/^handoff-(\d+)$/.exec(id)?.[1]);
+    if (!tabId) return;
+    void browser.tabs.update(tabId, { active: true }).then((t) => t && browser.windows.update(t.windowId, { focused: true })).catch(() => {});
+    void browser.notifications?.clear(id);
+  });
 
   // ---------- side panel ----------
   const panels = new Set<Browser.runtime.Port>();
@@ -244,6 +253,7 @@ export default defineBackground(() => {
       install: installing?.card,
       script: scripting?.card,
       scriptSites: await scriptSites(),
+      settings: settings(),
       lent: await Promise.all(
         lentTabs().map(async (id) => {
           const t = await browser.tabs.get(id).catch(() => undefined);
@@ -350,6 +360,9 @@ export default defineBackground(() => {
 
   async function command(c: PanelCommand): Promise<unknown> {
     switch (c.t) {
+      case 'setting':
+        await changeSettings(c.change);
+        return;
       case 'takeBack':
         await giveBack(c.tabId);
         return;

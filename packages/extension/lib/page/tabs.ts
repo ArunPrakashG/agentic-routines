@@ -2,6 +2,7 @@ import type { ContentMsg } from '../../entrypoints/content';
 import { platform } from '../platform';
 import { dialogOn, unlessDialog } from './dialogs';
 import { cancelSession, handedOver, onHandoffChange } from './handoff';
+import { settings, watchSettings } from './settings';
 import { guardTab, listed, notListed, policyOf, unguardTab, watchPolicies } from './policy';
 import type { Send } from '../platform/types';
 
@@ -157,8 +158,11 @@ const opened = new Map<string, Set<number>>();
 const made = (session: string, tabId: number) => {
   if (!opened.has(session)) opened.set(session, new Set());
   opened.get(session)!.add(tabId);
+  lastUsed.set(tabId, Date.now());
   return tabId;
 };
+// When each tab was last driven, to close the ones left behind.
+const lastUsed = new Map<number, number>();
 
 /** What to call a session in the title and in messages. Two sessions of one agent are told apart by a number. */
 export function noteSession(session: string | undefined, name: string) {
@@ -222,8 +226,11 @@ export async function onItsSites(session: string | undefined, tabId: number) {
 // in one of the person's own, and is not the only tab in its window.
 const ours = new Set<number>();
 
+const SHARED_GROUP = 'Agents';
+const sharedGroups = new Map<number, number>();
+
 async function group(tabId: number, label: string | null) {
-  const groups = (browser as unknown as { tabGroups?: { update(id: number, p: object): Promise<unknown> } }).tabGroups;
+  const groups = (browser as unknown as { tabGroups?: { update(id: number, p: object): Promise<unknown>; query(q: object): Promise<{ id: number }[]> } }).tabGroups;
   const tabs = browser.tabs as typeof browser.tabs & { group?: (o: object) => Promise<number>; ungroup?: (ids: number) => Promise<void> };
   if (!groups || !tabs.group || !tabs.ungroup) return;
   try {
@@ -231,14 +238,20 @@ async function group(tabId: number, label: string | null) {
       if (ours.delete(tabId)) await tabs.ungroup(tabId);
       return;
     }
+    const how = settings().grouping;
+    if (how === 'none') return;
     const tab = await browser.tabs.get(tabId);
     // Grouping the only tab of a window makes the browser close that window, so it stays out.
     if (!ours.has(tabId) && (await browser.tabs.query({ windowId: tab.windowId })).length < 2) return;
     const gid = (tab as { groupId?: number }).groupId;
     if (gid !== undefined && gid !== -1 && !ours.has(tabId)) return;
-    const id = ours.has(tabId) ? gid! : await tabs.group({ tabIds: tabId });
+    // One group for every agent in a window, joined if it is still there.
+    const shared = how === 'shared' ? sharedGroups.get(tab.windowId) : undefined;
+    const still = shared !== undefined && (await groups.query({ windowId: tab.windowId })).some((g) => g.id === shared);
+    const id = ours.has(tabId) ? gid! : await tabs.group({ tabIds: tabId, ...(still ? { groupId: shared } : {}) });
     ours.add(tabId);
-    await groups.update(id, { title: label, color: 'purple' });
+    if (how === 'shared') sharedGroups.set(tab.windowId, id);
+    await groups.update(id, { title: how === 'shared' ? SHARED_GROUP : label, color: 'purple' });
   } catch {
     // The tab is gone, or the browser would not group it.
   }
@@ -302,6 +315,7 @@ function claim(session: string, tabId: number): number {
   const label = labelOf(session);
   holds.set(tabId, { session, label, until: isNamed(session) ? Number.MAX_SAFE_INTEGER : Date.now() + LEASE_MS, marked: Date.now() });
   tabOf.set(session, tabId);
+  lastUsed.set(tabId, Date.now());
   void guardTab(tabId, policyOf(session));
   void mark(tabId, label);
   paint(tabId);
@@ -313,6 +327,7 @@ function claim(session: string, tabId: number): number {
 function touch(tabId: number) {
   const h = holds.get(tabId);
   if (!h) return;
+  lastUsed.set(tabId, Date.now());
   if (!isNamed(h.session)) h.until = Date.now() + LEASE_MS;
   if (Date.now() - h.marked > 60_000) {
     h.marked = Date.now();
@@ -369,13 +384,49 @@ export async function agentTabId(session: string = USER, requested?: number): Pr
   }
   const own = tabOf.get(session);
   if (own !== undefined) return claim(session, own);
-  const alone = holds.size === 0;
-  if (alone) return claim(session, made(session, (await browser.tabs.create({ url: 'about:blank', active: false })).id!));
-  // Someone else is working: not in the person's window or in the other agent's.
+  const where = settings().tabsWhere;
+  if (where === 'window' || (where === 'auto' && holds.size === 0)) return claim(session, made(session, (await browser.tabs.create({ url: 'about:blank', active: false })).id!));
+  // A window for agents, kept while it is open. In auto mode someone else is working: not in the person's window or in the other agent's.
+  if (where === 'separate' && agentWindow !== undefined) {
+    const t = await browser.tabs.create({ url: 'about:blank', active: false, windowId: agentWindow }).catch(() => undefined);
+    if (t?.id !== undefined) return claim(session, made(session, t.id));
+  }
   const w = await browser.windows.create({ url: 'about:blank', focused: false });
+  if (where === 'separate') agentWindow = w?.id;
   const id = w?.tabs?.[0]?.id ?? (w?.id !== undefined ? (await browser.tabs.query({ windowId: w.id }))[0]?.id : undefined);
   if (id === undefined) throw new Error('The browser did not open a window for this agent');
   return claim(session, made(session, id));
+}
+let agentWindow: number | undefined;
+
+/** Close tabs a session opened and has left: this session's, or with `idleMs`, those untouched for that long. Never the one it is in, or one that is the person's right now. */
+export async function cleanUp(session?: string, idleMs = 0) {
+  const closed: number[] = [];
+  for (const [s, ids] of opened) {
+    if (session !== undefined && s !== session) continue;
+    for (const id of [...ids]) {
+      const idle = Date.now() - (lastUsed.get(id) ?? 0);
+      if (idle < idleMs || handedOver(id) || lent.has(id) || controlled.get(id)?.mode === 'paused') continue;
+      // Asked for its own tabs, it keeps the one it is in. Left alone that long, even that one goes.
+      if (session !== undefined && tabOf.get(s) === id) continue;
+      const tab = await browser.tabs.get(id).catch(() => undefined);
+      if (!tab) {
+        ids.delete(id);
+        continue;
+      }
+      const win = await browser.windows.get(tab.windowId).catch(() => undefined);
+      if (tab.active && win?.focused) continue;
+      ids.delete(id);
+      if (holds.get(id)?.session === s) holds.delete(id);
+      if (tabOf.get(s) === id) tabOf.delete(s);
+      void unguardTab(id);
+      await platform.release?.(id);
+      await browser.tabs.remove(id).catch(() => {});
+      closed.push(id);
+    }
+  }
+  keepNamed();
+  return closed;
 }
 
 // Tabs the person lent with the toolbar button. Stored so that a service worker that restarts still knows.
@@ -433,7 +484,13 @@ const spawned = new Map<number, number>();
 export function watchTabs() {
   onHandoffChange((tabId) => paint(tabId));
   watchPolicies();
+  watchSettings();
   void restoreNamed();
+  // Runs while the host keeps this worker alive, which is whenever an agent can be using a tab.
+  setInterval(() => {
+    const min = settings().idleMinutes;
+    if (min) void cleanUp(undefined, min * 60_000);
+  }, 60_000);
   void browser.storage.session?.get('lent').then((s) => {
     for (const id of (s.lent as number[] | undefined) ?? []) {
       lent.add(id);
@@ -441,7 +498,12 @@ export function watchTabs() {
     }
   });
   browser.tabs.onRemoved.addListener((tabId) => {
+    lastUsed.delete(tabId);
     if (lent.delete(tabId)) void keepLent();
+  });
+  browser.windows.onRemoved.addListener((id) => {
+    if (agentWindow === id) agentWindow = undefined;
+    sharedGroups.delete(id);
   });
   // A new document starts with the button's text cleared.
   browser.tabs.onUpdated.addListener((tabId, info) => {

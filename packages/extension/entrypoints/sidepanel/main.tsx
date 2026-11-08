@@ -128,7 +128,7 @@ const Pips = ({ colors, label }: { colors?: string[]; label: string }) => (
 
 // ---------- views ----------
 
-type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' };
+type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' };
 
 function RecordButton({ on }: { on: boolean }) {
   return (
@@ -218,6 +218,11 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
             </button>
           )}
           {go && (
+            <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'settings' }); }}>
+              Settings
+            </button>
+          )}
+          {go && (
             <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'submissions' }); }}>
               Your submissions
             </button>
@@ -237,6 +242,50 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
 }
 
 const repoName = (id: string) => id.replace(/^https:\/\/github\.com\//, '');
+
+function Choice<T extends string | number>({ label, value, options, set }: { label: string; value: T; options: [T, string][]; set: (v: T) => void }) {
+  return (
+    <label class="stack" style={{ gap: '4px' }}>
+      <span class="k">{label}</span>
+      <select value={String(value)} onChange={(e) => set(options.find(([v]) => String(v) === e.currentTarget.value)![0])}>
+        {options.map(([v, name]) => (
+          <option value={String(v)} key={String(v)}>{name}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Toggle({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <input type="checkbox" checked={on} onChange={(e) => set(e.currentTarget.checked)} style={{ width: '16px', height: '16px' }} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function SettingsView({ s, back }: { s: PanelState; back: () => void }) {
+  const c = s.settings;
+  const set = (change: Partial<PanelState['settings']>) => void send({ t: 'setting', change });
+  return (
+    <div class="panel">
+      <header class="bar back">
+        <button class="icon-btn" type="button" aria-label="Back to routines" onClick={back}>
+          ←
+        </button>
+        <h1>Settings</h1>
+      </header>
+      <main class="stack" style={{ gap: '16px', padding: '16px' }}>
+        <Choice label="Agent tabs open in" value={c.tabsWhere} set={(tabsWhere) => set({ tabsWhere })} options={[['auto', 'This window, or their own if another agent is working'], ['window', 'This window'], ['separate', 'A separate window']]} />
+        <Choice label="Tab groups" value={c.grouping} set={(grouping) => set({ grouping })} options={[['session', 'One for each agent'], ['shared', 'One for all agents'], ['none', 'None']]} />
+        <Choice label="Close tabs an agent has left after" value={c.idleMinutes} set={(idleMinutes) => set({ idleMinutes })} options={[[10, '10 minutes'], [30, '30 minutes'], [60, '1 hour'], [0, 'Never']]} />
+        <Toggle label="Show the agent's cursor on the page" on={c.agentCursor} set={(agentCursor) => set({ agentCursor })} />
+        <Toggle label="Notify me when an agent hands me a tab" on={c.handoffNotifications} set={(handoffNotifications) => set({ handoffNotifications })} />
+      </main>
+    </div>
+  );
+}
 
 function Sources({ back }: { back: () => void }) {
   const [data, setData] = useState<SourcesData>();
@@ -1399,6 +1448,7 @@ function App() {
   if (view.v === 'inputs') return <Inputs id={view.id} name={view.name} back={back} />;
   if (view.v === 'submissions') return <Submissions s={s} back={back} />;
   if (view.v === 'sources') return <Sources back={back} />;
+  if (view.v === 'settings') return <SettingsView s={s} back={back} />;
   return <Library s={s} go={setView} />;
 }
 

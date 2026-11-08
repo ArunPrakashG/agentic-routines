@@ -12,7 +12,8 @@ import * as native from './native';
 import { platform } from '../platform';
 import * as runs from './runs';
 import { unmark } from '../page/mark';
-import { adopt, agentTabId, ask, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, nameSession, noteSession, onItsSites, openTab, releaseSession, sessionTabs, settle, takePopupRefused, takeSpawned, waitLoaded } from '../page/tabs';
+import { changeSettings, settings } from '../page/settings';
+import { adopt, agentTabId, ask, cleanUp, closeOwnTab, frameOf, glow, heldBy, isLent, isOwnTab, lentTabs, nameSession, noteSession, onItsSites, openTab, releaseSession, sessionTabs, settle, takePopupRefused, takeSpawned, waitLoaded } from '../page/tabs';
 import { listed, notListed, policyOf, setPolicy, takeRefused } from '../page/policy';
 
 // The browser tools agents call. Each call is done and recorded.
@@ -241,7 +242,7 @@ let mayRunScript: (site: string, code: string, by: string) => Promise<void> = as
 export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
 
 // All a read-only session may call. Anything added later stays refused until someone decides otherwise.
-const READ_ONLY = new Set(['browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
+const READ_ONLY = new Set(['browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
 
 export async function handle(method: string, p: any): Promise<unknown> {
   const source = agentName(p?.agent);
@@ -255,6 +256,12 @@ export async function handle(method: string, p: any): Promise<unknown> {
       if (p.policy?.name) nameSession(p.target, p.policy.name);
       return true;
     }
+    case 'browser.settings':
+      return p.change ? changeSettings(p.change) : settings();
+    case 'browser.tabs_cleanup':
+      return { closed: await cleanUp(p?.session ?? 'user', (p.idle_minutes ?? 0) * 60_000) };
+    case 'browser.status':
+      return { tabs: await sessionTabs(p?.session ?? 'user'), lent: lentTabs().length, extension: browser.runtime.getManifest().version, settings: settings(), policy: policy && { hosts: policy.hosts, read_only: policy.readOnly } };
     case 'browser.session_tabs':
       return sessionTabs(p.target);
     case 'browser.session_end':
