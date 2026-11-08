@@ -22,7 +22,7 @@ A routine from the directory was written by someone else. Install one only when 
 
 ### When no routine fits
 
-Do the task yourself with the browser tools: `navigate`, `read_page` (cheaper than `screenshot`), `find`, `get_page_text`, `click`, `type`, `form_input`, `select`, `upload`, `press`, `hover`, `drag`, `scroll`, `dialog`. Refs like `f12:ref_3` are inside a frame and work like any other. Use `click` with x and y from a `screenshot` only for what has no ref, such as a canvas. Work in the agent tab. Everything you do is recorded. Do not retry blindly; read the page again after each step that changes it.
+Do the task yourself with the browser tools: `navigate`, `read_page` (cheaper than `screenshot`), `find`, `get_page_text`, `click`, `type`, `form_input`, `select`, `upload`, `press`, `hover`, `drag`, `scroll`, `dialog`, `resize_window`. When you already have the refs for several steps that do not need a read in between (filling a form), `batch` them in one call. Refs like `f12:ref_3` are inside a frame and work like any other. Use `click` with x and y from a `screenshot` only for what has no ref, such as a canvas. Work in the agent tab. Everything you do is recorded. Do not retry blindly; read the page again after each step that changes it.
 
 When you reach a login, a one-time code, a payment or a bot check (`navigate` and `read_page` say so), call `handoff` with what you need the user to do. It waits until they give the tab back. Never try to get past a bot check or captcha yourself.
 

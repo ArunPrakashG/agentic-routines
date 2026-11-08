@@ -24,6 +24,8 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `drag` | Press on one place and let go on another: a slider, a list to reorder, a map. Each end is a ref or a point, and both have to be on screen. |
 | `scroll` | Turn the wheel: `direction` and `amount`, over the middle of the page or over a ref or a point. Only a `ref` brings that element into view. `click` and `type` do that by themselves. |
 | `wait` | Wait some seconds. `read_page` with `wait` is usually better: it stops when the page is quiet. |
+| `resize_window` | Make the page lay out at another size, as a narrow window or a phone would, to see a layout or a mobile site. It changes only that tab, not the person's window. `reset` goes back. Read the page again after it. |
+| `batch` | Run up to 20 of the page tools one after another in one call and get every answer back together. Each runs as it would alone, with the same checks, pauses and recording, and the batch stops at the first one that fails. |
 | `type` | Type into a field by ref. Replaces what is there. `submit` presses Enter after. |
 | `select` | Pick an option in a select, by label or value. |
 | `form_input` | Bring a field to a value: a checkbox, switch or radio (`true` or `false`), a select, a slider, a date, a time, a colour, or text. What is ticked already stays ticked. |

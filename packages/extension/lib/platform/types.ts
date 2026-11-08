@@ -14,6 +14,8 @@ export interface Platform {
   targetOf?: (tabId: number) => Promise<string>;
   /** Let go of a tab's DevTools session now, when nothing is driving it any more. */
   release?: (tabId: number) => Promise<void>;
+  /** Make a tab lay out at another size, as a narrow window or a phone would, without touching the person's window. With null, its own size again. */
+  emulate?: (tabId: number, size: { width: number; height: number; mobile?: boolean } | null) => Promise<void>;
   /** What a tab's DevTools session says, from then on. Also `detached`, when that session ends. */
   onEvent?: (fn: (tabId: number, method: string, params: any, child?: string) => void) => void;
   /** The toolbar button: `first` says what the click was for, and with true the panel opens as well. */

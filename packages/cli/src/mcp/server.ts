@@ -327,7 +327,13 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
     };
   // Every tool call goes through the debug log when it is on (see debug.ts).
   const register = server.registerTool.bind(server) as (name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => RegisteredTool;
-  server.registerTool = ((name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => register(name, config, logged(name, () => bridge.agent, withNote(cb)))) as unknown as typeof server.registerTool;
+  // What batch can call: the tools themselves, as registered, so nothing is checked less in a batch than alone.
+  const tools = new Map<string, { input: z.ZodRawShape; run: (a: never, extra: unknown) => Promise<unknown> }>();
+  server.registerTool = ((name: string, config: unknown, cb: (a: never, extra: unknown) => Promise<unknown>) => {
+    const run = logged(name, () => bridge.agent, withNote(cb));
+    tools.set(name, { input: (config as { inputSchema?: z.ZodRawShape }).inputSchema ?? {}, run });
+    return register(name, config, run);
+  }) as unknown as typeof server.registerTool;
   const routineTools = new Map<string, RegisteredTool>();
   let refreshTimer: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {
@@ -962,6 +968,39 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
 
   server.registerTool('close_tab', { description: 'Close a tab you opened, or that a page opened because of what you did. Any other tab is the user\'s and stays open. With no tab_id, the one you are working in.', inputSchema: { tab_id: z.number().int().optional() } }, async (a) =>
     guarded(async () => text(await bridge.call<string>('browser.close_tab', a))),
+  );
+
+  const BATCHABLE = ['navigate', 'read_page', 'find', 'get_page_text', 'click', 'hover', 'drag', 'scroll', 'type', 'press', 'select', 'form_input', 'wait', 'screenshot', 'dialog', 'resize_window'] as const;
+  server.registerTool(
+    'batch',
+    {
+      description: `Do several of the browser tools one after another in one call, and get every answer back together: ${BATCHABLE.join(', ')}. Each runs as it would alone, with the same checks, pauses and recording; the batch stops at the first one that fails and says how far it got. Use it for steps whose refs you already have and that do not depend on reading in between: filling a form, a click then a press. A step that changes the page can make later refs gone, which stops the batch there. Not for upload, javascript, handoff or secrets.`,
+      inputSchema: {
+        actions: z.array(z.object({ tool: z.enum(BATCHABLE), input: z.record(z.string(), z.unknown()).optional().describe('What that tool takes, as it would be called alone') })).min(1).max(20),
+      },
+    },
+    async ({ actions }, extra) =>
+      guarded(async () => {
+        const content: Content[] = [];
+        for (const [i, step] of actions.entries()) {
+          const tool = tools.get(step.tool);
+          const parsed = z.object(tool?.input ?? {}).safeParse(step.input ?? {});
+          const stop = (why: string) => ({ content: [...content, { type: 'text', text: `${i + 1}. ${step.tool} was not run: ${why}. ${actions.length - i} of ${actions.length} steps did not run.` } as Content], isError: true });
+          if (!tool) return stop('there is no such tool');
+          if (!parsed.success) return stop(parsed.error.issues.map((x) => `${x.path.join('.') || 'input'}: ${x.message}`).join('; '));
+          const res = (await tool.run(parsed.data as never, extra)) as { content?: Content[]; isError?: boolean };
+          content.push({ type: 'text', text: `${i + 1}. ${step.tool}` }, ...(res.content ?? []));
+          if (res.isError) return { content: [...content, { type: 'text', text: `Stopped at step ${i + 1}. ${actions.length - i - 1} after it did not run.` } as Content], isError: true };
+        }
+        return { content };
+      }),
+  );
+
+  server.registerTool('resize_window', { description: 'Make the page lay out at another size, as a narrow window or a phone would, to see a layout or a mobile site. It changes only this tab, not the person\'s window. Read the page again after it: refs and points from a picture before it no longer fit. Pass reset to go back to its own size.', inputSchema: { width: z.number().int().min(200).max(3840).optional(), height: z.number().int().min(200).max(3840).optional(), mobile: z.boolean().optional().describe('Lay out as a phone does. A page with no viewport tag then lays out about 980 wide, as it does on a phone.'), reset: z.boolean().optional(), ...tab } }, async (a) =>
+    guarded(async () => {
+      if (!a.reset && (!a.width || !a.height)) return fail('Pass width and height, or reset.');
+      return text(await bridge.call<string>('browser.resize', a));
+    }),
   );
 
   server.registerTool('wait', { description: 'Wait some seconds, when you know the page needs time. To wait for a page to finish drawing, read_page with wait is better: it stops as soon as the page is quiet.', inputSchema: { seconds: z.number().min(0.1).max(30), ...tab } }, async (a) =>
