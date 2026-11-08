@@ -570,6 +570,46 @@ function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
   );
 }
 
+function ScriptCard({ card }: { card: NonNullable<PanelState['script']> }) {
+  return (
+    <section class="pubcard" aria-label="Allow a script">
+      <div class="stack" style={{ gap: '6px' }}>
+        <span class="k">{card.by} wants to run a script</span>
+        <span class="title mono">{card.site}</span>
+        <span class="meta">It can do anything you can do on this site, as you.</span>
+      </div>
+      <pre class="script-code">{card.code}</pre>
+      <div class="foot2">
+        <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'scriptDecide', answer: 'no' })}>
+          No
+        </button>
+        <button class="btn btn-secondary" type="button" onClick={() => send({ t: 'scriptDecide', answer: 'once' })}>
+          This once
+        </button>
+        <button class="btn btn-primary" type="button" onClick={() => send({ t: 'scriptDecide', answer: 'always' })}>
+          Always on this site
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ScriptSites({ sites }: { sites: string[] }) {
+  return (
+    <section class="stack" aria-label="Sites that allow scripts" style={{ gap: '6px' }}>
+      <span class="k">Agents can run scripts on</span>
+      {sites.map((site) => (
+        <div class="script-site" key={site}>
+          <span class="mono">{site}</span>
+          <button class="btn btn-ghost sm" type="button" aria-label={`Stop allowing scripts on ${site}`} onClick={() => send({ t: 'scriptForget', site })}>
+            Stop
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function PublishCard({ card }: { card: NonNullable<PanelState['publish']> }) {
   const [handle, setHandle] = useState('');
   const bad = card.needsHandle && !/^[a-z0-9][a-z0-9-]{2,29}$/.test(handle.trim().toLowerCase());
@@ -763,6 +803,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
         </main>
       ) : (
         <main class="lib">
+          {s.script && <ScriptCard card={s.script} />}
           {s.publish && <PublishCard card={s.publish} />}
           {s.runs.map((r) => {
             const live = r.id === s.recording;
@@ -841,6 +882,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
               ))}
             </section>
           )}
+          {s.scriptSites.length > 0 && <ScriptSites sites={s.scriptSites} />}
         </main>
       )}
     </div>

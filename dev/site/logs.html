@@ -1,0 +1,13 @@
+<!doctype html>
+<title>Logs</title>
+<h1>Logs</h1>
+<button id="send">Send a request</button>
+<p id="out">nothing</p>
+<script>
+  console.log('page started');
+  console.log('session', 'token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abcdefghijkl');
+  console.warn('key ghp_abcdefghijklmnopqrstuvwx');
+  console.error('boom from the page');
+  setTimeout(() => { throw new Error('uncaught one'); }, 0);
+  document.getElementById('send').onclick = () => fetch('overview.html?key=s3cret&who=asha');
+</script>

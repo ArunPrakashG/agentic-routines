@@ -31,6 +31,10 @@ This is a filter, and filters miss things. A reworded order will not be marked. 
 
 These hold whatever the agent, the page or a routine says:
 
+- **A script runs only on a site the person allowed.** `javascript` waits for the person in the side panel: no, this once, or always on this site. They can take a site back in the panel. A script is never recorded and cannot read cookies, and anything shaped like a token, key or cookie is hidden from what comes back from a script or the console. The hiding catches accidents, not a script written to get around it.
+- **A frame a person cannot see is left out.** A hidden or tiny frame is not in `read_page`, `find` or `get_page_text`, so what it says does not reach the agent.
+- **A dialog that now asks something final stops a replay.** A routine that said yes to a harmless dialog will not say yes to one that now talks about deleting or paying. A yes to one that sounded final when it was recorded pauses like any other irreversible step.
+
 - **A replay never follows page text.** It runs the recorded steps. When a step changed, the page's candidates are shown as data and only the agent's or your choice, by ref, picks one.
 - **A routine only works on its own site.** The site in its metadata is checked when it is published, when it is installed (directory and Git), and on every replay. A step that opens another site fails the run, and so does a tab that ended up elsewhere after a redirect. A routine from someone else gets nothing beyond its declared site. Your own routines may also use the pages you recorded them on.
 - **Irreversible steps pause for you.** Send, submit, delete, pay, publish and similar clicks pause the run in the side panel. For a routine from someone else this happens even when its author left the pause out, and the agent can't approve it: the answer has to come from the panel, and the run ends if nobody does.

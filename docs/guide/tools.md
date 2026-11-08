@@ -10,6 +10,9 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 |---|---|
 | `tabs` | List open tabs: id, title and address. |
 | `dialog` | Answer an alert, confirm or prompt that has stopped the page. Recorded as a step; yes to one that sounds final pauses a replay. |
+| `javascript` | Run a script in the page. The person says yes per site in the side panel. Never recorded. |
+| `read_console_messages` | What the page said to its console, and uncaught errors. |
+| `read_network_requests` | What the page sent since the first call on that tab: method, address, status, type. |
 | `close_tab` | Close a tab you opened, or that a page opened because of what you did. Any other tab stays open. Not recorded. |
 | `navigate` | Open an address in the agent tab. Pass `force` to leave a page that asks first. If an installed routine handles the page, it adds a hint line (see [Finding a routine first](#finding-a-routine-first)). |
 | `read_page` | The page as an outline of roles and names. Interactive elements get a ref such as `ref_12`. Text a person can't see is left out. The result is wrapped as [untrusted data](/docs/safety). Adds the same hint line when the tab has moved to a page a routine handles. |
@@ -136,3 +139,14 @@ A page's outline includes every frame a person can see and whatever is inside sh
 ## Dialogs
 
 An alert, confirm or prompt stops the page until someone answers. Every tool that needs the page then says so and quotes the dialog, and `dialog` answers it. The browser only reports dialogs on a tab with a debugging connection, which starts at the first click or key and lasts a minute after the last one. Behind another tab with no connection the browser answers no by itself. In front with no connection a dialog waits for the person. A dialog a person answers while recording is not captured.
+
+## Scripts, the console and the network
+
+These can reach what signs a person in, so they are held back on purpose:
+
+- `javascript` waits for the person in the side panel the first time on a site: no, this once, or always on this site. A script cannot read cookies, and the result has anything shaped like a token, key or cookie hidden.
+- A script is never recorded. A routine made from the run will not do it, so use the other tools for anything worth keeping.
+- `read_network_requests` gives no headers or bodies, and hides query values and long opaque parts of an address.
+- Listening to the console and network starts at the first call on a tab, because some sites treat being listened to as a sign of a bot.
+
+The hiding catches accidents. It would not stop a script written to get around it, which is why the person decides per site.
