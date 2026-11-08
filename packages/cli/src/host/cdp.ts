@@ -207,6 +207,8 @@ export function cdpRelay(call: Call, log: (...a: unknown[]) => void) {
         return { targetInfos: (await refreshTargets(c)).tabs.map((t) => t.targetInfo) };
       case 'Target.getTargetInfo': {
         if (sessionId) break;
+        // With no target named, the browser itself, which a client asks about as it connects.
+        if (!params?.targetId) return { targetInfo: { targetId: 'browser', type: 'browser', title: '', url: '', attached: true, canAccessOpener: false } };
         await refreshTargets(c);
         const t = [...c.targets.values()].find((x) => x.targetInfo.targetId === params?.targetId);
         if (!t) throw new Refused(`No target ${params?.targetId}`);
@@ -239,6 +241,9 @@ export function cdpRelay(call: Call, log: (...a: unknown[]) => void) {
         return call('cdp.cookies', { session: c.session });
       case 'Storage.setCookies':
         return call('cdp.setCookies', { session: c.session, cookies: params?.cookies ?? [] });
+      case 'Storage.clearCookies':
+      case 'Network.clearBrowserCookies':
+        throw new Refused(`${method} is refused: the cookies and data are the person's own sign-ins, on every site.`);
     }
     if (method.startsWith('Browser.') || method === 'Target.attachToBrowserTarget' || method === 'Target.attachToTarget' || method === 'Target.sendMessageToTarget' || method === 'Target.activateTarget') {
       throw new Refused(`${method} is not available here.${method === 'Target.attachToTarget' ? ' A separate CDP session on a page is not supported.' : ''}`);

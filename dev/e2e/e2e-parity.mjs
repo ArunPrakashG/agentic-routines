@@ -42,7 +42,10 @@ async function cdp(target, method, params = {}) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   const out = await new Promise((res) => {
-    ws.onmessage = (e) => res(JSON.parse(e.data));
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.id === 1) res(m);
+    };
     ws.send(JSON.stringify({ id: 1, method, params }));
   });
   ws.close();
@@ -50,9 +53,11 @@ async function cdp(target, method, params = {}) {
 }
 const pageOf = async (match) => (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'page' && x.url.includes(match));
 const evalIn = async (match, expression) => (await cdp(await pageOf(match), 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result.value;
+// Chromium runs extensions of its own too.
+const OURS = 'chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo/';
 /** In the extension's own service worker, for what only the browser's own buttons can do. */
 const inExtension = async (expression) => {
-  const sw = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'service_worker' && x.url.startsWith('chrome-extension://'));
+  const sw = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'service_worker' && x.url.startsWith(OURS));
   return (await cdp(sw, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result.value;
 };
 const realClick = async (match, x, y) => {
@@ -162,7 +167,7 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   const page = await read();
   await call('type', { ref: refFor(page, /textbox.*Item/i), text: 'Lent' });
   await call('click', { ref: refFor(page, /button.*Add item/i) });
-  const proposed = await call('routine_propose', { name: 'from-a-lent-tab', description: 'Use when testing.' });
+  const proposed = await call('routine_propose', { name: 'from-a-lent-tab', description: 'Adds an item in a lent tab. Use when testing.' });
   check(/Add item/.test(proposed.text), 'what it did there is recorded');
   const closing = await call('close_tab', { tab_id: id });
   check(closing.error && /stays open/.test(closing.text), 'it cannot close it');
@@ -274,7 +279,7 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
 
   await call('navigate', { url: `${SITE}/fields.html` });
   const outline = await read();
-  const field = refFor(outline, /textbox/);
+  const field = refFor(outline, /textbox “Name”/);
   const typed = await call('type_secret', { ref: field, name: 'site_pw' });
   check(!typed.error && !typed.text.includes(value), 'type_secret types it and does not say it');
   const after = await read();
@@ -286,17 +291,17 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   const script = await call('javascript', { code: 'document.title' });
   check(script.error && /no script may run/.test(script.text), 'no script runs in the tab after that');
 
-  const wrong = await call('type_secret', { ref: refFor(await read(), /textbox/), name: 'other_pw' });
+  const wrong = await call('type_secret', { ref: refFor(await read(), /textbox “Name”/), name: 'other_pw' });
   check(wrong.error && /kept for/.test(wrong.text) && !wrong.text.includes('not-for-this-site'), 'a secret for another site does not go in');
   await call('navigate', { url: `${SITE}/frames.html` });
   const framed = refFor(await read(), /^.*f\d+:ref_\d+.*textbox/m) ?? refFor(await read(), /f\d+:ref_\d+/);
   if (framed) check((await call('type_secret', { ref: framed, name: 'other_pw' })).error, 'nor in a frame of a site it was not kept for');
   await call('navigate', { url: `${SITE}/fields.html` });
-  const code = await call('type_secret', { ref: refFor(await read(), /textbox/), name: 'site_code' });
+  const code = await call('type_secret', { ref: refFor(await read(), /textbox “Name”/), name: 'site_code' });
   check(!code.error, 'a one-time code goes in by name');
   check(/^\d{6}$/.test(totp('JBSWY3DPEHPK3PXP')) && totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 59_000) === '287082', 'and is the code an authenticator would show');
 
-  const run = await call('routine_propose', { name: 'sign_in_with_secret', description: 'Fill the field. Use when testing secrets.' });
+  const run = await call('routine_propose', { name: 'sign-in-with-secret', description: 'Fill the field. Use when testing secrets.' });
   check(!run.text.includes(value) && /\{\{secret:site_pw\}\}|site_pw/.test(run.text), 'a routine proposed from it holds the name, not the value');
   for (const n of ['site_pw', 'other_pw', 'site_code']) await remove(n);
 }
@@ -422,13 +427,13 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
 {
   await session();
   const { execFileSync } = await import('node:child_process');
-  const name = `fast_${Date.now()}`;
+  const name = `fast-${Date.now()}`;
   await call('navigate', { url: `${SITE}/chores.html` });
   await evalIn('chores.html', `localStorage.clear(); sessionStorage.clear(); 1`);
-  const item = await refFor('Item');
-  await call('type', { ref: item, text: 'first' });
-  await call('click', { ref: await refFor('Add item') });
-  await call('click', { ref: await refFor('Publish list') });
+  const page = await read();
+  await call('type', { ref: refFor(page, /“Item”/), text: 'first' });
+  await call('click', { ref: refFor(page, /“Add item”/) });
+  await call('click', { ref: refFor(page, /“Publish list”/) });
   const proposed = await call('routine_propose', { name, description: 'Add a chore and publish the list. Use when a chore needs adding.' });
   const draft = draftOf(proposed.text);
   await call('routine_edit', { draft_id: draft, ops: [{ op: 'param', name: 'item', value: 'first' }] });
@@ -462,7 +467,7 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await session();
   await call('navigate', { url: `${SITE}/chores.html` });
   const title = await call('execute', { code: `console.log('hello'); return { title: await page.title(), n: await page.locator('button').count() };` });
-  check(/"title":"Chores"/.test(title.text) && /hello/.test(title.text), 'code runs on the page, and says what it returned and logged');
+  check(/"title":"[^"]*Chores"/.test(title.text) && /hello/.test(title.text), 'code runs on the page, and says what it returned and logged');
 
   const bare = await call('execute', { code: `return [typeof process, typeof require, typeof fetch, typeof Buffer].join();` });
   check(/undefined,undefined,undefined,undefined/.test(bare.text), 'it has no Node');
@@ -499,11 +504,16 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   const cli = (args) => execFileSync(process.execPath, [`${CLI}/dist/index.js`, ...args], { env: { ...process.env, AGENTIC_ROUTINES_HOME: far }, encoding: 'utf8' });
   const listener = () => JSON.parse(readFileSync(`${far}/remote/listener.json`, 'utf8'));
   const code = /Code: (\S+)/.exec(cli(['remote', 'pair', '127.0.0.1:47990']))?.[1];
+  // Pairing leaves a listener running, which a test that stops early must not leave behind.
+  process.on('exit', () => {
+    try {
+      cli(['remote', 'stop']);
+    } catch {}
+  });
   check(!!code, 'pairing gives a code without a terminal, as the person typing it is what connects it');
 
   // What the settings form sends. The form itself is for a person to look at.
-  const sw = (await (await fetch(`${CDP}/json/list`)).json()).find((x) => x.type === 'service_worker' && x.url.startsWith('chrome-extension://'));
-  const panelTab = await (await fetch(`${CDP}/json/new?${new URL(sw.url).origin}/sidepanel.html`, { method: 'PUT' })).json();
+  const panelTab = await (await fetch(`${CDP}/json/new?${OURS}sidepanel.html`, { method: 'PUT' })).json();
   await sleep(1000);
   const toPanel = async (command) => (await cdp(panelTab, 'Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((res) => { const p = chrome.runtime.connect({ name: 'panel' }); p.onMessage.addListener((m) => { if (m.reqId === 1) { p.disconnect(); res(m.err ?? 'done'); } }); p.postMessage(${JSON.stringify({ ...command, reqId: 1 })}); })` })).result.value;
   check(/say-so/.test(await toPanel({ t: 'linkPair', address: '93.184.216.34', code })), 'a public address needs the person to confirm');
@@ -528,7 +538,7 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await farCall('navigate', { url: `${SITE}/upload.html` });
   const ref = refFor((await farCall('read_page')).text, /Choose files/);
   check(!(await farCall('upload', { ref, path: file })).error, 'an upload crosses the link');
-  check(/report\.txt/.test((await farCall('read_page')).text), 'and the page has the file');
+  check(/report\.txt/.test((await farCall('read_page', { filter: 'all' })).text), 'and the page has the file');
 
   await farCall('navigate', { url: `${SITE}/chores.html` });
   await farCall('execute', { code: `await page.evaluate(() => { const a = document.createElement('a'); a.href = '/chores.html'; a.download = 'chores-copy.html'; document.body.append(a); a.click(); });` });
@@ -573,7 +583,7 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   await call('click', { ref: refFor(page.text, /Publish list/) });
   await call('click', { ref: refFor(page.text, /Add item/) });
   check((await evalIn('chores.html', 'window.moves')) > 3, 'the pointer moves on its way, rather than jumping');
-  check(/slowly by hand/.test((await call('read_page', {})).text), 'and the input still lands');
+  check(/slowly by hand/.test((await call('read_page', { filter: 'all' })).text), 'and the input still lands');
   await call('settings', { human_input: false });
 }
 
@@ -591,19 +601,15 @@ const draftOf = (t) => /draft_id "(d-[a-z0-9]+)"/.exec(t)?.[1];
   const ref = refFor(r.out, /Publish list/);
   check((await run('click', '--ref', ref)).code === 0, 'a flag goes through');
   r = await run('screenshot');
-  check(existsSync(r.out.trim().split('\n').pop()), 'an image goes to a file, and the command says where');
+  check(existsSync(r.out.trim().split('\n')[0]), 'an image goes to a file, and the command says where');
   r = await run('click', '--ref', 'nope');
   check(r.code === 1, 'a tool that fails exits 1');
   r = await run('frobnicate');
   check(r.code === 1 && /no command or tool/.test(r.err), 'an unknown command says so');
   r = await run('cdp_endpoint');
-  check(/ws:\/\/127\.0\.0\.1/.test(r.out), 'the DevTools address is given');
-  const ws = r.out.match(/ws:\/\/\S+/)?.[0];
-  const stillThere = ws && await new Promise((done) => {
-    const s = new WebSocket(ws);
-    s.onopen = () => { s.close(); done(true); };
-    s.onerror = () => done(false);
-  });
+  const endpoint = /Endpoint: (http:\/\/127\.0\.0\.1:\S+)/.exec(r.out)?.[1];
+  check(!!endpoint, 'the DevTools address is given');
+  const stillThere = endpoint && (await fetch(endpoint.replace('/?', '/json/version?')).then((x) => x.ok, () => false));
   check(stillThere, 'and it outlives the command that printed it');
   check((await run('session_delete', 'e2e-cli')).code === 0, 'the session closes');
 }

@@ -1484,7 +1484,9 @@ function App() {
   if (!s || onboarded === undefined) return null;
 
   const back = () => setView({ v: 'library' });
-  if (s.replay) {
+  // The result of a finished replay can wait. A request for the person cannot.
+  const asking = !!(s.script || s.install || s.hooksReview);
+  if (s.replay && !(asking && (s.replay.status === 'done' || s.replay.status === 'failed'))) {
     return (
       <Replay
         r={s.replay}

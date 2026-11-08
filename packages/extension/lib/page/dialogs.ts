@@ -72,18 +72,22 @@ export async function listenBeforeLeaving(tabId: number) {
   if (/^https?:/.test(url ?? '')) await platform.cdp?.(tabId, async () => {}).catch(() => {});
 }
 
-const LEAVE_MS = 1000;
+// A busy page, or one behind another tab, can take seconds to ask.
+const LEAVE_MS = 5000;
 
-/** After asking a tab to go elsewhere: it starts going, or the page asks first. */
-export async function whenLeaving(tabId: number, force: boolean): Promise<OpenDialog | undefined> {
+/** After asking a tab to go elsewhere: it goes, or the page asks first. */
+export async function whenLeaving(tabId: number, force: boolean, from: string, to: string): Promise<OpenDialog | undefined> {
   for (const end = Date.now() + LEAVE_MS; Date.now() < end; await new Promise((r) => setTimeout(r, 40))) {
     const d = open.get(tabId);
     if (d?.type === 'beforeunload') {
       await answerDialog(tabId, force);
       if (force) return d;
-      throw new Error(`The page asks before it is left, and it may have work that is not saved, so this stayed on it. It says: ${d.message}. Pass force: true to leave anyway.`);
+      throw new Error(`The page asks before it is left, and it may have work that is not saved, so this stayed on it.${d.message ? ` It says: ${d.message}.` : ''} Pass force: true to leave anyway.`);
     }
-    if ((await browser.tabs.get(tabId)).status === 'loading') return undefined;
+    const t = await browser.tabs.get(tabId);
+    // A tab is loading before the page has had its say, so only a new address means it left. Going to the same address
+    // again has nothing else to show.
+    if (t.url !== from || (to === from && t.status === 'loading')) return undefined;
   }
   return undefined;
 }

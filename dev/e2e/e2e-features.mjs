@@ -29,7 +29,8 @@ async function session() {
 }
 await session();
 const call = async (name, args = {}) => {
-  const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 90_000 });
+  // Longer than a replay waits for the side panel at a pause.
+  const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 900_000 });
   return { text: r.content.map((c) => c.text ?? `[${c.type}]`).join('\n'), error: !!r.isError, images: r.content.filter((c) => c.type === 'image') };
 };
 const refFor = (outline, re) => outline.split('\n').find((l) => re.test(l))?.match(/(?:f\d+:)?ref_\d+/)?.[0];
@@ -41,8 +42,11 @@ async function evalIn(expr, match = 'chores.html') {
   const ws = new WebSocket(list[0].webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   const out = await new Promise((res) => {
-    ws.onmessage = (e) => res(JSON.parse(e.data));
-    ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true } }));
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.id === 1) res(m);
+    };
+    ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true, awaitPromise: true } }));
   });
   ws.close();
   return out.result.result.value;
@@ -115,7 +119,7 @@ async function addByHand(item) {
   check(!!id, 'proposed a draft');
   check(/op": "expect"/.test(d.text), 'the proposal says to add a check on the result');
   const name = paramOf(d.text);
-  const edited = await call('routine_edit', { draft_id: id, edits: [{ op: 'expect', text: `Added {{${name}}}` }] });
+  const edited = await call('routine_edit', { draft_id: id, ops: [{ op: 'expect', text: `Added {{${name}}}` }] });
   check(/A finished run should show: Added/.test(edited.text), 'the draft shows the check');
   let t = await call('routine_test', { draft_id: id, params: { [name]: 'Milk' } });
   check(/Test passed/.test(t.text) && /as expected/.test(t.text), `the test looks for the result: ${t.text.slice(0, 120)}`);
@@ -189,10 +193,16 @@ let meterParam;
   check(after.recent.length === 1 && after.recent[0].agent === 'claude-code', 'a run is kept with its agent');
 
   const panel = await (await fetch(`${CDP}/json/new?chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo/sidepanel.html`, { method: 'PUT' })).json();
+  await sleep(1000);
+  // Signed in, as the panel shows nothing else to someone who is not.
+  await evalIn(`chrome.storage.local.set({ session: { account: { email: 'test@example.com', name: 'Test' }, access: 'x', accessExp: Date.now() + 3600000, refresh: 'x' } }).then(() => true)`, 'sidepanel.html');
   await sleep(1500);
+  // The run just made is on screen first, as it is to a person who opens the panel then.
+  await evalIn(`[...document.querySelectorAll('button')].find((b) => /Back to routines/.test(b.textContent))?.click(), true`, 'sidepanel.html');
+  await sleep(500);
   const shown = await evalIn(`document.body.innerText`, 'sidepanel.html');
-  check(/This week/.test(shown) && /\(estimated\)/.test(shown), 'the panel shows the week');
-  check(/meter-chore[\s\S]*over 1 run\b/.test(shown), 'and the routine');
+  check(/This week/.test(shown) && /\(estimated\)/.test(shown), `the panel shows the week: ${String(shown).replace(/\s+/g, ' ').slice(0, 300)}`);
+  check(/meter-chore[\s\S]*over 1 run\b/.test(shown), `and the routine: ${String(shown).replace(/\s+/g, ' ').split('meter-chore')[1]?.slice(0, 300)}`);
   await fetch(`${CDP}/json/close/${panel.id}`);
 }
 
@@ -263,7 +273,7 @@ let meterParam;
   let d = await call('routine_propose', { name: 'add-many', description: 'Adds items to the chores list. Use when someone wants several chores added.' });
   let id = draftOf(d.text);
   const item = paramOf(d.text);
-  let t = await call('routine_edit', { draft_id: id, edits: [{ op: 'each', from: 2, to: 3, param: item }] });
+  let t = await call('routine_edit', { draft_id: id, ops: [{ op: 'each', from: 2, to: 3, param: item }] });
   check(/for each value of/.test(t.text), `the draft shows the loop: ${t.text.slice(0, 200)}`);
   await fresh();
   t = await call('routine_test', { draft_id: id, params: { [item]: 'Kiwi, Lime, Mango' } });
@@ -282,13 +292,13 @@ let meterParam;
 
   // Edits keep a loop around the steps it had, and refuse what cannot be.
   const edit = draftOf((await call('routine_propose', { name: 'add-many', description: 'Adds items to the chores list. Use when someone wants several chores added.', from_routine: 'add-many' })).text);
-  t = await call('routine_edit', { draft_id: edit, edits: [{ op: 'if', from: 2, to: 3, text: 'Chores' }] });
+  t = await call('routine_edit', { draft_id: edit, ops: [{ op: 'if', from: 2, to: 3, text: 'Chores' }] });
   check(!!t.error && /wholly|runs past/.test(t.text), `a branch across a loop's edge is refused: ${t.text.slice(0, 200)}`);
-  t = await call('routine_edit', { draft_id: edit, edits: [{ op: 'each', from: 3, to: 3, param: item }] });
+  t = await call('routine_edit', { draft_id: edit, ops: [{ op: 'each', from: 3, to: 3, param: item }] });
   check(!!t.error && /loop inside/.test(t.text), `a loop in a loop is refused: ${t.text.slice(0, 200)}`);
-  t = await call('routine_edit', { draft_id: edit, edits: [{ op: 'remove', steps: [2] }] });
+  t = await call('routine_edit', { draft_id: edit, ops: [{ op: 'remove', steps: [2] }] });
   check(!/for each/.test(t.text), 'removing the loop keeps its steps');
-  await call('routine_edit', { draft_id: edit, edits: [{ op: 'undo' }] });
+  await call('routine_edit', { draft_id: edit, ops: [{ op: 'undo' }] });
 
   // Both ways of a branch: a notice that only sometimes shows.
   await session();
@@ -301,7 +311,7 @@ let meterParam;
   d = await call('routine_propose', { name: 'add-past-notice', description: 'Adds an item, past the notice when there is one. Use when someone wants a chore added.' });
   id = draftOf(d.text);
   const tea = paramOf(d.text);
-  t = await call('routine_edit', { draft_id: id, edits: [{ op: 'if', from: 2, to: 2, has_step: 2 }] });
+  t = await call('routine_edit', { draft_id: id, ops: [{ op: 'if', from: 2, to: 2, has_step: 2 }] });
   check(/^2\. if /m.test(t.text), `the draft shows the branch: ${t.text.slice(0, 200)}`);
   await fresh();
   t = await call('routine_test', { draft_id: id, params: { [tea]: 'Tea' } });
@@ -316,14 +326,18 @@ let meterParam;
 
   // One thing or another, on text on the page.
   await session();
-  await flags({ banner: '1', seed: 'Ash' });
+  await flags({ banner: '1' });
   await call('navigate', { url: CHORES });
-  const row = await read();
+  // A seeded row is kept by the tab, so it goes in once this session has its own.
+  await flags({ seed: 'Ash' });
+  await sleep(500);
+  const row = await read({ wait: 1000 });
   await call('click', { ref: refFor(row, /button.*Close notice/i) });
-  await call('click', { ref: refFor(row, /button.*Star/i) });
-  id = draftOf((await call('routine_propose', { name: 'notice-or-star', description: 'Closes the notice, or stars the row when there is none. Use when someone wants that.' })).text);
-  t = await call('routine_edit', { draft_id: id, edits: [{ op: 'if', from: 2, to: 2, else_to: 3, text: 'The terms have changed' }] });
-  check(/otherwise run/.test(t.text), `the draft shows both ways: ${t.text.slice(0, 200)}`);
+  const star = (await call('click', { ref: refFor(row, /button.*Star/i) })).text;
+  const both = (await call('routine_propose', { name: 'notice-or-star', description: 'Closes the notice, or stars the row when there is none. Use when someone wants that.' })).text;
+  id = draftOf(both);
+  t = await call('routine_edit', { draft_id: id, ops: [{ op: 'if', from: 2, to: 2, else_to: 3, text: 'The terms have changed' }] });
+  check(/otherwise run/.test(t.text), `the draft shows both ways: ${t.text.slice(0, 200)} ${star} ${both.replace(/\s+/g, ' ').slice(0, 700)}`);
   await flags({ seed: 'Ash' });
   await fresh();
   t = await call('routine_test', { draft_id: id });
@@ -340,7 +354,7 @@ let meterParam;
   d = await call('routine_propose', { name: 'publish-each', description: 'Adds and publishes each item. Use when someone wants items published one by one.' });
   id = draftOf(d.text);
   const fig = paramOf(d.text);
-  await call('routine_edit', { draft_id: id, edits: [{ op: 'each', from: 2, to: 4, param: fig }] });
+  await call('routine_edit', { draft_id: id, ops: [{ op: 'each', from: 2, to: 4, param: fig }] });
   t = await call('routine_test', { draft_id: id, params: { [fig]: 'One, Two' } });
   check(/Test passed/.test(t.text), `the test runs both passes and skips the publishing: ${t.text.slice(0, 200)}`);
   await call('routine_save', { draft_id: id });
@@ -356,14 +370,15 @@ let meterParam;
   // Over the elements on a page: rows that stay, rows that go.
   const byRow = async (name, button) => {
     await session();
-    await flags({ seed: 'Ash,Birch,Cedar' });
     await call('navigate', { url: CHORES });
-    await call('click', { ref: refFor(await read(), button) });
+    await flags({ seed: 'Ash,Birch,Cedar' });
+    await sleep(500);
+    await call('click', { ref: refFor(await read({ wait: 1000 }), button) });
     const id = draftOf((await call('routine_propose', { name, description: 'Goes down the list. Use when someone wants every row done.' })).text);
     return id;
   };
   id = await byRow('star-all', /button.*Star/i);
-  t = await call('routine_edit', { draft_id: id, edits: [{ op: 'each', from: 2, to: 2, step: 2 }] });
+  t = await call('routine_edit', { draft_id: id, ops: [{ op: 'each', from: 2, to: 2, step: 2 }] });
   check(/each element in turn/.test(t.text), `the draft shows which step moves along: ${t.text.slice(0, 200)}`);
   await flags({ seed: 'Ash,Birch,Cedar' });
   await fresh();
@@ -376,12 +391,12 @@ let meterParam;
   check(!/^Done/m.test(t.text) && /Delete/.test(t.text) && same(await log(), ['star:Ash']), `it stops short of what looks irreversible on another row: ${t.text.slice(0, 200)}`);
 
   id = await byRow('tick-all', /button.*Tick off/i);
-  await call('routine_edit', { draft_id: id, edits: [{ op: 'each', from: 2, to: 2, step: 2, limit: 2 }] });
+  await call('routine_edit', { draft_id: id, ops: [{ op: 'each', from: 2, to: 2, step: 2, limit: 2 }] });
   await flags({ seed: 'Ash,Birch,Cedar' });
   await fresh();
   t = await call('routine_test', { draft_id: id });
   check(/repeated 2 times/.test(t.text) && /may be more/.test(t.text) && same(await log(), ['tick:Ash', 'tick:Birch']), `its limit stops it and it says so: ${t.text.slice(0, 200)}`);
-  t = await call('routine_edit', { draft_id: id, edits: [{ op: 'undo' }, { op: 'each', from: 2, to: 2, step: 2 }] });
+  t = await call('routine_edit', { draft_id: id, ops: [{ op: 'undo' }, { op: 'each', from: 2, to: 2, step: 2 }] });
   await flags({ seed: 'Ash,Birch,Cedar' });
   await fresh();
   t = await call('routine_test', { draft_id: id });

@@ -283,8 +283,16 @@ export default defineContentScript({
             break;
           }
           case 'first': {
-            // Same kind of element in the same place in the page, whichever row of a list it is.
-            const shape = (l: Locator) => `${l.tag}|${l.role}|${(l.css ?? '').replace(/:nth-of-type\(\d+\)/g, '')}`;
+            // Same kind of element in the same place in the page, whichever row of a list it is. Inside a row that repeats,
+            // its own place in the row stays, so the second button of each row is not the first of the next.
+            // Whether it sits in such a row is read from the recorded one: the last row left has no place among rows.
+            const recorded = (msg.target.css ?? '').split('>');
+            const inRow = recorded.length > 1 && /:nth-of-type/.test(recorded[recorded.length - 2]);
+            const shape = (l: Locator) => {
+              const parts = (l.css ?? '').split('>');
+              const own = inRow ? parts.pop()! : undefined;
+              return `${l.tag}|${l.role}|${[...parts.map((x) => x.replace(/:nth-of-type\(\d+\)/, '')), ...(own ? [own] : [])].join('>')}`;
+            };
             const want = shape(msg.target);
             const like = interactive().filter((c) => shape(describe(c)) === want);
             const el = like[msg.index ?? 0];

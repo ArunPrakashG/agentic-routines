@@ -5,7 +5,7 @@ const INK = '#14131f';
 const ACCENT = '#3530e0';
 const CSS = `
 :host{all:initial}
-.card{position:fixed;right:16px;top:16px;width:320px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:16px;border-radius:12px;background:#fff;color:${INK};border:1px solid rgba(20,19,31,.16);box-shadow:0 8px 28px rgba(20,19,31,.28);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;pointer-events:auto}
+.card{box-sizing:border-box;padding:16px;border-radius:12px;background:#fff;color:${INK};border:1px solid rgba(20,19,31,.16);box-shadow:0 8px 28px rgba(20,19,31,.28);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;pointer-events:auto}
 .who{font-size:12px;color:#5c5a6e;margin:0 0 6px}
 .why{margin:0 0 10px;overflow-wrap:anywhere}
 .site{margin:0 0 12px;font-size:12px;overflow-wrap:anywhere;color:#5c5a6e}
@@ -55,6 +55,7 @@ export function showCard(c: CardText) {
   });
   card.append(para('who', `${c.by} needs you`), para('why', c.reason), site, go);
   root.append(style, card);
+  // The host is placed and the card fills it, so the host is as big as what a person sees.
   el.style.cssText = 'all:initial;position:fixed;right:16px;top:16px;width:320px;max-width:calc(100vw - 32px);z-index:2147483647;display:block';
   const place = () => (document.body ?? document.documentElement).append(el);
   place();

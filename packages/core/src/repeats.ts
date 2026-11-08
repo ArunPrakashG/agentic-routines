@@ -11,8 +11,6 @@ const NOISE = new Set(['scroll', 'hover']);
 const NOT_ACTS = new Set(['navigate', 'read']);
 
 export interface Repeat {
-  /** The same for as long as the repeat goes on, so it is mentioned once. */
-  key: string;
   site: string;
   shapes: string[];
   steps: number;
@@ -77,7 +75,6 @@ export function findRepeat(current: Run, others: Run[]): Repeat | null {
   const tail = cur.slice(-best);
   if (tail.filter((s) => s.act).length < MIN_ACTS) return null;
   return {
-    key: tail.slice(0, MIN_STEPS).map((s) => s.key).join('\n'),
     site: siteOf(tail[0].url),
     shapes: tail.map((s) => s.key),
     steps: best,

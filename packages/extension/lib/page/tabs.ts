@@ -3,7 +3,7 @@ import { platform } from '../platform';
 import { dialogOn, unlessDialog } from './dialogs';
 import { cancelSession, handedOver, onHandoffChange } from './handoff';
 import { settings, watchSettings } from './settings';
-import { guardTab, listed, notListed, policyOf, unguardTab, watchPolicies } from './policy';
+import { guardTab, listed, notListed, policyOf, unguardTab, wasRefused, watchPolicies } from './policy';
 import type { Send } from '../platform/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -106,6 +106,8 @@ export async function waitLoaded(tabId: number, timeoutMs = 30_000) {
     const t = await browser.tabs.get(tabId);
     // Stopped until someone answers: there is nothing more to wait for here.
     if (dialogOn(tabId)) return;
+    // Sent to a blank page for leaving its session's sites, where nothing more will load.
+    if (wasRefused(tabId) && t.status === 'complete' && t.url === 'about:blank') return;
     if (t.status === 'complete') {
       try {
         await ensureContent(tabId);
@@ -536,6 +538,14 @@ export function watchTabs() {
     keepNamed();
     cameFrom.set(t.id, t.openerTabId);
     spawned.set(t.openerTabId, t.id);
+  });
+  // A popup's address can come after its tab, so it is checked again once the browser says where it goes.
+  browser.webNavigation.onCreatedNavigationTarget.addListener((d) => {
+    const h = heldBy(d.sourceTabId);
+    const hosts = h && policyOf(h.session)?.hosts;
+    if (!h || !hosts || listed(hosts, d.url)) return;
+    popupRefused.set(h.session, notListed(d.url, hosts));
+    void browser.tabs.remove(d.tabId).catch(() => {});
   });
 }
 

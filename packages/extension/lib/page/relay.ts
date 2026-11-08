@@ -183,7 +183,7 @@ export async function handleRelay(method: string, p: any): Promise<unknown> {
     }
     case 'cdp.closeTab':
       if (!isOwnTab(session, p.tabId)) throw new Error("This tab is the person's, so it stays open.");
-      relayed.delete(p.tabId);
+      // Still relayed, so its closing is told to the client, which waits for that.
       await closeOwnTab(session, p.tabId);
       return true;
     case 'cdp.cookies': {

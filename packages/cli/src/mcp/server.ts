@@ -340,15 +340,16 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
     if (e.event === 'routines.changed') scheduleRefresh();
   });
 
-  // Said once for each thing repeated: the same steps again are not news the second time they come up.
-  const toldRepeats = new Set<string>();
+  // Said once for each thing repeated: the same steps again are not news the second time they come up. Where a repeat
+  // starts moves as it goes on, so what was said is kept as steps, and a repeat that is mostly those is not said again.
+  const toldShapes = new Set<string>();
   const REPEAT_COVERED = 0.5;
 
   /** One line when what was just done repeats steps recorded before, unless a routine already does them. Costs no extra call for the agent. */
   async function repeatNote(): Promise<string> {
     const r = await bridge.call<Repeat | null>('runs.repeat', {}).catch(() => null);
-    if (!r || toldRepeats.has(r.key)) return '';
-    toldRepeats.add(r.key);
+    if (!r || r.shapes.filter((k) => toldShapes.has(k)).length / r.shapes.length >= REPEAT_COVERED) return '';
+    for (const k of r.shapes) toldShapes.add(k);
     for (const x of await store.list()) {
       if (!x.enabled || x.site !== r.site) continue;
       const routine = await store.read(`${x.owner}/${x.name}`).catch(() => undefined);
@@ -377,6 +378,7 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
       const slow = Object.entries(result.step_ms ?? {}).map(([n, ms]) => ({ n: Number(n), ms })).filter((x) => x.ms >= store.SLOW_STEP_MS).sort((a, b) => b.ms - a.ms).slice(0, 3);
       const unconfirmed = result.outcome?.ok === false;
       await store.recordRun(p.id, { ok: result.status === 'done' && !unconfirmed, calls: result.model_calls, ms: result.ms, steps: p.routine.steps.length, ...(bridge.agent ? { agent: bridge.agent } : {}), ...(fixed.length ? { fixed } : {}), ...(slow.length ? { slow } : {}), ...(unconfirmed ? { unconfirmed } : {}) }).catch(() => {});
+      void bridge.call('store.ran', {}).catch(() => {});
       result.tidy = tidyNote(p.routine, fixed, store.viewStats(await store.statsOf(p.id).catch(() => undefined)));
     }
     if (Object.keys(fixes).length) {
@@ -905,7 +907,7 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
           [
             `Endpoint: ${r.endpoint}`,
             `In Playwright: const browser = await chromium.connectOverCDP(endpoint); const page = browser.contexts()[0].pages()[0];`,
-            `It lasts as long as this server runs, or eight hours, on 127.0.0.1 only. One connection at a time.`,
+            `It lasts ${o.cli ? 'eight hours' : 'as long as this server runs, or eight hours'}, on 127.0.0.1 only. One connection at a time.`,
             `A client sees only this session's tabs. Cookie reads and writes are limited to their sites. Clearing data, closing the browser, bringing a window to the front and new browser contexts are refused.`,
             `What is done through it is not recorded, so it cannot become a routine.`,
           ].join('\n'),

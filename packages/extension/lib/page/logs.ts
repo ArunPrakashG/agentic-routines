@@ -59,6 +59,8 @@ interface Watch {
   lapsed: boolean;
   lines: Line[];
   requests: Map<string, Request>;
+  /** The network has been read here before, not only the console. */
+  netRead?: boolean;
 }
 
 const MAX = 500;
@@ -111,7 +113,7 @@ export function watchLogs() {
 /** Starts listening the first time it is asked, not before: a page can tell, and some treat being listened to as a bot. */
 async function listening(tabId: number) {
   if (!platform.cdp) throw new Error('This browser does not let an extension read this.');
-  const w = watches.get(tabId) ?? { on: false, lapsed: false, lines: [], requests: new Map() };
+  const w: Watch = watches.get(tabId) ?? { on: false, lapsed: false, lines: [], requests: new Map() };
   watches.set(tabId, w);
   const first = !w.on && !w.lapsed;
   if (!w.on) {
@@ -157,7 +159,14 @@ export async function networkOf(tabId: number, o: { url_contains?: string; limit
   const shown = [...w.requests.values()].map((r) => ({ ...r, url: scrubUrl(r.url) })).filter((r) => !o.url_contains || r.url.includes(o.url_contains));
   const out = shown.slice(-(o.limit ?? 100)).map((r) => `${r.method} ${r.url} ${r.failed ?? r.status ?? 'pending'} ${r.type}${r.mime ? ` ${r.mime}` : ''}`);
   if (o.clear) w.requests.clear();
-  const from = first ? 'Listening starts with this call, so what the page sent before is not here. Do what you want to see again, and call this after.' : lapsed ? 'The connection to this tab lapsed for a while, so there is a gap.' : undefined;
+  const from = first
+    ? 'Listening starts with this call, so what the page sent before is not here. Do what you want to see again, and call this after.'
+    : !w.netRead
+      ? 'Listening started when the console of this tab was first read, so what the page sent before that is not here.'
+      : lapsed
+        ? 'The connection to this tab lapsed for a while, so there is a gap.'
+        : undefined;
+  w.netRead = true;
   return { lines: out, note: from };
 }
 

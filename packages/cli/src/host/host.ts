@@ -30,7 +30,7 @@ function log(...a: unknown[]) {
 
 // What an agent may ask of the host over the socket. Changing sources and installing from them is only
 // ever done from the browser, after the person clicked.
-const AGENT_MAY = new Set(['store.list', 'store.read', 'store.write', 'store.remove', 'store.setEnabled', 'sources.list', 'sources.entries', 'sources.preview']);
+const AGENT_MAY = new Set(['store.list', 'store.read', 'store.write', 'store.remove', 'store.setEnabled', 'store.ran', 'sources.list', 'sources.entries', 'sources.preview']);
 
 export async function handleStore(method: string, p: any, fromBrowser = true): Promise<unknown> {
   if (!fromBrowser && !AGENT_MAY.has(method)) throw new Error('Only the browser can do that.');
@@ -45,6 +45,9 @@ export async function handleStore(method: string, p: any, fromBrowser = true): P
       return store.remove(p.id);
     case 'store.setEnabled':
       return sources.enable(p.id, p.enabled);
+    case 'store.ran':
+      // An agent wrote how a run went, so what the panel shows about the routine changed.
+      return true;
     case 'sources.list':
       return sources.list();
     case 'sources.add':
@@ -198,7 +201,7 @@ export function runHost(): void {
           } catch (e) {
             toClient(client, { id: m.id, error: (e as Error).message });
           }
-          if (m.method === 'store.write' || m.method === 'store.remove' || m.method === 'store.setEnabled' || m.method === 'sources.install') {
+          if (m.method === 'store.write' || m.method === 'store.remove' || m.method === 'store.setEnabled' || m.method === 'store.ran' || m.method === 'sources.install') {
             toBrowser({ event: 'routines.changed' });
             for (const c of clients) if (c !== client) toClient(c, { event: 'routines.changed' });
           }

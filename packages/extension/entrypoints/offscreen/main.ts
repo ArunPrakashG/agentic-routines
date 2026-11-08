@@ -42,8 +42,8 @@ addEventListener('message', (e) => {
   waiting.delete(a.id);
 });
 
-// A store build has no hooks and no sandbox to frame.
-if ((browser.runtime.getManifest() as { sandbox?: unknown }).sandbox) boot();
+// A store build has no hooks and no sandbox to frame. An offscreen page has no getManifest, so the address says.
+if (new URLSearchParams(location.search).has('hooks')) boot();
 listenForVideo();
 
 browser.runtime.onMessage.addListener((msg: { t?: string; id: number; code: string; ctx: unknown; ms: number; max: number }, sender: { id?: string }, send: (a: unknown) => void) => {

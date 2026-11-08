@@ -3,7 +3,7 @@
 //   node dev/e2e/e2e-api.mjs
 import { spawnSync } from 'node:child_process';
 import { createHash, createSign, generateKeyPairSync, randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { isDeepStrictEqual } from 'node:util';
@@ -204,7 +204,8 @@ spawnSync('tmux', ['kill-session', '-t', `=${TMUX}`]);
 await sleep(500);
 start();
 check(await alive(), 'the API starts again on a migrated database');
-check(psql('SELECT count(*) FROM schema_migrations') === '4', 'each migration ran once');
+const migrations = readdirSync(join(API_DIR, 'migrations')).filter((f) => f.endsWith('.sql')).length;
+check(psql('SELECT count(*) FROM schema_migrations') === String(migrations), 'each migration ran once');
 check((await me(keep.access_token, keepInstall)).ok, 'a session survives a restart');
 const kept = await post('/auth/refresh', { refresh_token: keep.refresh_token, install_id: keepInstall });
 check(kept.ok, 'and so does its refresh token');
