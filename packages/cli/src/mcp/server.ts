@@ -503,7 +503,11 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
         if (a.id === undefined) {
           const list = await bridge.call<{ id: number; name: string; url: string; bytes: number; state: string; startedAt: string }[]>('browser.downloads', { session: bridge.sessionId });
           if (!list.length) return text('Nothing has been downloaded since this agent started.');
-          return text(block(list.map((d) => `${d.id}  ${d.name}  ${d.bytes} bytes  ${d.state}  ${d.startedAt}  ${d.url}`).join('\n'), 'download list').text);
+          const stuck = list.some((d) => d.state === 'waiting_at_save_box');
+          return text(
+            block(list.map((d) => `${d.id}  ${d.name}  ${d.bytes} bytes  ${d.state}  ${d.startedAt}  ${d.url}`).join('\n'), 'download list').text +
+              (stuck ? '\nwaiting_at_save_box: the browser is asking where to save, in a box nothing here can answer. Call download with that id to cancel it and fetch the file without the box.' : ''),
+          );
         }
         const r = await bridge.call<{ path: string; bytes: number; warning?: string }>('browser.download_get', { session: bridge.sessionId, id: a.id }, 30 * 60_000);
         return text(block(`${r.path} (${r.bytes} bytes)${r.warning ? `\n${r.warning}` : ''}`, 'download path').text);

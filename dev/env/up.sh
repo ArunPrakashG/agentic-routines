@@ -4,6 +4,7 @@
 #   dev/env/up.sh [--headless] [--no-claude] [--no-build]
 # AR_DEV_DIR moves the state folder, AR_CHROME picks the browser, AR_MODEL the agent's model.
 # AR_SHARED_STORE points the routine store (and so the hosts) somewhere shared; AR_TMUX_PREFIX renames the tmux sessions (default br), so two checkouts can run side by side.
+# AR_PREFS names a Preferences file for the browser's profile, for checks that need a setting such as asking where to save.
 # AR_TLS_HOST and AR_TLS_PORT make https://$AR_TLS_HOST/ in that browser reach 127.0.0.1:$AR_TLS_PORT, with the
 # certificate errors ignored, for checks that need an https site (routines from Git only install for https).
 set -e
@@ -55,6 +56,7 @@ STORE=${AR_SHARED_STORE:-$DEV/store}
 BHOME=$DEV/home-$(sha256sum "$EXT/background.js" | cut -c1-8)
 PROFILE=$BHOME/.config/chromium
 mkdir -p "$PROFILE" "$STORE" "$DEV/workspace"
+if [ -n "$AR_PREFS" ]; then mkdir -p "$PROFILE/Default" && cp "$AR_PREFS" "$PROFILE/Default/Preferences"; fi
 cp -r "$ROOT"/dev/fixtures/* "$DEV/workspace/"
 
 # Real setup against the throwaway home, with no agent on PATH to edit.

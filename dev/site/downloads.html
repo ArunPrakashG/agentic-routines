@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Downloads</title>
+<h1>Downloads</h1>
+<p><a id="link" href="/files/report.txt" download>Download the report</a></p>
+<p><button id="blob">Download a generated file</button></p>
+<script>
+  document.getElementById('blob').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['made in the page\n'], { type: 'text/plain' }));
+    a.download = 'generated.txt';
+    a.click();
+  };
+</script>

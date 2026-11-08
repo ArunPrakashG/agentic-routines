@@ -275,7 +275,7 @@ export async function handle(method: string, p: any): Promise<unknown> {
     case 'browser.downloads':
       return listDownloads(p?.session);
     case 'browser.download_get':
-      return getDownload(p?.session, p.id);
+      return getDownload(p?.session, p.id, await working(p?.session).catch(() => undefined));
     case 'browser.recording': {
       const tabId = await working(p?.session, p.tab_id);
       native.noteTab(tabId, p?.session);
