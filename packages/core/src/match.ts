@@ -30,6 +30,14 @@ export function isVolatileId(id: string): boolean {
 
 /** How well does a live element match the recorded locator? */
 export function score(rec: Locator, live: Locator): number {
+  // Written by hand rather than recorded (no tag): what it names is all there is to go on, and all of it has to hold.
+  if (!rec.tag) {
+    const has = (a?: string, b?: string) => norm(a) !== '' && norm(b).includes(norm(a));
+    if (rec.role && rec.role !== live.role) return 0;
+    if (rec.name && !has(rec.name, live.name)) return 0;
+    if (rec.text && !has(rec.text, live.text) && !has(rec.text, live.name)) return 0;
+    return rec.name || rec.text ? MIN_SCORE + (norm(rec.name || rec.text) === norm(live.name || live.text) ? 4 : 0) : 0;
+  }
   let s = 0;
   if (rec.tag === live.tag) s += 1;
   if (rec.role && rec.role === live.role) s += 3;
@@ -53,6 +61,7 @@ export function score(rec: Locator, live: Locator): number {
 
 /** Role, tag and position fit many elements. Only a name or a stable attribute says it is this one. */
 function sameElement(rec: Locator, live: Locator, all: Locator[]): boolean {
+  if (!rec.tag) return true;
   // A value many elements share, like the id #checkbox on every row of a list, identifies none of them.
   const unique = (k: string) => all.filter((l) => l.attrs[k] === rec.attrs[k]).length <= 1;
   const stable = STABLE.filter((k) => k !== 'type' && rec.attrs[k] && !(k === 'id' && isVolatileId(rec.attrs[k]!)) && unique(k));

@@ -36,7 +36,7 @@ A real case: publishing to a testing track shows a dialog offering to go back to
 | `pause` | Add a pause before a step, or take away one you added. |
 | `note` | Text for the agent that runs the routine: what to check at this step. |
 | `first_in_list` | A click that takes whatever is first in the list next time. |
-| `read` | Adds a step that reads the text of the element another step uses and returns it under a name you give (`as`), before or after that step. The run result carries it. |
+| `read` | Adds a step that reads an element's text and returns it under a name you give (`as`). Give `step` to reuse the element another step uses, or `before` with `name` or `text` (and `role`) for an element nothing clicked. The run result carries it. |
 | `retarget` | Changes what a step looks for: role, accessible name, text, CSS or the nearby heading. Use it when the recorded name holds text that changes, like a chat row's last message. Steps that submit, publish, pay or delete cannot be retargeted. |
 | `each` | Repeat steps `from` to `to`: for each value of a parameter (`param`), or for each element on the page like the one a step used (`step`). At most `limit` times, 25 unless you say, 100 at the most. |
 | `if` | Run steps `from` to `to` only when the page shows `text` or has the element a step used (`has_step`). Steps after `to` up to `else_to` run otherwise. `not` turns it round. |
