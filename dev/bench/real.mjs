@@ -114,12 +114,39 @@ Object.assign(TASK, {
   },
 });
 
+// Sites with no API or MCP a person would set up: they are only ever used in the browser.
+const PLACES = ['Sabarimala Temple', 'Aranmula Parthasarathy Temple', 'Gavi Eco Tourism', 'Perunthenaruvi Waterfalls', 'Konni Elephant Training Centre', 'Adoor Kannamkara'];
+const ITEMS = ['steel water bottle 1 litre', 'usb c charging cable', 'a5 ruled notebook', 'led desk lamp', 'mobile phone stand', 'hdmi cable 2 metre'];
+Object.assign(TASK, {
+  maps: {
+    vary: 'the place',
+    values: PLACES,
+    ask: (v) => `In Google Maps, search for "${v}", open the first result and save it to my list called "Bench" (create that list first if it does not exist). Do not share anything.`,
+    check: async (v) => {
+      const a = await side('In Google Maps, open Saved, then the list called "Bench". Tell me the names of the places in it. Change nothing.');
+      return hay(a).includes(hay(v).split(' ')[0]) ? '' : `list lacks ${v}: ${a.replace(/\s+/g, ' ').slice(0, 140)}`;
+    },
+    cleanup: () => side('In Google Maps, open Saved, find the list called "Bench" and delete the list. Then tell me whether it is gone.'),
+  },
+  amazon: {
+    vary: 'the thing searched for',
+    values: ITEMS,
+    ask: (v) => `On Amazon.in, search for "${v}", open the first result that is not sponsored and add it to my wish list called "Bench" (create that list first if it does not exist). Do not add anything to the cart and do not buy anything.`,
+    check: async (v) => {
+      const a = await side('On Amazon.in, open Your Lists, then the wish list called "Bench". Tell me the titles of the items in it. Change nothing.');
+      const w = hay(v).split(' ')[0];
+      return hay(a).includes(w) ? '' : `list lacks ${v}: ${a.replace(/\s+/g, ' ').slice(0, 140)}`;
+    },
+    cleanup: () => side('On Amazon.in, open Your Lists, find the wish list called "Bench" and delete that list. Do not touch the cart or any other list. Then tell me whether it is gone.'),
+  },
+});
+
 const node = process.execPath;
 writeFileSync(join(BENCH, 'mcp-default.json'), JSON.stringify({ mcpServers: { 'agentic-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'] } } }));
 
-function runClaude(kind, prompt, raw, model = MODEL) {
+function runClaude(kind, prompt, raw, model = MODEL, more = []) {
   const browser = kind === 'cic' ? ['--chrome', '--allowedTools', 'mcp__claude-in-chrome'] : ['--mcp-config', join(BENCH, 'mcp-default.json'), '--allowedTools', 'mcp__agentic-routines'];
-  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', ...browser, '--disallowedTools', 'Bash', 'WebFetch', 'WebSearch', '--strict-mcp-config', '--setting-sources', 'project,local', '--permission-mode', 'default', '--model', model, '--max-budget-usd', '6'];
+  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', ...(kind === 'cic' ? [] : ['--no-session-persistence']), ...more, ...browser, '--disallowedTools', 'Bash', 'WebFetch', 'WebSearch', '--strict-mcp-config', '--setting-sources', 'project,local', '--permission-mode', 'default', '--model', model, '--max-budget-usd', '6'];
   return new Promise((resolve) => {
     const t0 = Date.now();
     const p = spawn('claude', args, { cwd: join(BENCH, 'work'), stdio: ['ignore', 'pipe', 'pipe'] });
@@ -169,6 +196,7 @@ function parse(lines) {
     images,
     names,
     answer: String(result?.result ?? '').slice(0, 600),
+    session_id: result?.session_id,
   };
 }
 
@@ -189,6 +217,9 @@ async function one(task, arm, i) {
   const raw = join(BENCH, 'raw', `${TAG}-${task}-${arm}-${i}.jsonl`);
   const r = await runClaude(kind, prompt, raw);
   const m = parse(r.lines);
+  // Our tools close what they opened when the session ends. The other leaves its group of tabs, so the same conversation is
+  // asked to close them. Outside the numbers, because nobody doing the task would pay for it.
+  if (kind === 'cic' && m.session_id) await runClaude('cic', 'Close every tab you opened in this conversation. Change nothing else.', `${raw}.tidy`, 'haiku', ['--resume', m.session_id]);
   let problem = '';
   try {
     problem = await t.check(v, m.answer);
@@ -196,11 +227,19 @@ async function one(task, arm, i) {
     problem = `check failed: ${e.message}`.slice(0, 120);
   }
   if (arm === 'record' && !have(name)) problem ||= 'no routine saved';
-  const row = { task, arm, rep: i, value: label, model: MODEL, ok: !problem && !m.is_error, problem, wall_ms: r.wall_ms, exit: r.code, ...m };
+  const { session_id: _s, ...numbers } = m;
+  const row = { task, arm, rep: i, value: label, model: MODEL, ok: !problem && !m.is_error, problem, wall_ms: r.wall_ms, exit: r.code, ...numbers };
   appendFileSync(RESULTS, JSON.stringify(row) + '\n');
   console.log(`${row.ok ? 'ok  ' : 'FAIL'} ${task} ${arm} #${i} ${(r.wall_ms / 1000).toFixed(1)}s $${(m.cost_usd ?? 0).toFixed(3)} tok=${m.total_tokens} tools=${m.tools} images=${m.images} ${problem}`);
 }
 
+if (process.argv.includes('--cleanup-only')) {
+  for (const task of TASKS) {
+    wipe(`bench-${task}`);
+    if (TASK[task].cleanup) console.log(task, 'cleanup:', String(await TASK[task].cleanup()).slice(0, 200).replace(/\n/g, ' '));
+  }
+  process.exit(0);
+}
 for (const task of TASKS) {
   wipe(`bench-${task}`);
   await one(task, 'record', 0);
