@@ -1,8 +1,9 @@
 # Documentation
 
-New here? Start with [Getting started](guide/getting-started.md).
+New here? Start with [Try it now](guide/quickstart.md), or [Getting started](guide/getting-started.md).
 
 ## Using it
+- [Try it now](guide/quickstart.md): run it today from a release or a build of the repository.
 - [Getting started](guide/getting-started.md): install, connect an agent, make a first routine.
 - [How it works](guide/how-it-works.md): recording, checking and replaying.
 - [Routines](guide/routines.md): what a routine is and what it can do.

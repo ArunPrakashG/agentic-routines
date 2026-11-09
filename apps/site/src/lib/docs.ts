@@ -4,6 +4,7 @@ import { marked } from 'marked';
 
 // The pages of the documentation, in reading order. Each is docs/guide/<slug>.md in the repository.
 export const pages = [
+  { slug: 'quickstart', title: 'Try it now', summary: 'Run it today from a release or from a build of the repository, before the store listings go live.' },
   { slug: 'getting-started', title: 'Getting started', summary: 'Add the extension and connect your agent. It does the rest.' },
   { slug: 'how-it-works', title: 'How it works', summary: 'What is recorded, what a save changes, and how a replay checks each step.' },
   { slug: 'refine', title: 'Refine a routine', summary: 'How an agent proposes, edits, tests and saves a routine, and what the extension refuses.' },

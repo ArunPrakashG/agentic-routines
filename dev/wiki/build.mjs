@@ -39,10 +39,10 @@ mkdirSync(OUT, { recursive: true });
 for (const f of sources) writeFileSync(join(OUT, `${page.get(f)}.md`), rewrite(f, readFileSync(join(ROOT, f), 'utf8')));
 
 const link = (f) => `[${titleOf(f)}](${page.get(f)})`;
-const order = ['getting-started', 'how-it-works', 'routines', 'refine', 'tools', 'agents', 'cli', 'safety', 'sharing', 'repositories', 'remote', 'hooks', 'benchmarks', 'troubleshooting', 'development'];
+const order = ['quickstart', 'getting-started', 'how-it-works', 'routines', 'refine', 'tools', 'agents', 'cli', 'safety', 'sharing', 'repositories', 'remote', 'hooks', 'benchmarks', 'troubleshooting', 'development'];
 const ordered = order.map((s) => guide.find((f) => basename(f, '.md') === s)).filter(Boolean);
 const rest = guide.filter((f) => !ordered.includes(f));
 const lines = [...ordered, ...rest, ...extra].map((f) => `- ${link(f)}`);
 writeFileSync(join(OUT, '_Sidebar.md'), `**[Home](Home)**\n\n${lines.join('\n')}\n`);
-writeFileSync(join(OUT, 'Home.md'), `# Agentic Routines\n\nA cache for your agent's long browser chores. Repeat tasks replay as one tool call, with no model.\n\nStart with ${link('docs/guide/getting-started.md')}.\n\n${lines.join('\n')}\n\nThe source is in [the repository](${REPO}). These pages are generated from its \`docs/\` folder, so change them there.\n`);
+writeFileSync(join(OUT, 'Home.md'), `# Agentic Routines\n\nA cache for your agent's long browser chores. Repeat tasks replay as one tool call, with no model.\n\nStart with ${link('docs/guide/quickstart.md')}, then ${link('docs/guide/getting-started.md')}.\n\n${lines.join('\n')}\n\nThe source is in [the repository](${REPO}). These pages are generated from its \`docs/\` folder, so change them there.\n`);
 console.log(`${sources.length + 2} pages in ${OUT}`);
