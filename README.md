@@ -57,6 +57,8 @@ Length decides whether it pays. A one-step lookup on GitHub used about 70% more 
    Restart your agent afterwards, then check the connection with `npx agentic-routines doctor`. Use `pnpm dlx`, `bunx` or `yarn dlx` in place of `npx` if you prefer. `setup --dry-run` shows what it would write first.
 3. **Make your first routine.** Ask your agent to do a task in the browser the way you normally would. Then ask it to save the run as a routine, or save it from the side panel. The next time you ask for the same thing, it calls the routine.
 
+**Want it running today?** The stores and the public npm package are not live yet. [Try it now](docs/guide/quickstart.md) uses a release or a build of this repository.
+
 More in [Getting started](docs/guide/getting-started.md).
 
 ## How an agent picks a routine
