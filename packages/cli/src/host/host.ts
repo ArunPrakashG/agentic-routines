@@ -8,6 +8,7 @@ import { valueFor } from '../store/secrets.ts';
 import { paths, socketPath } from '../paths.ts';
 import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, type Message, type Request } from '../protocol.ts';
 import * as sources from '../store/sources.ts';
+import * as projects from '../store/projects.ts';
 import * as store from '../store/routines.ts';
 
 // Started by the browser through native messaging, one per browser.
@@ -60,6 +61,10 @@ export async function handleStore(method: string, p: any, fromBrowser = true): P
       return sources.entries(p.id ? String(p.id) : undefined, !!p.fresh);
     case 'sources.preview':
       return sources.preview(String(p.id), String(p.path), p.ref ? String(p.ref) : undefined);
+    case 'sources.projects':
+      return projects.targets();
+    case 'sources.share':
+      return projects.share(String(p.id), String(p.dir));
     case 'sources.install':
       return sources.install(String(p.id), String(p.path), p.ref ? String(p.ref) : undefined);
     default:

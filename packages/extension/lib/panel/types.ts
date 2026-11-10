@@ -56,6 +56,8 @@ export type PanelCommand =
   | { t: 'linkForget' }
   | { t: 'setting'; change: Partial<Settings> }
   | { t: 'sources' }
+  | { t: 'projects' }
+  | { t: 'share'; id: string; dir: string }
   | { t: 'sourceAdd'; address: string }
   | { t: 'sourceRemove'; id: string }
   | { t: 'sourceSet'; id: string; enabled: boolean }

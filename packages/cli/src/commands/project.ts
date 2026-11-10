@@ -1,7 +1,7 @@
 import { relative } from 'node:path';
 import * as projects from '../store/projects.ts';
 
-// agentic-routines project [status | add <routine> [--examples] | remove <name>]
+// agentic-routines project [status | add <routine> [--examples] | remove <name> | prune]
 // Routines kept in this repository's .agentic-routines folder, so Git tracks them and the team shares them.
 
 const WHAT: Record<projects.ProjectState, string> = {
@@ -19,9 +19,10 @@ export async function runProject(args: string[]): Promise<void> {
       console.log(`No ${projects.PROJECT_DIR} folder in this repository.\nShare a routine with: agentic-routines project add <routine>`);
       return;
     }
-    const { routines, problems } = await projects.status(dir);
+    const { routines, problems, removed } = await projects.status(dir);
     console.log(`${rel(dir)} · ${routines.length} routines`);
     for (const r of routines) console.log(`  ${r.name} v${r.version} · ${r.site} · ${WHAT[r.state]}`);
+    for (const id of removed) console.log(`  ${id} · installed here, but the project no longer has it. Run: agentic-routines project prune`);
     for (const p of problems) console.log(`  problem: ${p}`);
     if (problems.length) process.exitCode = 1;
     return;
@@ -37,5 +38,12 @@ export async function runProject(args: string[]): Promise<void> {
     console.log(`Removed ${rel(await projects.unshare(name))}. Commit that to take it off the team.`);
     return;
   }
-  throw new Error('Use status, add or remove.');
+  if (cmd === 'prune') {
+    const dir = await projects.find();
+    if (!dir) throw new Error(`No ${projects.PROJECT_DIR} folder in this repository.`);
+    const gone = await projects.prune(dir);
+    console.log(gone.length ? `Uninstalled ${gone.join(', ')}.` : 'Nothing to uninstall.');
+    return;
+  }
+  throw new Error('Use status, add, remove or prune.');
 }

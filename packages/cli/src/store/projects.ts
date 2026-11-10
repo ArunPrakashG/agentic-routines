@@ -52,14 +52,23 @@ export interface ProjectRoutine {
 }
 
 /** What the project shares, and for each routine whether it is installed here and still the same as the file. */
-export async function status(dir: string): Promise<{ routines: ProjectRoutine[]; problems: string[] }> {
+export async function status(dir: string): Promise<{ routines: ProjectRoutine[]; problems: string[]; removed: string[] }> {
   const l = await sources.checkFolder(dir);
   const mine = (await store.list()).filter((r) => r.origin?.kind === 'folder' && r.origin.source === dir);
   const routines = l.entries.map((e): ProjectRoutine => {
     const have = mine.find((r) => r.origin?.path === e.path);
     return { name: e.name, path: e.path, site: e.site, version: e.version, state: !have ? 'new' : have.origin?.ref === e.ref ? 'installed' : 'changed' };
   });
-  return { routines, problems: l.problems ?? [] };
+  // Installed from this folder, and the file is gone: it was taken off the team, or renamed.
+  const removed = l.problems?.length ? [] : mine.filter((r) => !l.entries.some((e) => e.path === r.origin?.path)).map((r) => `${r.owner}/${r.name}`);
+  return { routines, problems: l.problems ?? [], removed };
+}
+
+/** Uninstalls the copies on this computer whose file the project no longer has. */
+export async function prune(dir: string): Promise<string[]> {
+  const { removed } = await status(dir);
+  for (const id of removed) await store.remove(id);
+  return removed;
 }
 
 /**
@@ -70,7 +79,7 @@ export async function note(from = process.cwd()): Promise<string> {
   const dir = await find(from);
   if (!dir) return '';
   await sources.addProject(dir).catch(() => {});
-  const { routines } = await status(dir).catch(() => ({ routines: [] as ProjectRoutine[] }));
+  const { routines } = await status(dir).catch(() => ({ routines: [] as ProjectRoutine[], problems: [], removed: [] }));
   const safe = (r: ProjectRoutine) => /^[a-z0-9][a-z0-9-]{1,62}$/.test(r.name);
   const all = routines.filter(safe);
   if (!all.length) return '';
@@ -97,10 +106,13 @@ signed-in browser.
 `;
 
 /** Saves an installed or recorded routine into the repository that `from` is in. */
-export async function save(id: string, o: { from?: string; examples?: boolean } = {}): Promise<{ file: string; version: number; change: 'created' | 'updated' | 'unchanged' }> {
-  const root = await gitRoot(o.from);
-  if (!root) throw new Error('Run this inside a Git repository.');
-  const dir = join(root, PROJECT_DIR);
+export async function save(id: string, o: { from?: string; dir?: string; examples?: boolean } = {}): Promise<{ file: string; version: number; change: 'created' | 'updated' | 'unchanged' }> {
+  let dir = o.dir;
+  if (!dir) {
+    const root = await gitRoot(o.from);
+    if (!root) throw new Error('Run this inside a Git repository.');
+    dir = join(root, PROJECT_DIR);
+  }
   const r = await store.read(id);
   // Example values are what was typed when it was recorded. They stay out of a repository unless asked for.
   const params = Object.fromEntries(Object.entries(r.meta.params ?? {}).map(([k, v]) => [k, o.examples ? v : { ...v, example: undefined }]));
@@ -134,4 +146,19 @@ export async function unshare(name: string, from = process.cwd()): Promise<strin
   if (!(await exists(file))) throw new Error('No such shared routine.');
   await rm(file);
   return file;
+}
+
+/** The projects the side panel may share into: the ones an agent was started in, and the person did not remove. */
+export async function targets(): Promise<{ dir: string; name: string }[]> {
+  const { sources: all } = await sources.list();
+  return all.filter((x) => x.project && x.enabled).map((x) => ({ dir: x.id, name: x.id.split(/[\\/]/).filter(Boolean).slice(-2, -1)[0] ?? 'project' }));
+}
+
+/** From the side panel, after the person chose the project. Only a listed project is written to. */
+export async function share(id: string, dir: string): Promise<{ name: string; change: string; version: number }> {
+  const t = (await targets()).find((x) => x.dir === dir);
+  if (!t) throw new Error('That is not one of your projects.');
+  if (!(await isDir(dir))) throw new Error('That project folder is gone.');
+  const r = await save(id, { dir });
+  return { name: t.name, change: r.change, version: r.version };
 }

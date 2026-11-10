@@ -1051,7 +1051,46 @@ function Saved({ s }: { s: PanelState }) {
   );
 }
 
+type ProjectTarget = { dir: string; name: string };
+
+/** Copies a routine into a project's repository, for Git to track. Offered only when an agent has been started in a project. */
+function ShareButton({ id, name, projects }: { id: string; name: string; projects: ProjectTarget[] }) {
+  const [open, setOpen] = useState(false);
+  const [said, setSaid] = useState('');
+  async function share(p: ProjectTarget) {
+    setOpen(false);
+    try {
+      const r = await send<{ change: string; version: number }>({ t: 'share', id, dir: p.dir });
+      setSaid(r.change === 'unchanged' ? `${p.name} already has it.` : `Saved to ${p.name}. Commit it there.`);
+    } catch (e) {
+      setSaid((e as Error).message);
+    }
+    setTimeout(() => setSaid(''), 8000);
+  }
+  if (said) return <span class="meta" role="status">{said}</span>;
+  return (
+    <span class="share">
+      <button class="btn btn-ghost sm" type="button" aria-label={`Share ${name} with a project`} aria-expanded={open} onClick={() => (projects.length === 1 ? share(projects[0]) : setOpen(!open))}>
+        {projects.length === 1 ? `Share to ${projects[0].name}` : 'Share'}
+      </button>
+      {open && (
+        <span class="share-menu">
+          {projects.map((p) => (
+            <button key={p.dir} class="btn btn-secondary sm" type="button" onClick={() => share(p)}>
+              {p.name}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
+  const [projects, setProjects] = useState<ProjectTarget[]>([]);
+  useEffect(() => {
+    send<ProjectTarget[]>({ t: 'projects' }).then(setProjects, () => {});
+  }, [s.connected]);
   const recording = !!s.recording;
   const empty = !s.routines.length && !s.runs.length;
   return (
@@ -1143,6 +1182,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                       Turn on
                     </button>
                   )}
+                  {r.owner === 'local' && projects.length > 0 && <ShareButton id={`${r.owner}/${r.name}`} name={r.name} projects={projects} />}
                   {r.owner === 'local' && !s.publish && (
                     <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => (s.account ? send({ t: 'publish', id: `local/${r.name}` }) : go({ v: 'signin' }))}>
                       {s.account ? 'Submit' : 'Sign in to submit'}

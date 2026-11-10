@@ -28,6 +28,7 @@ npx agentic-routines <command>
 | `project` | Shows the routines this repository shares in `.agentic-routines`, and whether each is installed on this computer. See [Project routines](project.md). |
 | `project add <routine>` | Copies a routine into the repository's `.agentic-routines/routines`, for Git to track. `--examples` keeps the example values. |
 | `project remove <name>` | Deletes a shared routine's file. |
+| `project prune` | Uninstalls the copies on this computer whose file the project no longer has. |
 | `sources on <address>` / `off <address>` | Turns a source on or off. |
 | `export <routine>` | Prints a routine as one file, ready to commit under a repository's `routines/` folder. `--playwright` prints it as a Playwright script instead. |
 | `mcp` | Runs the tool server. Your agent starts this. |

@@ -413,6 +413,10 @@ export default defineBackground(() => {
         return push();
       case 'sources':
         return git.list();
+      case 'projects':
+        return native.call('sources.projects');
+      case 'share':
+        return native.call('sources.share', { id: c.id, dir: c.dir });
       case 'sourceAdd':
         return git.add(c.address);
       case 'sourceRemove':

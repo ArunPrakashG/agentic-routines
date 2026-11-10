@@ -16,7 +16,9 @@ Example values you typed while recording stay out of the file. Add `--examples` 
 
 The routine must pass the same checks as one from a Git source. It is refused if it holds something that looks like a secret.
 
-To take one back out, run `npx agentic-routines project remove deploy-staging` and commit the deletion. Copies already installed on other computers stay until their owners remove them.
+From the side panel you can do the same: once an agent has been started in a project, each of your own routines has a **Share** button that saves it into that project's folder. Commit it from there.
+
+To take one back out, run `npx agentic-routines project remove deploy-staging` and commit the deletion. Copies already installed on other computers stay until their owners run `npx agentic-routines project prune`, which uninstalls the copies whose file the project no longer has. `project` lists them too.
 
 ## Use the team's routines
 

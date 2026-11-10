@@ -2,7 +2,7 @@
 // Run `pnpm --filter agentic-routines build` first.
 //   node dev/e2e/e2e-project.mjs
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,6 +57,17 @@ writeFileSync(join(copy, 'steps.json'), '[]');
 writeFileSync(join(copy, 'ROUTINE.md'), md());
 writeFileSync(join(copy, '.origin.json'), origin('old'));
 check(/installed, but the file has changed/.test(run(['project']).stdout), 'a routine installed before the file changed shows as changed');
+
+// A routine the project no longer has can be uninstalled.
+mkdirSync(join(repo, '.agentic-routines/routines'), { recursive: true });
+const keep = join(repo, '.agentic-routines/routines/other-routine.md');
+writeFileSync(keep, readFileSync(file, 'utf8').replaceAll('deploy-staging', 'other-routine'));
+r = run(['project']);
+rmSync(file);
+r = run(['project']);
+check(/deploy-staging .*no longer has it/.test(r.stdout), 'a routine installed from the project, whose file is gone, is reported');
+check(/Uninstalled .*deploy-staging/.test(run(['project', 'prune']).stdout) && !existsSync(copy), 'prune uninstalls it');
+writeFileSync(file, readFileSync(keep, 'utf8').replaceAll('other-routine', 'deploy-staging'));
 
 // A secret is not written into a repository.
 const bad = join(home, 'routines/local/leaky');
