@@ -272,6 +272,7 @@ export default defineBackground(() => {
       script: scripting?.card,
       scriptSites: await scriptSites(),
       settings: settings(),
+      update: newer,
       lent: await Promise.all(
         lentTabs().map(async (id) => {
           const t = await browser.tabs.get(id).catch(() => undefined);
@@ -312,6 +313,34 @@ export default defineBackground(() => {
     if (lastRuns[key]?.id === s.id) return;
     lastRuns[key] = { id: s.id, at: Date.now(), changed: Object.keys(s.fixes).map(Number) };
     await browser.storage.local.set({ lastRuns });
+  }
+
+  // ---------- update check ----------
+  // A store updates its own copies. One loaded by hand never hears about a new release, so it asks GitHub, about once a day.
+  let newer: { version: string; url: string } | undefined;
+  const RELEASES = 'https://api.github.com/repos/ArunPrakashG/agentic-routines/releases/latest';
+  const parts = (v: string) => v.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const isNewer = (a: string, b: string) => {
+    const [x, y] = [parts(a), parts(b)];
+    for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+    return false;
+  };
+  async function checkUpdate() {
+    try {
+      const self = await browser.management.getSelf();
+      if (self.installType === 'normal') return;
+      const res = await fetch(RELEASES, { headers: { accept: 'application/vnd.github+json' } });
+      if (!res.ok) return;
+      const rel = (await res.json()) as { tag_name?: string; html_url?: string };
+      const url = rel.html_url ?? '';
+      const next = rel.tag_name && url.startsWith('https://github.com/ArunPrakashG/agentic-routines/') && isNewer(rel.tag_name, browser.runtime.getManifest().version) ? { version: rel.tag_name.replace(/^v/, ''), url } : undefined;
+      if (next?.version !== newer?.version) {
+        newer = next;
+        void push();
+      }
+    } catch {
+      // Offline, or GitHub is busy: asked again later.
+    }
   }
 
   async function push() {
@@ -557,9 +586,11 @@ export default defineBackground(() => {
   // A link to another computer is only a socket, so a service worker that went to sleep comes back for it this way.
   browser.alarms.onAlarm.addListener((a) => {
     if (a.name === 'link') void native.connectLink();
+    if (a.name === 'update') void checkUpdate();
   });
 
   // Chrome only wakes a service worker for an event, and agents need the host up.
+  browser.alarms.create('update', { delayInMinutes: 1, periodInMinutes: 24 * 60 });
   browser.runtime.onStartup.addListener(() => {});
   browser.runtime.onInstalled.addListener(() => {});
 
