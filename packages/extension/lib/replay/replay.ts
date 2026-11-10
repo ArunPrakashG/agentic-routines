@@ -163,6 +163,7 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     ms: Date.now() - s.start,
     at_step: step?.n,
     step_label: step?.label,
+    ...(s.status === 'paused' ? { step_action: step?.action, pause_kind: s.pauseKind === 'forced' ? ('forced' as const) : ('asked' as const) } : {}),
     ...(s.test ? { final_url: s.finalUrl } : {}),
     ...(s.hooks ? { hooks: s.hooks.report() } : {}),
     candidates: s.candidates,
@@ -823,7 +824,8 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
           panelWaiters.set(s.id, res);
           // Runs started in the panel wait for the panel; agents get the pause back. Not when the routine is from
           // someone else and the step looks irreversible: that is the person's to answer, and the run ends if nobody does.
-          if (s.by && kind === 'asked') setTimeout(() => res(undefined), PANEL_WAIT_MS);
+          // Either way the agent gets the pause back, to ask the person where they are: in the chat, or here in the panel.
+          if (s.by) setTimeout(() => res(undefined), PANEL_WAIT_MS);
           if (kind === 'forced') setTimeout(() => res(false), FORCED_WAIT_MS);
         });
         panelWaiters.delete(s.id);
@@ -1013,12 +1015,13 @@ export async function start(p: { from?: FastFrom; routine: Routine; params: Reco
   return loop(s);
 }
 
-export async function resume(p: { run_id: string; approve?: boolean; choice?: string }) {
+export async function resume(p: { run_id: string; approve?: boolean; choice?: string; user?: boolean }) {
   const s = live.get(p.run_id);
   if (!s) throw new Error(`No paused run ${p.run_id}`);
   s.handedBack = false;
   if (s.status === 'paused') {
-    if (s.pauseKind === 'forced' && p.approve !== false) {
+    // `user` is set only by the tool server, after the person answered a question in their agent's own window.
+    if (s.pauseKind === 'forced' && p.approve !== false && !p.user) {
       throw new Error('This step looks irreversible and the routine is from someone else, so only the user can approve it, in the Agentic Routines side panel. Ask them; do not approve it for them.');
     }
     if (p.approve === false) {

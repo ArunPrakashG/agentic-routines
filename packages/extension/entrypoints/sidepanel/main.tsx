@@ -941,6 +941,11 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
           {s.account && <Account account={s.account} go={go} />}
         </div>
       </header>
+      {s.update && (
+        <div class="warnbox" role="status">
+          Version {s.update.version} is out. <a href={s.update.url} target="_blank" rel="noreferrer">What changed and how to update</a>
+        </div>
+      )}
       {empty && !recording && !s.script && !s.publish ? (
         <main class="center">
           <Mark size={56} stroke="var(--border-strong)" cls="drift" />

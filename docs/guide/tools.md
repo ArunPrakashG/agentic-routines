@@ -189,7 +189,7 @@ The wording is fixed so that agents and skills can rely on it: `Routine <tool na
 |---|---|
 | `rt_<name>` | One tool per saved routine, with its parameters. Replays without a model. |
 | `routine_run` | The same, by name, for clients that read tools only at startup. `match_viewport: true` sets the tab to the size the routine was recorded at and puts it back afterwards. |
-| `routine_resume` | Continue a paused replay. `approve` goes past a pause or stops. `choice` picks the element for a changed step. |
+| `routine_resume` | Continue a paused replay. `approve` goes past a pause or stops. `choice` picks the element for a changed step. Where the agent can ask you a question in its own window (Claude Code can), a pause is put to you there as Allow or Stop, and your answer goes straight to the extension; the model never sees a way to give it for you. A pause on someone else's routine that looks irreversible is settled the same way. Without that, the pause waits in the side panel and goes back to the agent after 90 seconds. |
 | `routines_list` | Saved routines, what each is for and how the agent's runs of it have gone. Text from routines someone else wrote is shown as [untrusted data](/docs/safety). |
 | `routine_describe` | The full notes: when to use it, when not to, the pages it applies to, how its runs have gone, values it asks for, where it pauses. |
 | `run_steps` | The recorded steps of a run, numbered, as they happened. Labels come from pages, so the list is [untrusted data](/docs/safety). |
