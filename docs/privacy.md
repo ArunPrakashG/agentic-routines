@@ -33,6 +33,7 @@ You can connect the extension to an agent on another computer by entering an add
 ## When you install from the directory or from Git
 
 - Searching the directory sends the words you typed, or the site you are on, to our server. Installing a routine reports one anonymous install to the count.
+- A copy of the extension that was loaded by hand (not installed from a store) asks GitHub once a day whether a newer release exists, and shows a note in the side panel if it does. The request carries nothing about you or your browsing. Store copies do not make it.
 - Installing from a Git repository fetches the files straight from GitHub. We are not involved, and the extension shows every step before it installs.
 - The extension reads a block list from us at least once a day, so it can turn off a routine that was found to be unsafe. The request carries no account or recording.
 

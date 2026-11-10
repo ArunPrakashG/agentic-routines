@@ -226,6 +226,9 @@ export interface RunResult {
   /** Set when paused or needs_choice. */
   at_step?: number;
   step_label?: string;
+  /** What the paused step does, and whether only the person may answer it. */
+  step_action?: string;
+  pause_kind?: 'asked' | 'forced';
   candidates?: Candidate[];
   error?: string;
   /** Text read by "read" steps, keyed by label. */

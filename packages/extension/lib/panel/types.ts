@@ -7,6 +7,8 @@ import type { GitCard } from '../remote/git';
 
 export interface PanelState {
   account?: Account;
+  /** A newer release than this copy, for a copy that does not update through a store. */
+  update?: { version: string; url: string };
   connected: boolean;
   /** A link to an agent on another computer, when the person made one. */
   link?: { address: string; computer: string; connected: boolean; error?: string };
