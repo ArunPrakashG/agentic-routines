@@ -76,3 +76,34 @@ func (l *limiter) once(ctx context.Context, group, visitor, what string, window 
 	}
 	return ok
 }
+
+// count is how many hits a key has in its window. Redis being down counts as none, like the other checks.
+func (l *limiter) count(ctx context.Context, key string) int64 {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	n, err := l.rdb.Get(ctx, "br:rl:"+key).Int64()
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// hit adds one to a key. The window starts at the first hit.
+func (l *limiter) hit(ctx context.Context, key string, window time.Duration) int64 {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	pipe := l.rdb.Pipeline()
+	n := pipe.Incr(ctx, "br:rl:"+key)
+	pipe.ExpireNX(ctx, "br:rl:"+key, window)
+	if _, err := pipe.Exec(ctx); err != nil {
+		slog.Warn("rate limit check failed", "err", err)
+		return 0
+	}
+	return n.Val()
+}
+
+func (l *limiter) clear(ctx context.Context, key string) {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	l.rdb.Del(ctx, "br:rl:"+key)
+}

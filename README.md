@@ -89,6 +89,17 @@ All of it is listed in [Agent tools](docs/guide/tools.md), and what protects you
 
 [Getting started](docs/guide/getting-started.md) · [How it works](docs/guide/how-it-works.md) · [Routines](docs/guide/routines.md) · [Refining](docs/guide/refine.md) · [Agent tools](docs/guide/tools.md) · [Command line](docs/guide/cli.md) · [Safety](docs/guide/safety.md) · [Sharing](docs/guide/sharing.md) · [Remote browsers](docs/guide/remote.md) · [Hooks](docs/guide/hooks.md) · [Benchmarks](docs/guide/benchmarks.md) · [Troubleshooting](docs/guide/troubleshooting.md). The full index is [docs/README.md](docs/README.md), and the same pages are on the [wiki](../../wiki).
 
+## Routines in your project
+
+Keep a project's routines in its own repository so Git tracks them and the team shares them:
+
+```bash
+npx agentic-routines project add deploy-staging   # copies it to .agentic-routines/routines/deploy-staging.md
+git add .agentic-routines && git commit
+```
+
+Anyone who starts an agent in that repository gets the routines listed, and `npx agentic-routines project` shows what is there. Each person installs a routine once, after reading its steps in the side panel, and again when the file changes. See [Project routines](docs/guide/project.md).
+
 ## Routine repositories
 
 A Git repository can hold routines for other people. Put a `config.routine` file in its root that says what the repository is, what each routine is for and what an agent should keep in mind. Anyone can add the repository as a source:

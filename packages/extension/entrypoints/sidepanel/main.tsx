@@ -10,7 +10,7 @@ import { addSavings, compileRun, HOW_ESTIMATED, noSavings, roughTime, savingsOf,
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { onPrivateNetwork } from '../../lib/agent/link';
-import type { Account as AccountInfo } from '../../lib/remote/auth';
+import type { Account as AccountInfo, Offered, Provider } from '../../lib/remote/auth';
 import type { LiveRoutine, Submission } from '../../lib/remote/directory';
 import type { GitCard, SourceEntries, SourcesData } from '../../lib/remote/git';
 import type { PanelCommand, PanelState } from '../../lib/panel/types';
@@ -129,7 +129,7 @@ const Pips = ({ colors, label }: { colors?: string[]; label: string }) => (
 
 // ---------- views ----------
 
-type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' };
+type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' } | { v: 'signin' };
 
 function RecordButton({ on }: { on: boolean }) {
   return (
@@ -151,47 +151,152 @@ function GoogleG() {
   );
 }
 
-function SignIn({ s }: { s: PanelState }) {
+function GitHubMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
+function MicrosoftMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+    </svg>
+  );
+}
+
+const PROVIDER_NAMES: Record<Provider, string> = { google: 'Google', github: 'GitHub', microsoft: 'Microsoft' };
+
+/** Signing in is optional. Everything on this computer works without it; this is for publishing and syncing. */
+function SignIn({ back }: { back: () => void }) {
+  const [offered, setOffered] = useState<Offered>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  async function go() {
+  const [error, setError] = useState('');
+  // choose: the buttons. login: email and password. set: a mailed code and a new password, to make an account or reset one.
+  const [mode, setMode] = useState<'choose' | 'login' | 'set'>('choose');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [mailed, setMailed] = useState(false);
+
+  useEffect(() => {
+    send<Offered>({ t: 'offered' }).then(setOffered, () => setOffered({ providers: [{ id: 'google', client_id: '' }], password: false }));
+  }, []);
+
+  async function run(job: () => Promise<unknown>) {
     setBusy(true);
-    setError(false);
+    setError('');
     try {
-      await send({ t: 'signIn' });
-    } catch {
-      setError(true);
+      await job();
+    } catch (e) {
+      setError((e as Error).message || "That didn't work. Try again.");
     }
     setBusy(false);
   }
+  const go = (provider: Provider) => run(() => send({ t: 'signIn', provider }));
+  const sendCode = () => run(async () => { await send({ t: 'passwordCode', email }); setMailed(true); });
+  const open = (m: 'choose' | 'login' | 'set') => { setMode(m); setError(''); setMailed(false); setPassword(''); setCode(''); };
+
+  const form = mode !== 'choose';
   return (
     <div class="panel">
       <main class="center signin">
         <Mark size={48} cls="drift" />
         <div class="stack" style={{ gap: '8px', alignItems: 'center' }}>
-          <h1>Agentic Routines</h1>
-          <p>Sign in once. Your routines follow you to every browser you use.</p>
+          <h1>Sign in</h1>
+          <p>Optional. Recording, running and editing routines on this computer never need an account.</p>
         </div>
-        <button class="gbtn" type="button" disabled={busy} onClick={go}>
-          <GoogleG />
-          Continue with Google
-        </button>
+        {!form && (
+          <ul class="signin-why">
+            <li>Publish routines to the community directory</li>
+            <li>Track what you submitted and its review</li>
+            <li>Sync your routines across browsers</li>
+          </ul>
+        )}
+        {!form && (
+          <div class="signin-buttons">
+            {(offered?.providers ?? [{ id: 'google' as Provider, client_id: '' }]).map((p) =>
+              p.id === 'google' ? (
+                <button key={p.id} class="gbtn" type="button" disabled={busy} onClick={() => go(p.id)}>
+                  <GoogleG />
+                  Continue with Google
+                </button>
+              ) : (
+                <button key={p.id} class="pbtn" type="button" disabled={busy} onClick={() => go(p.id)}>
+                  {p.id === 'github' ? <GitHubMark /> : <MicrosoftMark />}
+                  Continue with {PROVIDER_NAMES[p.id]}
+                </button>
+              ),
+            )}
+            {offered?.password && (
+              <button class="pbtn" type="button" disabled={busy} onClick={() => open('login')}>
+                <span class="pbtn-at" aria-hidden="true">@</span>
+                Continue with email
+              </button>
+            )}
+          </div>
+        )}
+        {mode === 'login' && (
+          <form class="signin-form" onSubmit={(e) => { e.preventDefault(); run(() => send({ t: 'passwordLogin', email, password })); }}>
+            <label class="field">
+              <span>Email</span>
+              <input class="input" type="email" value={email} autocomplete="username" required onInput={(e) => setEmail(e.currentTarget.value)} />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input class="input" type="password" value={password} autocomplete="current-password" required onInput={(e) => setPassword(e.currentTarget.value)} />
+            </label>
+            <button class="btn btn-primary" type="submit" disabled={busy || !email || !password}>Sign in</button>
+            <button class="btn btn-ghost sm" type="button" onClick={() => open('set')}>New here, or forgot your password?</button>
+            <button class="btn btn-ghost sm" type="button" onClick={() => open('choose')}>Other ways to sign in</button>
+          </form>
+        )}
+        {mode === 'set' && (
+          <form class="signin-form" onSubmit={(e) => { e.preventDefault(); if (mailed) run(() => send({ t: 'passwordSet', email, code, password })); else sendCode(); }}>
+            <p>{mailed ? `We mailed a code to ${email}. Enter it and choose a password of at least 10 characters.` : 'We mail a code to your address to show it is yours. Then you choose a password. This makes an account, or replaces the password on one.'}</p>
+            <label class="field">
+              <span>Email</span>
+              <input class="input" type="email" value={email} autocomplete="username" required disabled={mailed} onInput={(e) => setEmail(e.currentTarget.value)} />
+            </label>
+            {mailed && (
+              <>
+                <label class="field">
+                  <span>Code</span>
+                  <input class="input" value={code} inputMode="numeric" autocomplete="one-time-code" maxLength={6} required onInput={(e) => setCode(e.currentTarget.value)} />
+                </label>
+                <label class="field">
+                  <span>New password</span>
+                  <input class="input" type="password" value={password} autocomplete="new-password" minLength={10} required onInput={(e) => setPassword(e.currentTarget.value)} />
+                </label>
+              </>
+            )}
+            <button class="btn btn-primary" type="submit" disabled={busy || !email || (mailed && (code.length !== 6 || password.length < 10))}>
+              {mailed ? 'Save password and sign in' : 'Mail me a code'}
+            </button>
+            {mailed && <button class="btn btn-ghost sm" type="button" disabled={busy} onClick={sendCode}>Send a new code</button>}
+            <button class="btn btn-ghost sm" type="button" onClick={() => open('login')}>Back</button>
+          </form>
+        )}
         {error && (
           <p class="signin-error" role="alert">
-            That didn't work. Try again.
+            {error}
           </p>
         )}
-        <details>
-          <summary>My agent is on another computer</summary>
-          <LinkSettings s={s} />
-        </details>
+        <button class="btn btn-ghost sm" type="button" onClick={back}>
+          Not now
+        </button>
       </main>
-      <footer class="signin-foot">Passwords you type are never saved.</footer>
+      <footer class="signin-foot">Passwords you type into pages are never recorded.</footer>
     </div>
   );
 }
 
-function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void }) {
+function Account({ account, go }: { account?: AccountInfo; go?: (v: View) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -211,12 +316,21 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
   }, [open]);
   return (
     <div class="account" ref={ref}>
-      <button class="icon-btn" type="button" aria-label={`Account, ${account.name}`} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span class="avatar">{(account.name || account.email).charAt(0).toUpperCase()}</span>
+      <button class="icon-btn" type="button" aria-label={account ? `Account, ${account.name}` : 'Account, not signed in'} aria-expanded={open} onClick={() => setOpen(!open)}>
+        {account ? (
+          <span class="avatar">{(account.name || account.email).charAt(0).toUpperCase()}</span>
+        ) : (
+          <span class="avatar out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+          </span>
+        )}
       </button>
       {open && (
         <div class="account-menu">
-          <span class="email">{account.email}</span>
+          <span class="email">{account ? account.email : 'Not signed in'}</span>
           {go && (
             <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'sources' }); }}>
               Sources
@@ -227,19 +341,30 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
               Settings
             </button>
           )}
-          {go && (
+          {go && account && (
             <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'submissions' }); }}>
               Your submissions
             </button>
           )}
-          {account.admin && (
+          {account?.admin && (
             <button class="btn btn-secondary sm" type="button" onClick={() => browser.tabs.create({ url: browser.runtime.getURL('/admin.html' as any) })}>
               Review submissions
             </button>
           )}
-          <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
-            Sign out
-          </button>
+          {account ? (
+            <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
+              Sign out
+            </button>
+          ) : (
+            go && (
+              <>
+                <span class="why">Sign in to publish routines to the community and sync them across browsers.</span>
+                <button class="btn btn-primary sm" type="button" onClick={() => { setOpen(false); go({ v: 'signin' }); }}>
+                  Sign in
+                </button>
+              </>
+            )
+          )}
         </div>
       )}
     </div>
@@ -405,9 +530,9 @@ function Sources({ back }: { back: () => void }) {
               <div key={x.id}>
                 <div class="src">
                   <button class="src-name" type="button" aria-expanded={open === x.id} disabled={!x.enabled} onClick={() => expand(x.id)}>
-                    <span class="name">{x.kind === 'folder' ? x.id.replace(/^\/home\/[^/]+/, '~') : repoName(x.id)}</span>
+                    <span class="name">{x.project ? x.id.replace(/[\\/]\.agentic-routines$/, '').split(/[\\/]/).pop() : x.kind === 'folder' ? x.id.replace(/^\/home\/[^/]+/, '~') : repoName(x.id)}</span>
                     <span class="meta">
-                      {x.kind === 'folder' ? 'Local folder' : 'GitHub'} · {!x.enabled ? 'turned off' : x.error ? 'could not be read' : `${x.routines ?? 0} routines${x.checkedAt ? ` · checked ${ago(x.checkedAt)}` : ''}`}
+                      {x.project ? 'Project, shared in Git' : x.kind === 'folder' ? 'Local folder' : 'GitHub'} · {!x.enabled ? 'turned off' : x.error ? 'could not be read' : `${x.routines ?? 0} routines${x.checkedAt ? ` · checked ${ago(x.checkedAt)}` : ''}`}
                     </span>
                   </button>
                   <Switch on={x.enabled} label={repoName(x.id)} set={(on) => act(send({ t: 'sourceSet', id: x.id, enabled: on }))} />
@@ -926,7 +1051,46 @@ function Saved({ s }: { s: PanelState }) {
   );
 }
 
+type ProjectTarget = { dir: string; name: string };
+
+/** Copies a routine into a project's repository, for Git to track. Offered only when an agent has been started in a project. */
+function ShareButton({ id, name, projects }: { id: string; name: string; projects: ProjectTarget[] }) {
+  const [open, setOpen] = useState(false);
+  const [said, setSaid] = useState('');
+  async function share(p: ProjectTarget) {
+    setOpen(false);
+    try {
+      const r = await send<{ change: string; version: number }>({ t: 'share', id, dir: p.dir });
+      setSaid(r.change === 'unchanged' ? `${p.name} already has it.` : `Saved to ${p.name}. Commit it there.`);
+    } catch (e) {
+      setSaid((e as Error).message);
+    }
+    setTimeout(() => setSaid(''), 8000);
+  }
+  if (said) return <span class="meta" role="status">{said}</span>;
+  return (
+    <span class="share">
+      <button class="btn btn-ghost sm" type="button" aria-label={`Share ${name} with a project`} aria-expanded={open} onClick={() => (projects.length === 1 ? share(projects[0]) : setOpen(!open))}>
+        {projects.length === 1 ? `Share to ${projects[0].name}` : 'Share'}
+      </button>
+      {open && (
+        <span class="share-menu">
+          {projects.map((p) => (
+            <button key={p.dir} class="btn btn-secondary sm" type="button" onClick={() => share(p)}>
+              {p.name}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
+  const [projects, setProjects] = useState<ProjectTarget[]>([]);
+  useEffect(() => {
+    send<ProjectTarget[]>({ t: 'projects' }).then(setProjects, () => {});
+  }, [s.connected]);
   const recording = !!s.recording;
   const empty = !s.routines.length && !s.runs.length;
   return (
@@ -938,7 +1102,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
         </div>
         <div class="bar-end">
           {(!empty || recording) && <RecordButton on={recording} />}
-          {s.account && <Account account={s.account} go={go} />}
+          <Account account={s.account} go={go} />
         </div>
       </header>
       {s.update && (
@@ -1023,9 +1187,10 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                       Turn on
                     </button>
                   )}
+                  {r.owner === 'local' && projects.length > 0 && <ShareButton id={`${r.owner}/${r.name}`} name={r.name} projects={projects} />}
                   {r.owner === 'local' && !s.publish && (
-                    <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => send({ t: 'publish', id: `local/${r.name}` })}>
-                      Submit
+                    <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => (s.account ? send({ t: 'publish', id: `local/${r.name}` }) : go({ v: 'signin' }))}>
+                      {s.account ? 'Submit' : 'Sign in to submit'}
                     </button>
                   )}
                   <button
@@ -1044,6 +1209,14 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
           {s.lent.length > 0 && <LentTabs tabs={s.lent} />}
           {s.scriptSites.length > 0 && <ScriptSites sites={s.scriptSites} />}
         </main>
+      )}
+      {!s.account && (
+        <footer class="local-note">
+          <span>Working on this computer, no account.</span>
+          <button class="btn btn-ghost sm" type="button" onClick={() => go({ v: 'signin' })}>
+            Sign in to publish and sync
+          </button>
+        </footer>
       )}
     </div>
   );
@@ -1083,7 +1256,7 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
     setBusy(true);
     setErr('');
     try {
-      await send({ t: 'save', runId, name, description: desc.trim(), fixed, publish });
+      await send({ t: 'save', runId, name, description: desc.trim(), fixed, publish: publish && !!s.account });
       back();
     } catch (e) {
       setErr((e as Error).message);
@@ -1183,8 +1356,8 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
       </main>
       <footer class="foot2">
         <label class="check" style={{ gridColumn: '1 / -1' }}>
-          <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.currentTarget.checked)} style={{ width: '16px', height: '16px', margin: 0, accentColor: 'var(--accent)' }} />
-          Submit to the directory for review
+          <input type="checkbox" checked={publish && !!s.account} disabled={!s.account} onChange={(e) => setPublish(e.currentTarget.checked)} style={{ width: '16px', height: '16px', margin: 0, accentColor: 'var(--accent)' }} />
+          {s.account ? 'Submit to the directory for review' : 'Submit to the directory for review (needs an account)'}
         </label>
         <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'discard', runId }).then(back)}>
           Discard
@@ -1486,6 +1659,12 @@ function App() {
     return () => removeEventListener('keydown', k);
   }, [view, s]);
 
+  // Signing in from the sign-in screen returns to the library.
+  const signedIn = !!s?.account;
+  useEffect(() => {
+    if (signedIn) setView((v) => (v.v === 'signin' ? { v: 'library' } : v));
+  }, [signedIn]);
+
   if (!s || onboarded === undefined) return null;
 
   const back = () => setView({ v: 'library' });
@@ -1506,7 +1685,8 @@ function App() {
   // A request for the person is answered on this computer and needs no account, so signing in does not hide it.
   if (s.install) return <InstallGit card={s.install} />;
   if (s.hooksReview) return <HooksReview r={s.hooksReview} />;
-  if (!s.account && s.script) {
+
+  if (!s.connected && s.script) {
     return (
       <div class="panel">
         <main class="lib">
@@ -1515,8 +1695,6 @@ function App() {
       </div>
     );
   }
-  if (!s.account) return <SignIn s={s} />;
-
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (
       <Onboarding
@@ -1529,6 +1707,7 @@ function App() {
     );
   }
 
+  if (view.v === 'signin') return s.account ? <Library s={s} go={setView} /> : <SignIn back={back} />;
   if (view.v === 'save') return <Save s={s} runId={view.runId} back={back} />;
   if (view.v === 'inputs') return <Inputs id={view.id} name={view.name} back={back} />;
   if (view.v === 'submissions') return <Submissions s={s} back={back} />;

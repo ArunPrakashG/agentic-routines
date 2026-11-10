@@ -58,6 +58,8 @@ export type PanelCommand =
   | { t: 'linkForget' }
   | { t: 'setting'; change: Partial<Settings> }
   | { t: 'sources' }
+  | { t: 'projects' }
+  | { t: 'share'; id: string; dir: string }
   | { t: 'sourceAdd'; address: string }
   | { t: 'sourceRemove'; id: string }
   | { t: 'sourceSet'; id: string; enabled: boolean }
@@ -80,5 +82,9 @@ export type PanelCommand =
   | { t: 'record'; on: boolean }
   | { t: 'remove'; id: string }
   | { t: 'refresh' }
-  | { t: 'signIn' }
+  | { t: 'signIn'; provider?: 'google' | 'github' | 'microsoft' }
+  | { t: 'offered' }
+  | { t: 'passwordCode'; email: string }
+  | { t: 'passwordSet'; email: string; code: string; password: string }
+  | { t: 'passwordLogin'; email: string; password: string }
   | { t: 'signOut' };

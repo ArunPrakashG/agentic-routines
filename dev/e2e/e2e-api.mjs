@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, createSign, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { createServer as tcpServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { isDeepStrictEqual } from 'node:util';
 import { dirname, join } from 'node:path';
@@ -14,6 +15,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const API_DIR = join(ROOT, 'apps/api');
 const PORT = 8799;
 const GOOGLE_PORT = 8798;
+const PROVIDER_PORT = 8797;
+const SMTP_PORT = 8796;
 const PG_PORT = 55432;
 const REDIS_PORT = 56379;
 const API = `http://127.0.0.1:${PORT}/api/v1`;
@@ -66,6 +69,85 @@ const google = createServer((req, res) => {
 });
 await new Promise((r) => google.listen(GOOGLE_PORT, '127.0.0.1', r));
 
+// ---------- the stand-ins for GitHub, Microsoft and a mail server ----------
+const GH_ID = 'gh-client';
+const MS_ID = 'ms-client';
+const MS_ISSUER = (tid) => `http://fake-ms/${tid}/v2.0`;
+const ghCodes = new Map(); // code -> { verifier, user, emails }
+const msCodes = new Map(); // code -> { verifier, token }
+const ghTokens = new Map();
+const providers = createServer((req, res) => {
+  const json = (status, body) => {
+    res.statusCode = status;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  if (req.url === '/ms/keys') return json(200, { keys: [{ ...mainKey.publicKey.export({ format: 'jwk' }), kid: 'k1', alg: 'RS256', use: 'sig' }] });
+  if (req.url === '/gh/api/user' || req.url === '/gh/api/user/emails') {
+    const g = ghTokens.get((req.headers.authorization ?? '').replace('Bearer ', ''));
+    if (!g || !req.headers['user-agent']) return json(401, {});
+    return json(200, req.url.endsWith('emails') ? g.emails : g.user);
+  }
+  let raw = '';
+  req.on('data', (d) => (raw += d));
+  req.on('end', () => {
+    const q = new URLSearchParams(raw);
+    if (req.url === '/gh/token') {
+      const c = ghCodes.get(q.get('code'));
+      ghCodes.delete(q.get('code'));
+      if (!c || q.get('client_secret') !== 'gh-secret' || q.get('client_id') !== GH_ID || q.get('code_verifier') !== c.verifier) return json(200, { error: 'bad_verification_code' });
+      ghTokens.set(`gho_${q.get('code')}`, c);
+      return json(200, { access_token: `gho_${q.get('code')}`, token_type: 'bearer' });
+    }
+    if (req.url === '/ms/token') {
+      const c = msCodes.get(q.get('code'));
+      msCodes.delete(q.get('code'));
+      if (!c || q.get('client_secret') !== 'ms-secret' || q.get('client_id') !== MS_ID || q.get('code_verifier') !== c.verifier) return json(400, { error: 'invalid_grant' });
+      return json(200, { id_token: c.token });
+    }
+    json(404, {});
+  });
+});
+await new Promise((r) => providers.listen(PROVIDER_PORT, '127.0.0.1', r));
+
+// A mail server that keeps what it is given.
+const mails = [];
+const smtp = tcpServer((sock) => {
+  let buf = '';
+  let data = null;
+  let rcpt = '';
+  sock.write('220 fake\r\n');
+  sock.on('data', (d) => {
+    buf += d;
+    for (let i; (i = buf.indexOf('\r\n')) >= 0; ) {
+      const line = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      if (data !== null) {
+        if (line === '.') {
+          mails.push({ to: rcpt, text: data });
+          data = null;
+          sock.write('250 queued\r\n');
+        } else data += line + '\n';
+      } else if (/^(EHLO|HELO)/i.test(line)) sock.write('250 fake\r\n');
+      else if (/^MAIL/i.test(line)) sock.write('250 ok\r\n');
+      else if (/^RCPT/i.test(line)) (rcpt = line.match(/<(.*)>/)[1]), sock.write('250 ok\r\n');
+      else if (/^DATA/i.test(line)) (data = ''), sock.write('354 go\r\n');
+      else if (/^QUIT/i.test(line)) sock.end('221 bye\r\n');
+      else sock.write('250 ok\r\n');
+    }
+  });
+  sock.on('error', () => {});
+});
+await new Promise((r) => smtp.listen(SMTP_PORT, '127.0.0.1', r));
+// The mail is sent after the answer, so wait for it.
+async function mailTo(email, since = 0) {
+  for (let i = 0; i < 40; i++) {
+    const m = mails.slice(since).filter((x) => x.to === email).pop();
+    if (m) return m.text.match(/code is (\d{6})/)?.[1];
+    await sleep(100);
+  }
+}
+
 // ---------- Postgres, Redis and the binary, each on a port of its own ----------
 const sh = (cmd, opts = {}) => spawnSync('sh', ['-c', cmd], { encoding: 'utf8', ...opts });
 function cleanup() {
@@ -75,6 +157,8 @@ function cleanup() {
 function finish() {
   cleanup();
   google.close();
+  providers.close();
+  smtp.close();
   console.log(failures ? `\n${failures} failed (API log: ${log})` : '\nAll passed');
   process.exit(failures ? 1 : 0);
 }
@@ -98,7 +182,10 @@ const vars = {
   PORT, DATABASE_URL: `postgres://postgres:test@127.0.0.1:${PG_PORT}/postgres`, REDIS_URL: `redis://127.0.0.1:${REDIS_PORT}/0`,
   GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: 'test-client-secret', SESSION_SECRET: 'test-session-secret-0123456789abcdef',
   GOOGLE_TOKEN_URL: `http://127.0.0.1:${GOOGLE_PORT}/token`, GOOGLE_JWKS_URL: `http://127.0.0.1:${GOOGLE_PORT}/certs`, GOOGLE_ISSUER: ISSUER,
-  ADMIN_EMAILS: 'Admin@example.com, other-admin@example.com',
+  TRUSTED_PROXY: 'localhost', ADMIN_EMAILS: 'Admin@example.com, other-admin@example.com',
+  GITHUB_CLIENT_ID: GH_ID, GITHUB_CLIENT_SECRET: 'gh-secret', GITHUB_TOKEN_URL: `http://127.0.0.1:${PROVIDER_PORT}/gh/token`, GITHUB_API_URL: `http://127.0.0.1:${PROVIDER_PORT}/gh/api`,
+  MICROSOFT_CLIENT_ID: MS_ID, MICROSOFT_CLIENT_SECRET: 'ms-secret', MICROSOFT_TOKEN_URL: `http://127.0.0.1:${PROVIDER_PORT}/ms/token`, MICROSOFT_JWKS_URL: `http://127.0.0.1:${PROVIDER_PORT}/ms/keys`, MICROSOFT_ISSUER_FORMAT: 'http://fake-ms/%s/v2.0',
+  SMTP_ADDR: `127.0.0.1:${SMTP_PORT}`, MAIL_FROM: 'noreply@example.com',
 };
 const envs = Object.entries(vars).map(([k, v]) => `${k}='${v}'`).join(' ');
 const start = () => spawnSync('tmux', ['new-session', '-d', '-s', TMUX, '-c', STATE, `env ${envs} ${STATE}/api >> ${log} 2>&1`]);
@@ -178,6 +265,134 @@ check(again.user.id === a.user.id && again.user.name === 'A Renamed', 'signing i
 check((await me(a.access_token, install)).ok, 'a second browser leaves the first signed in');
 const other = await (await signIn({ sub: 'google-2', email: 'b@example.com' })).json();
 check(other.user.id !== a.user.id, 'another Google account is another user');
+
+
+// ---------- GitHub, Microsoft, and email and password ----------
+{
+  const providerList = await (await fetch(`${API}/auth/providers`)).json();
+  check(providerList.providers.map((p) => p.id).join() === 'google,github,microsoft' && providerList.password === true, 'the API says which ways of signing in it offers');
+  check(!JSON.stringify(providerList).includes('secret'), 'and gives out only public ids');
+
+  const ghSignIn = ({ id = 4001, login = 'octo', name = 'Octo Cat', emails, verifier = verifierFor(), badVerifier } = {}) => {
+    const code = randomUUID();
+    ghCodes.set(code, { verifier, user: { id, login, name, avatar_url: 'https://avatars.example/o.png' }, emails: emails ?? [{ email: 'octo@example.com', primary: true, verified: true }] });
+    return post('/auth/github', { code, code_verifier: badVerifier ?? verifier, redirect_uri: 'https://x.chromiumapp.org/', nonce: 'unused', install_id: randomUUID() });
+  };
+  let gh = await ghSignIn();
+  const ghUser = await gh.json();
+  check(gh.ok && ghUser.user.email === 'octo@example.com' && ghUser.user.name === 'Octo Cat', 'GitHub sign-in makes an account from the primary verified email');
+  check((await ghSignIn({ badVerifier: 'wrong' })).status === 401, 'GitHub: the wrong PKCE verifier is refused');
+  check((await post('/auth/github', { code: 'nope', code_verifier: 'x', redirect_uri: 'x', nonce: 'x', install_id: 'x' })).status === 401, 'GitHub: a code GitHub rejects is refused');
+  check((await (await ghSignIn()).json()).user.id === ghUser.user.id, 'GitHub: signing in again finds the same account');
+  const ghPicks = await (await ghSignIn({ id: 4002, login: 'two', name: '', emails: [{ email: 'old@example.com', verified: true }, { email: 'unverified@example.com', primary: true, verified: false }, { email: 'two@example.com', primary: true, verified: true }] })).json();
+  check(ghPicks.user.email === 'two@example.com' && ghPicks.user.name === 'two', 'GitHub: the primary verified address wins, and the login stands in for a missing name');
+  const ghBare = await (await ghSignIn({ id: 4003, login: 'bare', emails: [{ email: 'a@example.com', primary: true, verified: false }] })).json();
+  check(ghBare.user.id !== a.user.id && ghBare.user.email === 'bare@users.noreply.github.com', 'GitHub: an unverified address is never used, even one that matches an account');
+  const ghLinked = await (await ghSignIn({ id: 4004, login: 'linked', emails: [{ email: 'A@Example.com', primary: true, verified: true }] })).json();
+  check(ghLinked.user.id === a.user.id, 'GitHub: a verified address that an account already has joins that account');
+
+  const msSignIn = (claims = {}, { verifier = verifierFor(), nonce = randomUUID(), tokenNonce, badVerifier, key } = {}) => {
+    const code = randomUUID();
+    const tid = claims.tid ?? 'tenant-1';
+    const token = idToken({ iss: MS_ISSUER(tid), aud: MS_ID, tid, sub: 'ms-1', name: 'Em Ess', email: 'ms@example.com', nonce: tokenNonce ?? nonce, ...claims }, key);
+    msCodes.set(code, { verifier, token });
+    return post('/auth/microsoft', { code, code_verifier: badVerifier ?? verifier, redirect_uri: 'https://x.chromiumapp.org/', nonce, install_id: randomUUID() });
+  };
+  const msErr = async (what, ...x) => check((await (await msSignIn(...x)).json()).error === 'bad_id_token', what);
+  const ms = await (await msSignIn()).json();
+  check(ms.user?.email === 'ms@example.com' && ms.user.name === 'Em Ess', 'Microsoft sign-in makes an account');
+  check((await msSignIn({}, { badVerifier: 'wrong' })).status === 401, 'Microsoft: the wrong PKCE verifier is refused');
+  await msErr('Microsoft: an ID token signed by another key is refused', {}, { key: otherKey.privateKey });
+  await msErr('Microsoft: an ID token for another app is refused', { aud: 'someone-else' });
+  await msErr('Microsoft: an issuer that is not the token\'s own tenant is refused', { iss: MS_ISSUER('another-tenant') });
+  await msErr('Microsoft: an ID token with another nonce is refused', {}, { tokenNonce: 'other' });
+  await msErr('Microsoft: an expired ID token is refused', { exp: 1000 });
+  await msErr('Microsoft: a token with no tenant is refused', { tid: '', iss: MS_ISSUER('') });
+  check((await (await msSignIn()).json()).user.id === ms.user.id, 'Microsoft: signing in again finds the same account');
+  const msTwin = await (await msSignIn({ sub: 'ms-2', email: 'a@example.com' })).json();
+  check(msTwin.user.id !== a.user.id, 'Microsoft: an email claim never joins an account, so a tenant cannot take over a Google account by claiming its address');
+  const msAdmin = await (await msSignIn({ sub: 'ms-3', email: 'admin@example.com' })).json();
+  check(msAdmin.user.admin === false, 'Microsoft: an email claim never makes a reviewer');
+  const msAdminMe = await (await me(msAdmin.access_token, JSON.parse(Buffer.from(msAdmin.access_token.split('.')[1], 'base64url')).ins)).json();
+  check(msAdminMe.admin === false, 'and neither does it on a later request');
+  check((await msSignIn({ sub: 'ms-1', tid: 'tenant-2' })).ok && psql("SELECT count(*) FROM identities WHERE provider = 'microsoft' AND subject LIKE '%:ms-1'") === '2', 'Microsoft: the same id in another tenant is another account');
+
+  // Email and password.
+  const pwInstall = randomUUID();
+  const pw = (path, body) => post(`/auth/password/${path}`, { install_id: pwInstall, ...body });
+  const email = 'pw@example.com';
+  const PASSWORD = 'correct horse battery';
+  check((await pw('code', { email: 'not-an-address' })).status === 400, 'a code is not sent to something that is not an address');
+  check((await pw('code', { email: 'x@example.com\r\nBcc: y@example.com' })).status === 400, 'or to an address with a header in it');
+  check((await pw('login', { email, password: PASSWORD })).status === 401, 'an address with no account cannot sign in');
+  let mark = mails.length;
+  check((await pw('code', { email })).status === 202, 'asking for a code is accepted');
+  let code = await mailTo(email, mark);
+  check(/^\d{6}$/.test(code ?? ''), 'and a six digit code is mailed');
+  check(!psql('SELECT code_hash::text FROM email_codes').includes(code), 'the code is kept as a keyed hash');
+  check((await pw('set', { email, code, password: 'short' })).status === 400, 'a short password is refused');
+  check((await pw('set', { email, code: code === '000000' ? '000001' : '000000', password: PASSWORD })).status === 401, 'a wrong code is refused');
+  check((await pw('set', { email: 'other@example.com', code, password: PASSWORD })).status === 401, 'and a code for another address');
+  res = await pw('set', { email, code, password: PASSWORD });
+  const pwUser = await res.json();
+  check(res.ok && pwUser.user.email === email && pwUser.access_token, 'the right code and a good password make an account');
+  check((await pw('set', { email, code, password: PASSWORD })).status === 401, 'a code works once');
+  check(!psql('SELECT hash FROM passwords').includes(PASSWORD) && psql('SELECT hash FROM passwords').startsWith('argon2id$'), 'the password is stored as an argon2id hash');
+  check((await pw('login', { email: 'PW@Example.com', password: PASSWORD })).ok, 'signing in with the password works, whatever the case of the address');
+  const wrong = await pw('login', { email, password: 'not the password' });
+  const unknown = await pw('login', { email: 'nobody@example.com', password: 'not the password' });
+  check(wrong.status === 401 && unknown.status === 401 && (await wrong.json()).error === (await unknown.json()).error, 'a wrong password and an unknown address get the same answer');
+
+  // Too many wrong passwords stop even the right one for a while.
+  const lockEmail = 'lock@example.com';
+  mark = mails.length;
+  await pw('code', { email: lockEmail });
+  await pw('set', { email: lockEmail, code: await mailTo(lockEmail, mark), password: PASSWORD });
+  let last;
+  for (let i = 0; i < 8; i++) last = await pw('login', { email: lockEmail, password: 'guess number ' + i });
+  check(last.status === 401, 'wrong passwords are refused');
+  last = await pw('login', { email: lockEmail, password: PASSWORD });
+  check(last.status === 429 && (await last.json()).error === 'too_many_attempts', 'and after eight, the right one waits too');
+  check((await pw('login', { email, password: PASSWORD })).ok, 'while another address is not affected');
+
+  // Five wrong codes end the code.
+  const codeEmail = 'codes@example.com';
+  mark = mails.length;
+  await pw('code', { email: codeEmail });
+  const real = await mailTo(codeEmail, mark);
+  const bad = real === '111111' ? '222222' : '111111';
+  for (let i = 0; i < 5; i++) await pw('set', { email: codeEmail, code: bad, password: PASSWORD });
+  check((await pw('set', { email: codeEmail, code: real, password: PASSWORD })).status === 401, 'five wrong codes end the code, so the right one no longer works');
+
+  // A code is asked for at most three times in a while.
+  const spamEmail = 'spam@example.com';
+  mark = mails.length;
+  for (let i = 0; i < 6; i++) check((await pw('code', { email: spamEmail })).status === 202, i === 0 ? 'an address asking for more codes still gets the same answer' : 'and again') || 0;
+  await sleep(600);
+  check(mails.slice(mark).filter((m) => m.to === spamEmail).length === 3, 'but only three are mailed');
+
+  // An address that already signs in with Google gets a password on the same account, after proving the address.
+  mark = mails.length;
+  await pw('code', { email: 'a@example.com' });
+  const linkCode = await mailTo('a@example.com', mark);
+  const linked = await (await pw('set', { email: 'a@example.com', code: linkCode, password: PASSWORD })).json();
+  check(linked.user?.id === a.user.id, 'an address that has a Google account gets its password on that account');
+  check((await (await pw('login', { email: 'a@example.com', password: PASSWORD })).json()).user.id === a.user.id, 'and signing in with it reaches that account');
+
+  // Resetting the password ends every session and replaces the password.
+  const old = await (await pw('login', { email, password: PASSWORD })).json();
+  const oldInstall = pwInstall;
+  check((await me(old.access_token, oldInstall)).ok, 'signed in before the reset');
+  mark = mails.length;
+  await pw('code', { email });
+  const resetCode = await mailTo(email, mark);
+  const resetInstall = randomUUID();
+  const reset = await post('/auth/password/set', { email, code: resetCode, password: 'a brand new password', install_id: resetInstall });
+  check(reset.ok && (await reset.json()).user.id === pwUser.user.id, 'a code and a new password reset the password on the same account');
+  check((await me(old.access_token, oldInstall)).status === 401, 'which ends the sessions from before');
+  check((await pw('login', { email, password: PASSWORD })).status === 401 && (await pw('login', { email, password: 'a brand new password' })).ok, 'and the old password stops working');
+  check(psql("SELECT count(*) FROM identities WHERE provider = 'password' AND subject = 'pw@example.com'") === '1', 'with one password identity for the address');
+}
 
 // ---------- refresh ----------
 check((await post('/auth/refresh', { refresh_token: 'nope', install_id: install })).status === 401, 'an unknown refresh token is refused');
@@ -433,7 +648,7 @@ await call(adm, 'DELETE', '/admin/blocks?kind=routine&value=ptwo/play-release');
   await call(again, 'PUT', '/me/handle', { handle: 'pblocked-again' });
   check((await call(again, 'PUT', '/routines/after-block', routine({ meta: { ...routine().meta, name: 'after-block' } }))).status === 403, 'a blocked publisher cannot start over with a new handle');
   await call(adm, 'DELETE', '/admin/blocks?kind=user&value=pblocked');
-  await call(adm, 'DELETE', `/admin/blocks?kind=account&value=${claims.sub}`);
+  await call(adm, 'DELETE', `/admin/blocks?kind=account&value=google:${claims.sub}`);
 }
 
 // Deleting, the trail, and the limits.

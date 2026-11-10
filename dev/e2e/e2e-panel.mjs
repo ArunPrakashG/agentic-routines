@@ -89,7 +89,7 @@ for (let i = 0; i < 40 && !panelTarget; i++) {
 check(!!panelTarget, 'the toolbar icon opens the side panel');
 if (!panelTarget) process.exit(1);
 const panel = driver(await cdp(pageWs(panelTarget.targetId)));
-check(await panel.until((t) => /Continue with Google/.test(t)), 'signed out, the panel asks to sign in');
+check(await panel.until((t) => /Connect your agent|No routines|Working on this computer/.test(t) && !/Continue with Google/.test(t)), 'signed out, the panel works and does not ask to sign in');
 // Google's own screen needs a person. dev/e2e/e2e-api.mjs covers the API behind it.
 const worker = (await targets()).find((t) => t.type === 'service_worker' && t.url.includes(EXT_ID));
 const bg = driver(await cdp(pageWs(worker.targetId)));
@@ -225,7 +225,7 @@ await panel.c.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape' })
 check(await panel.until((t) => !/test@example\.com/.test(t), 2000), 'Escape closes the menu');
 await panel.click(panel.button('Account, Test'));
 await panel.click(panel.button('Sign out'));
-check(await panel.until((t) => /Continue with Google/.test(t)), 'signing out returns to the sign-in screen');
+check(await panel.until((t) => /Connect your agent|Working on this computer/.test(t)), 'signing out returns to the panel without an account');
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 browser.close();

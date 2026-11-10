@@ -54,7 +54,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	a := &app{cfg: cfg, proxy: &proxyAddrs{name: cfg.TrustedProxy}, db: db, google: newGoogle(cfg), signer: signer{cfg.SessionSecret}, limiter: lim}
+	a := &app{cfg: cfg, proxy: &proxyAddrs{name: cfg.TrustedProxy}, db: db, google: newGoogle(cfg), github: newGitHub(cfg), microsoft: newMicrosoft(cfg), mailer: newMailer(cfg), signer: signer{cfg.SessionSecret}, limiter: lim}
 
 	go func() {
 		for {

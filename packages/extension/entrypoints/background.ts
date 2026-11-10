@@ -442,6 +442,10 @@ export default defineBackground(() => {
         return push();
       case 'sources':
         return git.list();
+      case 'projects':
+        return native.call('sources.projects');
+      case 'share':
+        return native.call('sources.share', { id: c.id, dir: c.dir });
       case 'sourceAdd':
         return git.add(c.address);
       case 'sourceRemove':
@@ -507,7 +511,15 @@ export default defineBackground(() => {
       case 'refresh':
         return refreshRoutines();
       case 'signIn':
-        return auth.signIn();
+        return auth.signIn(c.provider);
+      case 'offered':
+        return auth.offered();
+      case 'passwordCode':
+        return auth.passwordCode(c.email);
+      case 'passwordSet':
+        return auth.passwordSet(c.email, c.code, c.password);
+      case 'passwordLogin':
+        return auth.passwordLogin(c.email, c.password);
       case 'signOut':
         return auth.signOut();
     }

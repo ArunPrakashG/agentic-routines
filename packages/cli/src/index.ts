@@ -12,6 +12,7 @@ import { runHost } from './host/host.ts';
 import { runMcp } from './mcp/server.ts';
 import { runSetup } from './commands/setup.ts';
 import { runExport, runSources } from './commands/sources.ts';
+import { runProject } from './commands/project.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -30,6 +31,11 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
   });
 } else if (cmd === 'sources' || cmd === 'export') {
   (cmd === 'sources' ? runSources(args) : runExport(args)).catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
+} else if (cmd === 'project') {
+  runProject(args).catch((e) => {
     console.error(e.message);
     process.exit(1);
   });

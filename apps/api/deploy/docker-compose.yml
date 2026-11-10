@@ -5,7 +5,9 @@
 # static website, shipped by apps/site/deploy/deploy.sh). Both are reached over the "proxy" network. Postgres and Redis are the
 # shared ones, reached over "shared_services".
 # .env next to this file (mode 600, never in the repo) holds DATABASE_URL, REDIS_URL, TAG (the image to run), GOOGLE_CLIENT_ID,
-# GOOGLE_CLIENT_SECRET, SESSION_SECRET and ADMIN_EMAILS (who may review submissions).
+# GOOGLE_CLIENT_SECRET, SESSION_SECRET and ADMIN_EMAILS (who may review submissions). It may also hold GITHUB_CLIENT_ID and
+# GITHUB_CLIENT_SECRET, MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET, and SMTP_ADDR, SMTP_USER, SMTP_PASS and MAIL_FROM
+# (email and password sign-in); each way of signing in is on only when its names are set.
 
 name: agenticroutines
 

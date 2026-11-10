@@ -20,6 +20,7 @@ import { ensureListener, listenConfig, startPairing } from '../host/remote.ts';
 import { checkUpload, splitPaths } from '../host/files.ts';
 import { paths } from '../paths.ts';
 import * as sources from '../store/sources.ts';
+import * as projects from '../store/projects.ts';
 import * as store from '../store/routines.ts';
 
 const MAX_ROUTINE_TOOLS = 30;
@@ -315,7 +316,9 @@ function watchRoutines(onChange: () => void) {
 }
 
 export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): Promise<void> {
-  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: `${INSTRUCTIONS}\n\n${UNTRUSTED_NOTES}` });
+  // A repository that shares routines: list them and tell the agent. Nothing is installed by this.
+  const project = await projects.note().catch(() => '');
+  const server = new McpServer({ name: 'agentic-routines', version: VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: `${INSTRUCTIONS}${project}\n\n${UNTRUSTED_NOTES}` });
   // With several browser profiles open, the first answer says which one the work is in.
   const withNote =
     (cb: (a: never, extra: unknown) => Promise<unknown>) =>

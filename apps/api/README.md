@@ -1,6 +1,6 @@
 # API
 
-Accounts and the directory for Agentic Routines. A small Go service: Google sign-in, short-lived access tokens, rotating refresh tokens, and the public directory of published routines.
+Accounts and the directory for Agentic Routines. A small Go service: sign-in (Google, GitHub, Microsoft, or email and password), short-lived access tokens, rotating refresh tokens, and the public directory of published routines.
 
 It runs on Postgres and Redis, in one 16 MB image, and idles around 4 MiB.
 
@@ -10,7 +10,13 @@ All under `/api/v1`, all JSON, all `Cache-Control: no-store`.
 
 | Method | Path | What it does |
 |---|---|---|
+| GET | `/auth/providers` | Which ways of signing in are on, with their public client ids, and whether email and password is on. |
 | POST | `/auth/google` | Takes the Google authorization code, its PKCE verifier and nonce, and the install id. Returns tokens and the account. |
+| POST | `/auth/github` | The same for GitHub (`code`, `code_verifier`, `redirect_uri`, `install_id`; `nonce` is ignored). Only when the GitHub client is set. |
+| POST | `/auth/microsoft` | The same for Microsoft, with the nonce checked in the ID token. Only when the Microsoft client is set. |
+| POST | `/auth/password/code` | `{email}`. Mails a six digit code, good for ten minutes. Answers `202` whatever the address, and mails at most three an address in fifteen minutes. |
+| POST | `/auth/password/set` | `{email, code, password, install_id}`. With the right code, makes the account for the address, adds a password to the account that already has that verified address, or replaces its password and ends its other sessions. |
+| POST | `/auth/password/login` | `{email, password, install_id}`. Eight wrong passwords for an address stop it for fifteen minutes; setting a password with a mailed code lifts that. |
 | POST | `/auth/refresh` | Swaps a refresh token for a new pair. A reused token ends the session. |
 | POST | `/auth/signout` | Ends the session. |
 | GET | `/me` | The signed-in account. Needs `Authorization: Bearer` and `x-install-id`. |
@@ -26,6 +32,18 @@ All under `/api/v1`, all JSON, all `Cache-Control: no-store`.
 | POST | `/routines/{owner}/{name}/installs` | Public. Counts an install, reported by the installer. |
 | GET | `/blocklist` | Public, cached for five minutes. Blocked publishers, blocked Git repositories, and routines that are blocked or switched off, so a client can turn off what it installed from them. |
 | GET | `/healthz` | Database check, outside `/api/v1`. |
+
+## Sign-in
+
+An account has one or more identities: a provider and the provider's id for the person (`google`, `github`, `microsoft`, or `password` with the lower-case email as the id). Rules:
+
+- A new identity with a **verified** email joins the account that already has that verified email. Google, GitHub (the primary verified address from the API) and a mailed code count as verified.
+- **Microsoft's email claim is never trusted.** A tenant admin can set it to anything, so a Microsoft identity never joins another account and never makes a reviewer. Its id is `tenant:sub`.
+- A reviewer must have a verified email in `ADMIN_EMAILS`.
+- Passwords are argon2id (19 MiB, 2 passes), at most two hashing at once. They need 10 to 128 characters and have no other rule. An unknown address costs the same time as a wrong password and gets the same answer.
+- Setting a password always needs a code mailed to the address, so nobody can register an address they do not control.
+- Blocking a publisher blocks every identity of the account (`kind=account`, value `provider:subject`, such as `google:1234`). Email accounts are cheap to make, so this is weaker against someone who starts over with a new address than it was when Google was the only way in.
+- Email and password is off unless `SMTP_ADDR` is set. GitHub and Microsoft are off unless both halves of their client are set.
 
 ## Review
 
@@ -64,7 +82,10 @@ Environment variables. The service refuses to start without the first five.
 | `GOOGLE_CLIENT_ID` | Public, same value as in the extension |
 | `GOOGLE_CLIENT_SECRET` | From the Google client JSON in `.keys/` |
 | `SESSION_SECRET` | At least 32 characters, signs access tokens |
-| `ADMIN_EMAILS` | Optional. Comma-separated emails that may review submissions |
+| `ADMIN_EMAILS` | Optional. Comma-separated emails that may review submissions. The account needs that email verified |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Optional, both or neither. A GitHub OAuth app whose callback is the extension's `chromiumapp.org` address |
+| `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | Optional, both or neither. A Microsoft Entra app registered as a web app for any organization and personal accounts, with the same callback |
+| `SMTP_ADDR`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Optional. `host:port` of a mail server that offers STARTTLS (587), and the sender. Turns on email and password. `SMTP_USER` may be empty for a relay on the same network |
 | `PORT` | Default 8080 |
 
 Migrations in `migrations/` are embedded and run at start, under an advisory lock.
@@ -75,7 +96,7 @@ Migrations in `migrations/` are embedded and run at start, under an advisory loc
 pnpm e2e:api
 ```
 
-Builds the binary, starts throwaway Postgres and Redis containers and a stand-in for Google, and checks the whole flow: bad codes and ID tokens are refused, tokens are bound to the install, refresh rotation and reuse, a restart keeps sessions, the rate limit, and the request size limit. It ends with a throughput line.
+Builds the binary, starts throwaway Postgres and Redis containers and stand-ins for Google, GitHub, Microsoft and a mail server, and checks the whole flow: bad codes and ID tokens are refused, tokens are bound to the install, refresh rotation and reuse, a restart keeps sessions, the rate limit, and the request size limit. It ends with a throughput line.
 
 ## Deploy
 
@@ -97,4 +118,4 @@ The deploy script assumes these exist. They are done once.
 4. A proxied DNS record for the name in Cloudflare.
 5. Three Cloudflare cache rules for that host, in this order, after the zone's catch-all "cache everything" rule (later rules win): respect origin cache headers for the host; no caching for `/api/*` and `/healthz`; respect origin for `/api/v1/blocklist` (public, five minutes). The website sets its own headers: built files under `/_astro/` are immutable for a year, pages revalidate in the browser and stay five minutes on the edge, and `apps/site/deploy/deploy.sh` purges the host after a release.
 
-Firefox needs its own redirect URL added to the Google client before sign-in works there.
+Firefox needs its own redirect URL added to each provider's client before sign-in works there.

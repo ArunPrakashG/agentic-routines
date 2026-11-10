@@ -581,7 +581,7 @@ func (s *store) approve(ctx context.Context, id, admin string) (owner, name stri
 	}
 	var blocked bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2)
-		OR (kind = 'account' AND value = (SELECT google_sub FROM users WHERE id = $3::uuid)))`,
+		OR (kind = 'account' AND value IN (SELECT provider || ':' || subject FROM identities WHERE user_id = $3::uuid)))`,
 		owner, owner+"/"+name, ownerID).Scan(&blocked); err != nil {
 		return
 	}
@@ -830,7 +830,8 @@ func (a *app) adminBlocks(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"blocks": out})
 }
 
-var subPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{6,64}$`)
+// An account block names an identity: provider:subject, like google:1234 or password:a@example.com.
+var subPattern = regexp.MustCompile(`^(google|github|microsoft|password):\S{1,254}$`)
 
 var routineRef = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,29}/[a-z0-9][a-z0-9-]{1,62}$`)
 
@@ -879,7 +880,7 @@ func (a *app) adminBlock(w http.ResponseWriter, r *http.Request) {
 		}
 		// Blocking a person also stops what they have waiting. Their live routines are already hidden by the block.
 		if b["kind"] == "user" {
-			if _, err = tx.Exec(ctx, `INSERT INTO blocks (kind, value, reason, created_by) SELECT 'account', u.google_sub, $2, $3 FROM users u
+			if _, err = tx.Exec(ctx, `INSERT INTO blocks (kind, value, reason, created_by) SELECT 'account', i.provider || ':' || i.subject, $2, $3 FROM users u JOIN identities i ON i.user_id = u.id
 				WHERE u.handle = $1 ON CONFLICT (kind, value) DO NOTHING`, value, b["reason"], admin); err != nil {
 				return err
 			}
@@ -916,7 +917,7 @@ func (a *app) adminUnblock(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(ctx)
 	t, err := tx.Exec(ctx, `DELETE FROM blocks WHERE kind = $1 AND value = $2`, q.Get("kind"), value)
 	if err == nil && q.Get("kind") == "user" {
-		_, err = tx.Exec(ctx, `DELETE FROM blocks WHERE kind = 'account' AND value IN (SELECT google_sub FROM users WHERE handle = $1)`, value)
+		_, err = tx.Exec(ctx, `DELETE FROM blocks WHERE kind = 'account' AND value IN (SELECT i.provider || ':' || i.subject FROM users u JOIN identities i ON i.user_id = u.id WHERE u.handle = $1)`, value)
 	}
 	if err == nil && t.RowsAffected() == 0 {
 		err = errNotFound
