@@ -213,3 +213,8 @@ textarea.input { height: 84px; resize: none; padding: 10px 12px; font: 400 13px/
 .saved .meta { white-space: normal; line-height: 18px; }
 .saved summary { cursor: pointer; margin-top: 4px; }
 .saved details p { margin: 6px 0 0; line-height: 1.45; }
+.avatar.out { background: var(--surface-2); color: var(--text-2); }
+.account-menu .why { font-size: 12px; line-height: 18px; color: var(--text-3); }
+.signin-why { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 20px; color: var(--text-2); text-align: left; }
+.signin-why li::before { content: "\2022"; margin-right: 8px; color: var(--text-3); }
+.local-note { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); }

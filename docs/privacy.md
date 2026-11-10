@@ -19,6 +19,8 @@ You can connect the extension to an agent on another computer by entering an add
 
 ## If you sign in
 
+Signing in is optional. Recording, running and editing routines on your computer never needs an account. An account is for publishing routines to the directory and tracking your submissions.
+
 - Google, GitHub or Microsoft: the extension opens the provider's sign-in. Our server receives the one-time code the provider returns, checks it with the provider, and stores the provider's account id, your email address, name and picture. For GitHub the email is your primary verified address; we also read your public profile name and picture.
 - Email and password: you give us your email address and a password. We mail a code to the address to show it is yours. We store the address and a salted hash of the password, never the password. The code is kept as a hash for ten minutes.
 - You can use more than one way. If they share a verified email address they are one account.

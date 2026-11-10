@@ -129,7 +129,7 @@ const Pips = ({ colors, label }: { colors?: string[]; label: string }) => (
 
 // ---------- views ----------
 
-type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' };
+type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' } | { v: 'signin' };
 
 function RecordButton({ on }: { on: boolean }) {
   return (
@@ -172,7 +172,8 @@ function MicrosoftMark() {
 
 const PROVIDER_NAMES: Record<Provider, string> = { google: 'Google', github: 'GitHub', microsoft: 'Microsoft' };
 
-function SignIn({ s }: { s: PanelState }) {
+/** Signing in is optional. Everything on this computer works without it; this is for publishing and syncing. */
+function SignIn({ back }: { back: () => void }) {
   const [offered, setOffered] = useState<Offered>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -207,9 +208,16 @@ function SignIn({ s }: { s: PanelState }) {
       <main class="center signin">
         <Mark size={48} cls="drift" />
         <div class="stack" style={{ gap: '8px', alignItems: 'center' }}>
-          <h1>Agentic Routines</h1>
-          <p>Sign in once. Your routines follow you to every browser you use.</p>
+          <h1>Sign in</h1>
+          <p>Optional. Recording, running and editing routines on this computer never need an account.</p>
         </div>
+        {!form && (
+          <ul class="signin-why">
+            <li>Publish routines to the community directory</li>
+            <li>Track what you submitted and its review</li>
+            <li>Sync your routines across browsers</li>
+          </ul>
+        )}
         {!form && (
           <div class="signin-buttons">
             {(offered?.providers ?? [{ id: 'google' as Provider, client_id: '' }]).map((p) =>
@@ -279,17 +287,16 @@ function SignIn({ s }: { s: PanelState }) {
             {error}
           </p>
         )}
-        <details>
-          <summary>My agent is on another computer</summary>
-          <LinkSettings s={s} />
-        </details>
+        <button class="btn btn-ghost sm" type="button" onClick={back}>
+          Not now
+        </button>
       </main>
       <footer class="signin-foot">Passwords you type into pages are never recorded.</footer>
     </div>
   );
 }
 
-function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void }) {
+function Account({ account, go }: { account?: AccountInfo; go?: (v: View) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -309,12 +316,21 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
   }, [open]);
   return (
     <div class="account" ref={ref}>
-      <button class="icon-btn" type="button" aria-label={`Account, ${account.name}`} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span class="avatar">{(account.name || account.email).charAt(0).toUpperCase()}</span>
+      <button class="icon-btn" type="button" aria-label={account ? `Account, ${account.name}` : 'Account, not signed in'} aria-expanded={open} onClick={() => setOpen(!open)}>
+        {account ? (
+          <span class="avatar">{(account.name || account.email).charAt(0).toUpperCase()}</span>
+        ) : (
+          <span class="avatar out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+          </span>
+        )}
       </button>
       {open && (
         <div class="account-menu">
-          <span class="email">{account.email}</span>
+          <span class="email">{account ? account.email : 'Not signed in'}</span>
           {go && (
             <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'sources' }); }}>
               Sources
@@ -325,19 +341,30 @@ function Account({ account, go }: { account: AccountInfo; go?: (v: View) => void
               Settings
             </button>
           )}
-          {go && (
+          {go && account && (
             <button class="btn btn-secondary sm" type="button" onClick={() => { setOpen(false); go({ v: 'submissions' }); }}>
               Your submissions
             </button>
           )}
-          {account.admin && (
+          {account?.admin && (
             <button class="btn btn-secondary sm" type="button" onClick={() => browser.tabs.create({ url: browser.runtime.getURL('/admin.html' as any) })}>
               Review submissions
             </button>
           )}
-          <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
-            Sign out
-          </button>
+          {account ? (
+            <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
+              Sign out
+            </button>
+          ) : (
+            go && (
+              <>
+                <span class="why">Sign in to publish routines to the community and sync them across browsers.</span>
+                <button class="btn btn-primary sm" type="button" onClick={() => { setOpen(false); go({ v: 'signin' }); }}>
+                  Sign in
+                </button>
+              </>
+            )
+          )}
         </div>
       )}
     </div>
@@ -1036,7 +1063,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
         </div>
         <div class="bar-end">
           {(!empty || recording) && <RecordButton on={recording} />}
-          {s.account && <Account account={s.account} go={go} />}
+          <Account account={s.account} go={go} />
         </div>
       </header>
       {empty && !recording && !s.script && !s.publish ? (
@@ -1117,8 +1144,8 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
                     </button>
                   )}
                   {r.owner === 'local' && !s.publish && (
-                    <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => send({ t: 'publish', id: `local/${r.name}` })}>
-                      Submit
+                    <button class="btn btn-ghost sm" type="button" aria-label={`Submit ${r.name} for review`} onClick={() => (s.account ? send({ t: 'publish', id: `local/${r.name}` }) : go({ v: 'signin' }))}>
+                      {s.account ? 'Submit' : 'Sign in to submit'}
                     </button>
                   )}
                   <button
@@ -1137,6 +1164,14 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
           {s.lent.length > 0 && <LentTabs tabs={s.lent} />}
           {s.scriptSites.length > 0 && <ScriptSites sites={s.scriptSites} />}
         </main>
+      )}
+      {!s.account && (
+        <footer class="local-note">
+          <span>Working on this computer, no account.</span>
+          <button class="btn btn-ghost sm" type="button" onClick={() => go({ v: 'signin' })}>
+            Sign in to publish and sync
+          </button>
+        </footer>
       )}
     </div>
   );
@@ -1176,7 +1211,7 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
     setBusy(true);
     setErr('');
     try {
-      await send({ t: 'save', runId, name, description: desc.trim(), fixed, publish });
+      await send({ t: 'save', runId, name, description: desc.trim(), fixed, publish: publish && !!s.account });
       back();
     } catch (e) {
       setErr((e as Error).message);
@@ -1276,8 +1311,8 @@ function Save({ s, runId, back }: { s: PanelState; runId: string; back: () => vo
       </main>
       <footer class="foot2">
         <label class="check" style={{ gridColumn: '1 / -1' }}>
-          <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.currentTarget.checked)} style={{ width: '16px', height: '16px', margin: 0, accentColor: 'var(--accent)' }} />
-          Submit to the directory for review
+          <input type="checkbox" checked={publish && !!s.account} disabled={!s.account} onChange={(e) => setPublish(e.currentTarget.checked)} style={{ width: '16px', height: '16px', margin: 0, accentColor: 'var(--accent)' }} />
+          {s.account ? 'Submit to the directory for review' : 'Submit to the directory for review (needs an account)'}
         </label>
         <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'discard', runId }).then(back)}>
           Discard
@@ -1579,6 +1614,12 @@ function App() {
     return () => removeEventListener('keydown', k);
   }, [view, s]);
 
+  // Signing in from the sign-in screen returns to the library.
+  const signedIn = !!s?.account;
+  useEffect(() => {
+    if (signedIn) setView((v) => (v.v === 'signin' ? { v: 'library' } : v));
+  }, [signedIn]);
+
   if (!s || onboarded === undefined) return null;
 
   const back = () => setView({ v: 'library' });
@@ -1599,7 +1640,8 @@ function App() {
   // A request for the person is answered on this computer and needs no account, so signing in does not hide it.
   if (s.install) return <InstallGit card={s.install} />;
   if (s.hooksReview) return <HooksReview r={s.hooksReview} />;
-  if (!s.account && s.script) {
+
+  if (!s.connected && s.script) {
     return (
       <div class="panel">
         <main class="lib">
@@ -1608,8 +1650,6 @@ function App() {
       </div>
     );
   }
-  if (!s.account) return <SignIn s={s} />;
-
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (
       <Onboarding
@@ -1622,6 +1662,7 @@ function App() {
     );
   }
 
+  if (view.v === 'signin') return s.account ? <Library s={s} go={setView} /> : <SignIn back={back} />;
   if (view.v === 'save') return <Save s={s} runId={view.runId} back={back} />;
   if (view.v === 'inputs') return <Inputs id={view.id} name={view.name} back={back} />;
   if (view.v === 'submissions') return <Submissions s={s} back={back} />;
