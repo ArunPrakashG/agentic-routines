@@ -40,6 +40,7 @@ step api-e2e node dev/e2e/e2e-api.mjs
 step site site
 step store-checks store
 step sources node dev/e2e/e2e-sources.mjs
+step project node dev/e2e/e2e-project.mjs
 step agents node dev/e2e/e2e-agents.mjs
 if [ "$1" != "--skip-e2e" ]; then
   step browser-e2e dev/e2e/e2e.sh

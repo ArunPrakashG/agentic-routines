@@ -30,6 +30,8 @@ export interface SourceEntry {
   /** The pages it applies to: config.routine's, else the routine file's, else worked out from its steps. */
   urls?: string[];
   hooks?: number;
+  /** A fingerprint of the file as it is now (folder sources). It changes when the file does. */
+  ref?: string;
 }
 
 /** What a repository says about itself in config.routine. */
@@ -367,6 +369,17 @@ export function githubSource(key: string, doFetch: Fetch = fetch, hosts = GITHUB
 /** The owner directory a routine from this origin is saved under. The underscore keeps it apart from any handle. */
 export function ownerFor(origin: Origin): string {
   if (origin.kind === 'github') return 'gh_' + origin.source.split('/')[3];
-  if (origin.kind === 'folder') return 'folder_' + (origin.source.split(/[\\/]/).filter(Boolean).pop() ?? 'routines').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  if (origin.kind === 'folder') {
+    const parts = origin.source.split(/[\\/]/).filter(Boolean);
+    const clean = (x: string) => x.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+    // A project's shared folder is always called .agentic-routines, so it is named for its repository. Two clones with the
+    // same name still differ by where they are.
+    if (parts[parts.length - 1] === '.agentic-routines' && parts.length > 1) {
+      let h = 5381;
+      for (const c of origin.source) h = ((h << 5) + h + c.charCodeAt(0)) >>> 0;
+      return `folder_${clean(parts[parts.length - 2]) || 'project'}-${h.toString(36).slice(0, 4)}`;
+    }
+    return 'folder_' + (clean(parts[parts.length - 1] ?? 'routines') || 'routines');
+  }
   return origin.source;
 }

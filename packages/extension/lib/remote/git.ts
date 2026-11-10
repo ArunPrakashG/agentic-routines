@@ -36,6 +36,8 @@ export interface SourceInfo {
   id: string;
   kind: 'github' | 'folder';
   enabled: boolean;
+  /** The shared routines of a repository an agent was started in. */
+  project?: boolean;
   routines?: number;
   /** What is wrong with config.routine or a file it lists, with file, line and field. */
   problems?: string[];

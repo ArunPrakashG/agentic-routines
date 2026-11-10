@@ -18,7 +18,7 @@ New here? Start with [Try it now](guide/quickstart.md), or [Getting started](gui
 - [Privacy](privacy.md).
 
 ## Going further
-- [Sharing routines](guide/sharing.md) and [routine repositories](guide/repositories.md).
+- [Sharing routines](guide/sharing.md) and [routine repositories](guide/repositories.md), and [routines kept in your project](guide/project.md).
 - [A browser on another computer](guide/remote.md).
 - [Hooks](guide/hooks.md).
 - [Benchmarks](guide/benchmarks.md).

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -16,10 +17,14 @@ export interface SourceConfig {
   id: string;
   kind: 'github' | 'folder';
   enabled: boolean;
+  /** Added because an agent started in a repository that shares routines (see projects.ts). Listed, never installed. */
+  project?: boolean;
 }
 interface Config {
   directory: boolean;
   sources: SourceConfig[];
+  /** Project folders the person removed, so they are not added again. */
+  dismissed?: string[];
 }
 export interface SourceInfo extends SourceConfig {
   routines?: number;
@@ -68,6 +73,13 @@ function folderIO(path: string): RepoIO {
   };
 }
 
+/** A fingerprint of a routine file and the config.routine beside it, so a change after installing can be seen. */
+async function fingerprint(io: RepoIO, p: string): Promise<string | undefined> {
+  const text = await io.read(p);
+  if (text === null) return undefined;
+  return createHash('sha256').update(text).update('\0').update((await io.read('config.routine')) ?? '').digest('hex').slice(0, 12);
+}
+
 function folderSource(path: string): Source {
   return {
     kind: 'folder',
@@ -75,10 +87,13 @@ function folderSource(path: string): Source {
     async list() {
       const io = folderIO(path);
       if (!(await io.fallback()).length && (await io.read('config.routine')) === null) throw new Error('That folder has no routines in it. Add a config.routine, or a routines folder.');
-      return listRepo(io);
+      const l = await listRepo(io);
+      for (const e of l.entries) e.ref = await fingerprint(io, e.path);
+      return l;
     },
     async fetch(p) {
-      return { ...(await fetchRepo(folderIO(path), p)), path: p };
+      const io = folderIO(path);
+      return { ...(await fetchRepo(io, p)), path: p, ref: await fingerprint(io, p) };
     },
   };
 }
@@ -145,6 +160,7 @@ export async function add(address: string): Promise<SourceConfig> {
   const blocked = kind === 'github' && (await blockList()).repos.includes(id);
   if (blocked) throw new Error('That repository has been blocked.');
   const s: SourceConfig = { id, kind, enabled: true };
+  if (c.dismissed?.includes(id)) c.dismissed = c.dismissed.filter((d) => d !== id);
   // Looked at before it is kept: a wrong address or an empty repository says so now.
   const l = await listing(s, true);
   if (l.error) throw new Error(l.error);
@@ -153,9 +169,26 @@ export async function add(address: string): Promise<SourceConfig> {
   return s;
 }
 
+/**
+ * Lists a project's shared routines as a source, the first time an agent starts in the repository.
+ * That only lists them: nothing is installed until the person clicks Install. A project the person removed stays removed.
+ */
+export async function addProject(dir: string): Promise<'added' | 'known' | 'skipped'> {
+  const c = await config();
+  if (c.sources.some((s) => s.id === dir)) return 'known';
+  if (c.dismissed?.includes(dir) || c.sources.length >= MAX_SOURCES) return 'skipped';
+  const s: SourceConfig = { id: dir, kind: 'folder', enabled: true, project: true };
+  const l = await listing(s, true);
+  if (l.error || !l.entries.length) return 'skipped';
+  await writeJson('sources.json', { ...c, sources: [...c.sources, s] });
+  return 'added';
+}
+
 export async function remove(id: string): Promise<void> {
   const c = await config();
-  await writeJson('sources.json', { ...c, sources: c.sources.filter((s) => s.id !== id) });
+  const gone = c.sources.find((s) => s.id === id);
+  const dismissed = gone?.project ? [...new Set([...(c.dismissed ?? []), id])].slice(-200) : c.dismissed;
+  await writeJson('sources.json', { ...c, sources: c.sources.filter((s) => s.id !== id), ...(dismissed ? { dismissed } : {}) });
   listings.delete(id);
 }
 

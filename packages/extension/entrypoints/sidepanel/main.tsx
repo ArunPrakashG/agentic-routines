@@ -530,9 +530,9 @@ function Sources({ back }: { back: () => void }) {
               <div key={x.id}>
                 <div class="src">
                   <button class="src-name" type="button" aria-expanded={open === x.id} disabled={!x.enabled} onClick={() => expand(x.id)}>
-                    <span class="name">{x.kind === 'folder' ? x.id.replace(/^\/home\/[^/]+/, '~') : repoName(x.id)}</span>
+                    <span class="name">{x.project ? x.id.replace(/[\\/]\.agentic-routines$/, '').split(/[\\/]/).pop() : x.kind === 'folder' ? x.id.replace(/^\/home\/[^/]+/, '~') : repoName(x.id)}</span>
                     <span class="meta">
-                      {x.kind === 'folder' ? 'Local folder' : 'GitHub'} · {!x.enabled ? 'turned off' : x.error ? 'could not be read' : `${x.routines ?? 0} routines${x.checkedAt ? ` · checked ${ago(x.checkedAt)}` : ''}`}
+                      {x.project ? 'Project, shared in Git' : x.kind === 'folder' ? 'Local folder' : 'GitHub'} · {!x.enabled ? 'turned off' : x.error ? 'could not be read' : `${x.routines ?? 0} routines${x.checkedAt ? ` · checked ${ago(x.checkedAt)}` : ''}`}
                     </span>
                   </button>
                   <Switch on={x.enabled} label={repoName(x.id)} set={(on) => act(send({ t: 'sourceSet', id: x.id, enabled: on }))} />

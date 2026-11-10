@@ -25,6 +25,9 @@ npx agentic-routines <command>
 | `sources add <address>` | Adds a GitHub repository, such as `github.com/owner/repository`. Nothing is installed until you click Install in the side panel. |
 | `sources check <folder>` | Reads a folder the way a source would and prints every problem in its `config.routine`, with the file, line and field. Run it before you push a [routine repository](/docs/repositories). |
 | `sources remove <address>` | Removes a source. |
+| `project` | Shows the routines this repository shares in `.agentic-routines`, and whether each is installed on this computer. See [Project routines](project.md). |
+| `project add <routine>` | Copies a routine into the repository's `.agentic-routines/routines`, for Git to track. `--examples` keeps the example values. |
+| `project remove <name>` | Deletes a shared routine's file. |
 | `sources on <address>` / `off <address>` | Turns a source on or off. |
 | `export <routine>` | Prints a routine as one file, ready to commit under a repository's `routines/` folder. `--playwright` prints it as a Playwright script instead. |
 | `mcp` | Runs the tool server. Your agent starts this. |
