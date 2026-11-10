@@ -17,7 +17,13 @@ You can connect the extension to an agent on another computer by entering an add
 - The address, the name of that computer and a key for it are kept in the browser's extension storage, and a key for the browser on that computer. They stay until you disconnect.
 - That computer's owner can use your browser with your sign-ins, so connect only to a computer of your own.
 
-## If you sign in with Google
+## If you sign in
+
+- Google, GitHub or Microsoft: the extension opens the provider's sign-in. Our server receives the one-time code the provider returns, checks it with the provider, and stores the provider's account id, your email address, name and picture. For GitHub the email is your primary verified address; we also read your public profile name and picture.
+- Email and password: you give us your email address and a password. We mail a code to the address to show it is yours. We store the address and a salted hash of the password, never the password. The code is kept as a hash for ten minutes.
+- You can use more than one way. If they share a verified email address they are one account.
+
+### Google, in detail
 
 - The extension opens Google's sign-in. Our server receives the one-time code Google returns, checks it with Google, and stores your Google account id, email address, name and picture.
 - It also stores a hash of the session token and the id of the browser install the session belongs to.

@@ -592,7 +592,7 @@ func (s *store) submit(ctx context.Context, ownerID, handle, name string, r rout
 	}
 	var blocked bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM blocks WHERE (kind = 'user' AND value = $1) OR (kind = 'routine' AND value = $2)
-		OR (kind = 'account' AND value = (SELECT google_sub FROM users WHERE id = $3::uuid)))`,
+		OR (kind = 'account' AND value IN (SELECT provider || ':' || subject FROM identities WHERE user_id = $3::uuid)))`,
 		handle, handle+"/"+name, ownerID).Scan(&blocked); err != nil {
 		return
 	}
@@ -763,7 +763,7 @@ func (a *app) user(w http.ResponseWriter, r *http.Request) (user, bool) {
 		serverError(w, r, err)
 		return user{}, false
 	}
-	u.Admin = a.cfg.AdminEmails[strings.ToLower(u.Email)]
+	u.Admin = u.Verified && a.cfg.AdminEmails[strings.ToLower(u.Email)]
 	return u, true
 }
 

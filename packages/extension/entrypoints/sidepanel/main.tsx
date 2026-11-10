@@ -10,7 +10,7 @@ import { addSavings, compileRun, HOW_ESTIMATED, noSavings, roughTime, savingsOf,
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { onPrivateNetwork } from '../../lib/agent/link';
-import type { Account as AccountInfo } from '../../lib/remote/auth';
+import type { Account as AccountInfo, Offered, Provider } from '../../lib/remote/auth';
 import type { LiveRoutine, Submission } from '../../lib/remote/directory';
 import type { GitCard, SourceEntries, SourcesData } from '../../lib/remote/git';
 import type { PanelCommand, PanelState } from '../../lib/panel/types';
@@ -151,19 +151,57 @@ function GoogleG() {
   );
 }
 
+function GitHubMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
+function MicrosoftMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+    </svg>
+  );
+}
+
+const PROVIDER_NAMES: Record<Provider, string> = { google: 'Google', github: 'GitHub', microsoft: 'Microsoft' };
+
 function SignIn({ s }: { s: PanelState }) {
+  const [offered, setOffered] = useState<Offered>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  async function go() {
+  const [error, setError] = useState('');
+  // choose: the buttons. login: email and password. set: a mailed code and a new password, to make an account or reset one.
+  const [mode, setMode] = useState<'choose' | 'login' | 'set'>('choose');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [mailed, setMailed] = useState(false);
+
+  useEffect(() => {
+    send<Offered>({ t: 'offered' }).then(setOffered, () => setOffered({ providers: [{ id: 'google', client_id: '' }], password: false }));
+  }, []);
+
+  async function run(job: () => Promise<unknown>) {
     setBusy(true);
-    setError(false);
+    setError('');
     try {
-      await send({ t: 'signIn' });
-    } catch {
-      setError(true);
+      await job();
+    } catch (e) {
+      setError((e as Error).message || "That didn't work. Try again.");
     }
     setBusy(false);
   }
+  const go = (provider: Provider) => run(() => send({ t: 'signIn', provider }));
+  const sendCode = () => run(async () => { await send({ t: 'passwordCode', email }); setMailed(true); });
+  const open = (m: 'choose' | 'login' | 'set') => { setMode(m); setError(''); setMailed(false); setPassword(''); setCode(''); };
+
+  const form = mode !== 'choose';
   return (
     <div class="panel">
       <main class="center signin">
@@ -172,13 +210,73 @@ function SignIn({ s }: { s: PanelState }) {
           <h1>Agentic Routines</h1>
           <p>Sign in once. Your routines follow you to every browser you use.</p>
         </div>
-        <button class="gbtn" type="button" disabled={busy} onClick={go}>
-          <GoogleG />
-          Continue with Google
-        </button>
+        {!form && (
+          <div class="signin-buttons">
+            {(offered?.providers ?? [{ id: 'google' as Provider, client_id: '' }]).map((p) =>
+              p.id === 'google' ? (
+                <button key={p.id} class="gbtn" type="button" disabled={busy} onClick={() => go(p.id)}>
+                  <GoogleG />
+                  Continue with Google
+                </button>
+              ) : (
+                <button key={p.id} class="pbtn" type="button" disabled={busy} onClick={() => go(p.id)}>
+                  {p.id === 'github' ? <GitHubMark /> : <MicrosoftMark />}
+                  Continue with {PROVIDER_NAMES[p.id]}
+                </button>
+              ),
+            )}
+            {offered?.password && (
+              <button class="pbtn" type="button" disabled={busy} onClick={() => open('login')}>
+                <span class="pbtn-at" aria-hidden="true">@</span>
+                Continue with email
+              </button>
+            )}
+          </div>
+        )}
+        {mode === 'login' && (
+          <form class="signin-form" onSubmit={(e) => { e.preventDefault(); run(() => send({ t: 'passwordLogin', email, password })); }}>
+            <label class="field">
+              <span>Email</span>
+              <input class="input" type="email" value={email} autocomplete="username" required onInput={(e) => setEmail(e.currentTarget.value)} />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input class="input" type="password" value={password} autocomplete="current-password" required onInput={(e) => setPassword(e.currentTarget.value)} />
+            </label>
+            <button class="btn btn-primary" type="submit" disabled={busy || !email || !password}>Sign in</button>
+            <button class="btn btn-ghost sm" type="button" onClick={() => open('set')}>New here, or forgot your password?</button>
+            <button class="btn btn-ghost sm" type="button" onClick={() => open('choose')}>Other ways to sign in</button>
+          </form>
+        )}
+        {mode === 'set' && (
+          <form class="signin-form" onSubmit={(e) => { e.preventDefault(); if (mailed) run(() => send({ t: 'passwordSet', email, code, password })); else sendCode(); }}>
+            <p>{mailed ? `We mailed a code to ${email}. Enter it and choose a password of at least 10 characters.` : 'We mail a code to your address to show it is yours. Then you choose a password. This makes an account, or replaces the password on one.'}</p>
+            <label class="field">
+              <span>Email</span>
+              <input class="input" type="email" value={email} autocomplete="username" required disabled={mailed} onInput={(e) => setEmail(e.currentTarget.value)} />
+            </label>
+            {mailed && (
+              <>
+                <label class="field">
+                  <span>Code</span>
+                  <input class="input" value={code} inputMode="numeric" autocomplete="one-time-code" maxLength={6} required onInput={(e) => setCode(e.currentTarget.value)} />
+                </label>
+                <label class="field">
+                  <span>New password</span>
+                  <input class="input" type="password" value={password} autocomplete="new-password" minLength={10} required onInput={(e) => setPassword(e.currentTarget.value)} />
+                </label>
+              </>
+            )}
+            <button class="btn btn-primary" type="submit" disabled={busy || !email || (mailed && (code.length !== 6 || password.length < 10))}>
+              {mailed ? 'Save password and sign in' : 'Mail me a code'}
+            </button>
+            {mailed && <button class="btn btn-ghost sm" type="button" disabled={busy} onClick={sendCode}>Send a new code</button>}
+            <button class="btn btn-ghost sm" type="button" onClick={() => open('login')}>Back</button>
+          </form>
+        )}
         {error && (
           <p class="signin-error" role="alert">
-            That didn't work. Try again.
+            {error}
           </p>
         )}
         <details>
@@ -186,7 +284,7 @@ function SignIn({ s }: { s: PanelState }) {
           <LinkSettings s={s} />
         </details>
       </main>
-      <footer class="signin-foot">Passwords you type are never saved.</footer>
+      <footer class="signin-foot">Passwords you type into pages are never recorded.</footer>
     </div>
   );
 }

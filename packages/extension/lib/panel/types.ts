@@ -78,5 +78,9 @@ export type PanelCommand =
   | { t: 'record'; on: boolean }
   | { t: 'remove'; id: string }
   | { t: 'refresh' }
-  | { t: 'signIn' }
+  | { t: 'signIn'; provider?: 'google' | 'github' | 'microsoft' }
+  | { t: 'offered' }
+  | { t: 'passwordCode'; email: string }
+  | { t: 'passwordSet'; email: string; code: string; password: string }
+  | { t: 'passwordLogin'; email: string; password: string }
   | { t: 'signOut' };

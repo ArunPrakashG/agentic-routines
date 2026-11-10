@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -31,6 +32,8 @@ type user struct {
 	Picture *string `json:"picture"`
 	Handle  *string `json:"handle"`
 	Admin   bool    `json:"admin"`
+	// Verified is whether the email was vouched for by a provider or a mailed code. It never leaves the server.
+	Verified bool `json:"-"`
 }
 
 type store struct{ db *pgxpool.Pool }
@@ -121,19 +124,79 @@ func (s *store) migrate(ctx context.Context) error {
 
 func (s *store) ping(ctx context.Context) error { return s.db.Ping(ctx) }
 
-// signIn finds or creates the user for a Google account and starts a session for this install,
-// replacing any earlier one from the same install.
-func (s *store) signIn(ctx context.Context, sub, email, name string, picture *string, install string, refresh []byte, expires time.Time) (u user, sessionID string, err error) {
+// identity is one way a person proved who they are: a provider and its id for them.
+type identity struct {
+	Provider string // google, github, microsoft or password
+	Subject  string
+	Email    string
+	// Verified says the provider vouched for the email. Microsoft does not, so its email is only shown.
+	Verified bool
+	Name     string
+	Picture  *string
+}
+
+// signIn finds or creates the user for an identity and starts a session for this install, replacing any earlier
+// one from the same install. A new identity with a verified email joins the account that already has that
+// verified email, so one person who uses two providers keeps one account. An unverified email never joins anything.
+// then, if given, runs in the same transaction before the session starts.
+func (s *store) signIn(ctx context.Context, id identity, install string, refresh []byte, expires time.Time, then func(tx pgx.Tx, userID string) error) (u user, sessionID string, err error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return
 	}
 	defer tx.Rollback(ctx)
-	err = tx.QueryRow(ctx, `
-		INSERT INTO users (id, google_sub, email, name, picture) VALUES (gen_random_uuid(), $1, $2, $3, $4)
-		ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name, picture = EXCLUDED.picture, updated_at = now()
-		RETURNING id::text, email, name, picture, handle`, sub, email, name, picture).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &u.Handle)
+	email := strings.ToLower(strings.TrimSpace(id.Email))
+	// Two first sign-ins with the same email at once must not make two accounts.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, email); err != nil {
+		return
+	}
+	var userID string
+	err = tx.QueryRow(ctx, `SELECT user_id::text FROM identities WHERE provider = $1 AND subject = $2`, id.Provider, id.Subject).Scan(&userID)
+	switch {
+	case err == nil:
+		_, err = tx.Exec(ctx, `UPDATE identities SET email = $3, verified = $4 WHERE provider = $1 AND subject = $2`, id.Provider, id.Subject, email, id.Verified)
+		if err == nil {
+			_, err = tx.Exec(ctx, `
+				UPDATE users SET name = COALESCE(NULLIF($2, ''), name), picture = COALESCE($3, picture),
+					email = CASE WHEN $4 THEN $5 ELSE email END, email_verified = email_verified OR $4, updated_at = now()
+				WHERE id = $1::uuid`, userID, id.Name, id.Picture, id.Verified, email)
+		}
+	case errors.Is(err, pgx.ErrNoRows):
+		err = nil
+		if id.Verified {
+			err = tx.QueryRow(ctx, `SELECT user_id::text FROM identities WHERE verified AND lower(email) = $1 ORDER BY created_at LIMIT 1`, email).Scan(&userID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				err = nil
+			}
+		}
+		if err == nil && userID == "" {
+			err = tx.QueryRow(ctx, `
+				INSERT INTO users (id, email, name, picture, email_verified) VALUES (gen_random_uuid(), $1, $2, $3, $4) RETURNING id::text`,
+				email, id.Name, id.Picture, id.Verified).Scan(&userID)
+		}
+		if err == nil {
+			_, err = tx.Exec(ctx, `INSERT INTO identities (provider, subject, user_id, email, verified) VALUES ($1, $2, $3::uuid, $4, $5)`,
+				id.Provider, id.Subject, userID, email, id.Verified)
+		}
+	}
+	if err != nil {
+		return
+	}
+	if then != nil {
+		if err = then(tx, userID); err != nil {
+			return
+		}
+	}
+	if u, sessionID, err = startSession(ctx, tx, userID, install, refresh, expires); err != nil {
+		return
+	}
+	err = tx.Commit(ctx)
+	return
+}
+
+func startSession(ctx context.Context, tx pgx.Tx, userID, install string, refresh []byte, expires time.Time) (u user, sessionID string, err error) {
+	err = tx.QueryRow(ctx, `SELECT id::text, email, name, picture, handle, email_verified FROM users WHERE id = $1::uuid`, userID).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &u.Handle, &u.Verified)
 	if err != nil {
 		return
 	}
@@ -143,10 +206,6 @@ func (s *store) signIn(ctx context.Context, sub, email, name string, picture *st
 	err = tx.QueryRow(ctx, `
 		INSERT INTO sessions (id, user_id, install_id, refresh_hash, expires_at) VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4)
 		RETURNING id::text`, u.ID, install, refresh, expires).Scan(&sessionID)
-	if err != nil {
-		return
-	}
-	err = tx.Commit(ctx)
 	return
 }
 
@@ -195,10 +254,10 @@ func (s *store) signOut(ctx context.Context, refresh []byte) error {
 // me reads through the session, so signing out ends an access token straight away.
 func (s *store) me(ctx context.Context, userID, sessionID string) (u user, err error) {
 	err = s.db.QueryRow(ctx, `
-		SELECT u.id::text, u.email, u.name, u.picture, u.handle
+		SELECT u.id::text, u.email, u.name, u.picture, u.handle, u.email_verified
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.id = $1::uuid AND u.id = $2::uuid AND s.expires_at > now()`, sessionID, userID).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &u.Handle)
+		Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &u.Handle, &u.Verified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errSignedOut
 	}
@@ -206,6 +265,73 @@ func (s *store) me(ctx context.Context, userID, sessionID string) (u user, err e
 }
 
 func (s *store) deleteExpired(ctx context.Context) (int64, error) {
+	s.db.Exec(ctx, `DELETE FROM email_codes WHERE expires_at < now()`)
 	t, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE expires_at < now()`)
 	return t.RowsAffected(), err
+}
+
+// putCode keeps the one code an address can have, replacing an earlier one.
+func (s *store) putCode(ctx context.Context, email string, hash []byte, expires time.Time) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO email_codes (email, code_hash, attempts, expires_at) VALUES ($1, $2, 0, $3)
+		ON CONFLICT (email) DO UPDATE SET code_hash = EXCLUDED.code_hash, attempts = 0, expires_at = EXCLUDED.expires_at`, email, hash, expires)
+	return err
+}
+
+// consumeCode spends the address's code if hash matches. A wrong guess counts, and the fifth ends the code.
+func (s *store) consumeCode(ctx context.Context, email string, hash []byte) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var want []byte
+	var tries int
+	var expires time.Time
+	err = tx.QueryRow(ctx, `SELECT code_hash, attempts, expires_at FROM email_codes WHERE email = $1 FOR UPDATE`, email).Scan(&want, &tries, &expires)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errBadCode
+	}
+	if err != nil {
+		return err
+	}
+	switch {
+	case time.Now().After(expires) || tries >= codeTries:
+		_, err = tx.Exec(ctx, `DELETE FROM email_codes WHERE email = $1`, email)
+		if err == nil {
+			err = tx.Commit(ctx)
+		}
+		if err == nil {
+			err = errBadCode
+		}
+		return err
+	case !bytes.Equal(want, hash):
+		if tries+1 >= codeTries {
+			_, err = tx.Exec(ctx, `DELETE FROM email_codes WHERE email = $1`, email)
+		} else {
+			_, err = tx.Exec(ctx, `UPDATE email_codes SET attempts = attempts + 1 WHERE email = $1`, email)
+		}
+		if err == nil {
+			err = tx.Commit(ctx)
+		}
+		if err == nil {
+			err = errBadCode
+		}
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM email_codes WHERE email = $1`, email); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// passwordHash is the stored hash for an address, or "" when it has no password.
+func (s *store) passwordHash(ctx context.Context, email string) (string, error) {
+	var h string
+	err := s.db.QueryRow(ctx, `
+		SELECT p.hash FROM identities i JOIN passwords p ON p.user_id = i.user_id WHERE i.provider = 'password' AND i.subject = $1`, email).Scan(&h)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return h, err
 }

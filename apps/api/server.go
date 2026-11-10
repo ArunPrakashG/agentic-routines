@@ -12,21 +12,32 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type app struct {
-	cfg     config
-	proxy   *proxyAddrs
-	db      *store
-	google  *google
-	signer  signer
-	limiter *limiter
+	cfg       config
+	proxy     *proxyAddrs
+	db        *store
+	google    *google
+	github    *github
+	microsoft *microsoft
+	mailer    *mailer
+	signer    signer
+	limiter   *limiter
 }
 
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.health)
+	mux.HandleFunc("GET /api/v1/auth/providers", a.limitedTo("read", 120, a.providers))
 	mux.HandleFunc("POST /api/v1/auth/google", a.limited(a.signIn))
+	mux.HandleFunc("POST /api/v1/auth/github", a.limited(a.signInGitHub))
+	mux.HandleFunc("POST /api/v1/auth/microsoft", a.limited(a.signInMicrosoft))
+	mux.HandleFunc("POST /api/v1/auth/password/code", a.limited(a.passwordCode))
+	mux.HandleFunc("POST /api/v1/auth/password/set", a.limited(a.passwordSet))
+	mux.HandleFunc("POST /api/v1/auth/password/login", a.limited(a.passwordLogin))
 	mux.HandleFunc("POST /api/v1/auth/refresh", a.limited(a.refresh))
 	mux.HandleFunc("POST /api/v1/auth/signout", a.limited(a.signOut))
 	mux.HandleFunc("GET /api/v1/me", a.limitedTo("read", 120, a.me))
@@ -244,19 +255,24 @@ func (a *app) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	id := identity{Provider: "google", Subject: claims.Subject, Email: claims.Email, Verified: true, Name: claims.Name}
+	if claims.Picture != "" {
+		id.Picture = &claims.Picture
+	}
+	a.startSession(w, r, id, b["install_id"], nil)
+}
+
+// startSession signs the identity in and answers with the tokens and the account.
+func (a *app) startSession(w http.ResponseWriter, r *http.Request, id identity, install string, then func(pgx.Tx, string) error) {
 	now := time.Now()
 	refresh, hash := newRefreshToken()
-	var picture *string
-	if claims.Picture != "" {
-		picture = &claims.Picture
-	}
-	u, sid, err := a.db.signIn(r.Context(), claims.Subject, claims.Email, claims.Name, picture, b["install_id"], hash, now.Add(refreshTTL))
+	u, sid, err := a.db.signIn(r.Context(), id, install, hash, now.Add(refreshTTL), then)
 	if err != nil {
 		serverError(w, r, err)
 		return
 	}
-	u.Admin = a.cfg.AdminEmails[strings.ToLower(u.Email)]
-	access, err := a.signer.access(u.ID, sid, b["install_id"], now)
+	u.Admin = u.Verified && a.cfg.AdminEmails[strings.ToLower(u.Email)]
+	access, err := a.signer.access(u.ID, sid, install, now)
 	if err != nil {
 		serverError(w, r, err)
 		return

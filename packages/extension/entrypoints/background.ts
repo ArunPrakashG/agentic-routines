@@ -478,7 +478,15 @@ export default defineBackground(() => {
       case 'refresh':
         return refreshRoutines();
       case 'signIn':
-        return auth.signIn();
+        return auth.signIn(c.provider);
+      case 'offered':
+        return auth.offered();
+      case 'passwordCode':
+        return auth.passwordCode(c.email);
+      case 'passwordSet':
+        return auth.passwordSet(c.email, c.code, c.password);
+      case 'passwordLogin':
+        return auth.passwordLogin(c.email, c.password);
       case 'signOut':
         return auth.signOut();
     }

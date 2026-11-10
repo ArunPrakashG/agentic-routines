@@ -26,7 +26,7 @@ A routine is a skill for the browser. It is a folder with a `ROUTINE.md` that te
 
 | Part | Job | Stack |
 |---|---|---|
-| Extension | Drives the browser for agents, records every run, replays routines, runs the page checks, side panel UI, Google sign-in | TypeScript, WXT (one codebase, builds MV3 for Chrome/Edge and Firefox), Preact |
+| Extension | Drives the browser for agents, records every run, replays routines, runs the page checks, side panel UI, sign-in | TypeScript, WXT (one codebase, builds MV3 for Chrome/Edge and Firefox), Preact |
 | `agentic-routines` npm package | `mcp` mode for agents, `host` mode for native messaging, `setup` to write agent configs and register the host with each browser | TypeScript, Node 20, `@modelcontextprotocol/sdk` |
 | `core` package | Routine format, compiler (drop navigation, find params, mark pauses), locator matching, shared by extension and package | TypeScript |
 | Directory API | Accounts, sync, publish, versions, search, install counts, reports | Go service on Postgres and Redis, behind Caddy and Cloudflare |
@@ -132,8 +132,8 @@ Secrets: a typed value in a password field is never written to disk. It becomes 
 
 ## Accounts: everything belongs to a signed-in user
 
-- **Sign-in.** Google only. The extension uses `identity.launchWebAuthFlow` (Chrome, Edge and Firefox all have it) with PKCE. The API verifies the Google ID token and issues its own session: a 15-minute access token and a refresh token, both bound to the install. The site uses the same Google flow with an HttpOnly cookie.
-- **User record.** Google `sub` as the identity key, email (never shown publicly), display name, and a handle picked at first publish (`arunprakashg`). The handle is the namespace.
+- **Sign-in.** Google, GitHub, Microsoft, or email and password. For the providers the extension uses `identity.launchWebAuthFlow` (Chrome, Edge and Firefox all have it) with PKCE; the API trades the code, verifies the answer and issues its own session: a 15-minute access token and a refresh token, both bound to the install. Email and password proves the address with a mailed code first. Apple is not offered: it needs a verified domain for its callback, which an extension's `chromiumapp.org` address cannot be. The site uses the Google flow with an HttpOnly cookie.
+- **User record.** One or more identities (provider and the provider's id) per user, email (never shown publicly), display name, and a handle picked at first publish (`arunprakashg`). The handle is the namespace.
 - **Ownership.** Every routine has an `owner`. Local routines live under the signed-in user's namespace. Published routines are addressed as `owner/name@version` (`arunprakashg/play-release@4`). Only the owner can publish new versions, unpublish or transfer.
 - **Scoping.** Every API call is authorised by the session's user id, with no exceptions:
   - Sync returns only that user's routines and installs.
@@ -201,7 +201,7 @@ design/              approved mockups and tokens
 - MCP tools are the main way routines reach agents. Exporting them as skill files is opt-in.
 - Changed steps are resolved by the agent that is already running, not by a model we host. This keeps it free to run.
 - Crops never leave the machine. Directory routines rely on locators, and each user's first run captures their own crops.
-- Google is the only sign-in. Handles are picked at first publish, not at sign-up.
+- Handles are picked at first publish, not at sign-up.
 
 ## Open questions for you
 

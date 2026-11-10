@@ -48,7 +48,7 @@ export default defineConfig({
             gecko: {
               id: 'agentic-routines@agentic-routines.dev',
               strict_min_version: '128.0',
-              // Nothing leaves the browser except a Google sign-in and a link to the person's own computer, both optional.
+              // Nothing leaves the browser except a sign-in (Google, GitHub, Microsoft, or an email and password) and a link to the person's own computer, both optional.
               data_collection_permissions: { required: ['none'], optional: ['authenticationInfo', 'personallyIdentifyingInfo', 'websiteContent', 'websiteActivity'] },
             },
           },

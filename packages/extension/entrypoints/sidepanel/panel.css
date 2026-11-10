@@ -73,6 +73,13 @@ kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border-r
 /* Google's sign-in branding: the only place Roboto appears. */
 .gbtn { height: 44px; padding: 0 20px 0 14px; border-radius: 22px; border: 1px solid #747775; background: #fff; color: #1f1f1f; font: 500 14px/1 'Roboto', sans-serif; display: inline-flex; align-items: center; gap: 12px; cursor: pointer; }
 .gbtn:disabled { opacity: .6; cursor: default; }
+.signin-buttons { display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: 100%; max-width: 260px; }
+.signin-buttons .gbtn, .signin-buttons .pbtn { justify-content: center; }
+.pbtn { height: 44px; padding: 0 20px 0 14px; border-radius: 22px; border: 1px solid var(--border-strong); background: var(--surface-1); color: var(--text-1); font: 500 14px/1 var(--font-sans); display: inline-flex; align-items: center; gap: 12px; cursor: pointer; }
+.pbtn:disabled { opacity: .6; cursor: default; }
+.pbtn-at { width: 18px; text-align: center; font-weight: 600; }
+.signin-form { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 260px; text-align: left; }
+.signin-form .input { font-family: var(--font-sans); }
 .onb { padding: 28px 16px; display: flex; flex-direction: column; gap: 20px; }
 .onb p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-2); }
 .cmd { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 2px 0 14px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-1); font-family: var(--font-mono); font-size: 13px; }
