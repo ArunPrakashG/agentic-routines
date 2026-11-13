@@ -968,7 +968,7 @@ if (panel) {
 {
   let t = await call('navigate', { url: `${SITE}/slow.html?authuser=2` });
   check(/Signed in as arun@example\.com/.test(t), 'navigate says which account the page is signed in as');
-  t = await call('read_page');
+  t = await call('read_page', { wait: 0 });
   check(/may not be finished/.test(t) && !/Remove/.test(t), 'a page that is still loading is called out, so an empty list is not read as empty');
   t = await call('read_page', { wait: 6000 });
   check(/Remove/.test(t) && !/may not be finished/.test(t), 'read_page with wait returns the finished page');
