@@ -1,6 +1,6 @@
 // Runs real Claude Code (claude -p) against the bench site and records what each run cost.
 //   node dev/bench/run.mjs --arms replay-small,cic-small --reps 3 --tag full
-// Arms: cic-* Claude in Chrome by hand, tools-* our browser tools by hand, record-* by hand then
+// Arms: cic-* Claude in Chrome by hand, bu-* browser-use's MCP server by hand (its own headless Chromium), tools-* our browser tools by hand, record-* by hand then
 // routine_save, replay-* the saved routine, changed-* the saved routine with a renamed button,
 // idle-* no task, to show what Claude Code costs before any browser work.
 // The side panel's pause is approved at once, so human waiting is not counted.
@@ -20,9 +20,10 @@ const REAL_STORE = join(BENCH, 'real/store');
 const VIDEO = process.env.BENCH_VIDEO;
 const WORK = join(BENCH, 'workspace');
 const SNAP = join(BENCH, 'routines');
-const BASE = 'http://127.0.0.1:8766';
+const BASE = `http://127.0.0.1:${process.env.BENCH_PORT ?? 8766}`;
 const EXT = 'chrome-extension://fafmcnlaedchfncjiimcndjlfphdfkdo';
 const MODEL = process.env.BENCH_MODEL ?? 'sonnet';
+const BU_VENV = process.env.BU_VENV ?? join(BENCH, 'bu-venv');
 const opt = (k, d) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d);
 const ARMS = opt('--arms', '').split(',').filter(Boolean);
 const REPS = Number(opt('--reps', '1'));
@@ -89,12 +90,15 @@ const node = process.execPath;
 const servers = {
   ours: { mcpServers: { 'agentic-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'], env: { AGENTIC_ROUTINES_HOME: STORE } } } },
   real: { mcpServers: { 'agentic-routines': { type: 'stdio', command: node, args: [join(ROOT, 'packages/cli/dist/index.js'), 'mcp'], env: { AGENTIC_ROUTINES_HOME: REAL_STORE } } } },
+  // browser-use's own MCP server (pip install "browser-use[cli]" into BU_VENV). --mcp gives it a Chromium of its own on a fresh
+  // profile, headless with no display, like the bench browser our arms drive. No telemetry.
+  bu: { mcpServers: { 'browser-use': { type: 'stdio', command: join(BU_VENV, 'bin/browser-use'), args: ['--mcp'], env: { DISPLAY: '', WAYLAND_DISPLAY: '', ANONYMIZED_TELEMETRY: 'false', BH_TELEMETRY: '0', BH_RUNTIME_DIR: join(BENCH, 'bu-runtime') } } } },
 };
 for (const [k, v] of Object.entries(servers)) writeFileSync(join(BENCH, `mcp-${k}.json`), JSON.stringify(v));
 
 function runClaude(server, prompt, rawFile) {
   // Claude in Chrome comes from --chrome and drives the real Chrome with its extension.
-  const browser = server === 'cic' ? ['--chrome', '--allowedTools', 'mcp__claude-in-chrome'] : ['--mcp-config', join(BENCH, `mcp-${server}.json`), '--allowedTools', 'mcp__agentic-routines'];
+  const browser = server === 'cic' ? ['--chrome', '--allowedTools', 'mcp__claude-in-chrome'] : ['--mcp-config', join(BENCH, `mcp-${server}.json`), '--allowedTools', server === 'bu' ? 'mcp__browser-use' : 'mcp__agentic-routines'];
   const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', ...browser, '--strict-mcp-config', '--setting-sources', 'project,local', '--permission-mode', 'default', '--model', MODEL, '--max-budget-usd', '6'];
   return new Promise((resolve) => {
     const t0 = Date.now();
@@ -245,12 +249,12 @@ async function one(arm, rep) {
   const yt = task.startsWith('yt');
   const name = task === 'ytlist' ? 'yt-list' : yt ? 'yt-description' : `${task}-release`;
   local = join(yt ? REAL_STORE : STORE, 'routines/local');
-  let server = kind === 'cic' ? 'cic' : yt ? 'real' : 'ours';
+  let server = kind === 'cic' ? 'cic' : kind === 'bu' ? 'bu' : yt ? 'real' : 'ours';
   let v = yt ? { desc: `Benchmark edit ${TAG} ${arm} ${rep}` } : v2;
   let prompt = ask[task]?.(v);
   let variant = 'a';
   if (kind === 'idle') {
-    server = task === 'cic' ? 'cic' : 'ours';
+    server = task === 'cic' ? 'cic' : task === 'bu' ? 'bu' : 'ours';
     prompt = 'Reply with the single word ok.';
   } else if (kind === 'record' || kind === 'srecord') {
     if (!yt) v = v1;
@@ -267,7 +271,7 @@ async function one(arm, rep) {
       prompt += ' If the console asks for a change window, choose Tonight.';
     }
   }
-  if (kind === 'cic' || kind === 'tools' || kind === 'script' || kind === 'record' || kind === 'srecord' || kind === 'idle') parkRoutines();
+  if (kind === 'cic' || kind === 'bu' || kind === 'tools' || kind === 'script' || kind === 'record' || kind === 'srecord' || kind === 'idle') parkRoutines();
   else restoreRoutine(name);
   if (!yt) await fetch(`${BASE}/__reset?variant=${variant}`, { method: 'POST' });
   await backToRoutines();
