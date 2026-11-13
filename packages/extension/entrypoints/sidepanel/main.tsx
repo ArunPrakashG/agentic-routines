@@ -812,30 +812,6 @@ function Onboarding({ s, onDone }: { s: PanelState; onDone: () => void }) {
   );
 }
 
-function ScriptCard({ card }: { card: NonNullable<PanelState['script']> }) {
-  return (
-    <section class="pubcard" aria-label="Allow a script">
-      <div class="stack" style={{ gap: '6px' }}>
-        <span class="k">{card.by} wants to run a script</span>
-        <span class="title mono">{card.site}</span>
-        <span class="meta">It can do anything you can do on this site, as you.</span>
-      </div>
-      <pre class="script-code">{card.code}</pre>
-      <div class="foot2">
-        <button class="btn btn-ghost" type="button" onClick={() => send({ t: 'scriptDecide', answer: 'no' })}>
-          No
-        </button>
-        <button class="btn btn-secondary" type="button" onClick={() => send({ t: 'scriptDecide', answer: 'once' })}>
-          This once
-        </button>
-        <button class="btn btn-primary" type="button" onClick={() => send({ t: 'scriptDecide', answer: 'always' })}>
-          Always on this site
-        </button>
-      </div>
-    </section>
-  );
-}
-
 function LentTabs({ tabs }: { tabs: PanelState['lent'] }) {
   return (
     <section class="stack" aria-label="Tabs you have lent" style={{ gap: '6px' }}>
@@ -845,22 +821,6 @@ function LentTabs({ tabs }: { tabs: PanelState['lent'] }) {
           <span class="mono">{t.site}{t.by ? ` · ${t.by}` : ''}</span>
           <button class="btn btn-ghost sm" type="button" aria-label={`Take back ${t.title || t.site}`} onClick={() => send({ t: 'takeBack', tabId: t.id })}>
             Take back
-          </button>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function ScriptSites({ sites }: { sites: string[] }) {
-  return (
-    <section class="stack" aria-label="Sites that allow scripts" style={{ gap: '6px' }}>
-      <span class="k">Agents can run scripts on</span>
-      {sites.map((site) => (
-        <div class="script-site" key={site}>
-          <span class="mono">{site}</span>
-          <button class="btn btn-ghost sm" type="button" aria-label={`Stop allowing scripts on ${site}`} onClick={() => send({ t: 'scriptForget', site })}>
-            Stop
           </button>
         </div>
       ))}
@@ -1110,7 +1070,7 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
           Version {s.update.version} is out. <a href={s.update.url} target="_blank" rel="noreferrer">What changed and how to update</a>
         </div>
       )}
-      {empty && !recording && !s.script && !s.publish ? (
+      {empty && !recording && !s.publish ? (
         <main class="center">
           <Mark size={56} stroke="var(--border-strong)" cls="drift" />
           <div class="stack" style={{ gap: '8px', alignItems: 'center' }}>
@@ -1124,7 +1084,6 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
         </main>
       ) : (
         <main class="lib">
-          {s.script && <ScriptCard card={s.script} />}
           {s.publish && <PublishCard card={s.publish} />}
           {s.runs.map((r) => {
             const live = r.id === s.recording;
@@ -1207,7 +1166,6 @@ function Library({ s, go }: { s: PanelState; go: (v: View) => void }) {
             </section>
           )}
           {s.lent.length > 0 && <LentTabs tabs={s.lent} />}
-          {s.scriptSites.length > 0 && <ScriptSites sites={s.scriptSites} />}
         </main>
       )}
       {!s.account && (
@@ -1669,7 +1627,7 @@ function App() {
 
   const back = () => setView({ v: 'library' });
   // The result of a finished replay can wait. A request for the person cannot.
-  const asking = !!(s.script || s.install || s.hooksReview);
+  const asking = !!(s.install || s.hooksReview);
   if (s.replay && !(asking && (s.replay.status === 'done' || s.replay.status === 'failed'))) {
     return (
       <Replay
@@ -1686,15 +1644,6 @@ function App() {
   if (s.install) return <InstallGit card={s.install} />;
   if (s.hooksReview) return <HooksReview r={s.hooksReview} />;
 
-  if (!s.connected && s.script) {
-    return (
-      <div class="panel">
-        <main class="lib">
-          <ScriptCard card={s.script} />
-        </main>
-      </div>
-    );
-  }
   if (!s.connected || (!onboarded && !s.agents.length && !s.routines.length && !s.runs.length)) {
     return (
       <Onboarding

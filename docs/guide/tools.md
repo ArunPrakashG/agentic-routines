@@ -10,7 +10,7 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 |---|---|
 | `tabs` | List open tabs: id, title and address. |
 | `dialog` | Answer an alert, confirm or prompt that has stopped the page. Recorded as a step; yes to one that sounds final pauses a replay. |
-| `javascript` | Run a script in the page. The person says yes per site in the side panel. Never recorded. |
+| `javascript` | Run a script in the page. It cannot read cookies, will not run in a tab where a secret was typed, and hides values that look like credentials. Never recorded. |
 | `read_console_messages` | What the page said to its console, and uncaught errors. |
 | `read_network_requests` | What the page sent since the first call on that tab: method, address, status, type. |
 | `session_adopt` | Work in a tab the person lent with the toolbar button, by id or address. It cannot be closed, and they can take it back at any moment. Recorded like any other work. |

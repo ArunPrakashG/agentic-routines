@@ -255,11 +255,6 @@ export async function challengeOn(tabId: number): Promise<string | undefined> {
   return kind;
 }
 
-// The person says which sites may run an agent's scripts. Only the panel can say so, so it is handed in from there.
-let mayRunScript: (site: string, code: string, by: string) => Promise<void> = async () => {
-  throw new Error('Nothing here can ask the user yet.');
-};
-export const askAboutScripts = (fn: typeof mayRunScript) => void (mayRunScript = fn);
 
 // All a read-only session may call. Anything added later stays refused until someone decides otherwise.
 const READ_ONLY = new Set(['browser.downloads', 'browser.download_get', 'browser.recording', 'browser.flight_recorder', 'browser.network_capture', 'browser.settings', 'browser.status', 'browser.tabs_cleanup', 'browser.tabs', 'browser.navigate', 'browser.read', 'browser.llm', 'browser.find', 'browser.text', 'browser.hover', 'browser.scroll', 'browser.wait', 'browser.resize', 'browser.console', 'browser.network', 'browser.close_tab', 'browser.screenshot', 'browser.handoff', 'browser.adopt', 'browser.session', 'browser.session_tabs', 'browser.session_end']);
@@ -513,7 +508,6 @@ export async function handle(method: string, p: any): Promise<unknown> {
       refuseScript(tabId);
       const { url } = await browser.tabs.get(tabId);
       if (!/^https?:/.test(url ?? '')) throw new Error('A script can only run on a website.');
-      await mayRunScript(new URL(url!).host, p.code, source);
       return runScript(tabId, p.code);
     }
     case 'browser.console': {

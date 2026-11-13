@@ -18,10 +18,6 @@ export interface PanelState {
   recording?: string;
   publish?: PublishCard;
   install?: GitCard;
-  /** An agent's script waiting for the person to say whether it may run on this site. */
-  script?: { site: string; code: string; by: string };
-  /** Sites where it may, until the person says otherwise. */
-  scriptSites: string[];
   settings: Settings;
   /** Tabs the person has lent with the toolbar button, and who is working in them. */
   lent: { id: number; title: string; site: string; by?: string }[];
@@ -64,8 +60,6 @@ export type PanelCommand =
   | { t: 'sourceRemove'; id: string }
   | { t: 'sourceSet'; id: string; enabled: boolean }
   | { t: 'sourceEntries'; id: string; fresh?: boolean }
-  | { t: 'scriptDecide'; answer: 'no' | 'once' | 'always' }
-  | { t: 'scriptForget'; site: string }
   | { t: 'gitPreview'; source: string; path: string }
   | { t: 'gitDecide'; approve: boolean; hooks?: boolean }
   | { t: 'hooksReview'; id: string }
