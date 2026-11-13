@@ -492,42 +492,11 @@ for (const where of ['behind another tab', 'in front']) {
   r = await call('read_network_requests', { url_contains: 'overview' });
   check(/GET .*overview\.html\?key=…&who=… 200/.test(r.text) && !/s3cret/.test(r.text), `a request, with its values hidden: ${r.text.split('\n').filter((l) => /^[A-Z]+ /.test(l)).join(' | ').slice(0, 240) || r.text.slice(-200)}`);
 
-  // A script waits for the person, and a no is a no.
-  const panel = await (await fetch(`${CDP}/json/new?${EXT}/sidepanel.html`, { method: 'PUT' })).json();
-  // Signed in, as the panel shows nothing else to someone who is not.
-  const signIn = `chrome.storage.local.set({ session: { account: { email: 'test@example.com', name: 'Test' }, access: 'x', accessExp: Date.now() + 3600000, refresh: 'x' } })`;
-  await sleep(1000);
-  await evalIn(signIn, `${EXT}/sidepanel.html`);
-  const answer = async (label) => {
-    const ws = new WebSocket(panel.webSocketDebuggerUrl);
-    await new Promise((res) => (ws.onopen = res));
-    const out = await new Promise((res) => {
-      ws.onmessage = (e) => {
-        const m = JSON.parse(e.data);
-        if (m.id === 1) res(m);
-      };
-      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: `(async () => { for (let i = 0; i < 100; i++) { const b = [...document.querySelectorAll('section[aria-label="Allow a script"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)}); if (b) { b.click(); return true; } await new Promise((r) => setTimeout(r, 100)); } return document.body.innerText.slice(0, 300); })()`, awaitPromise: true, returnByValue: true } }));
-    });
-    ws.close();
-    if (!out.result) throw new Error(`The side panel did not answer: ${JSON.stringify(out.error ?? out)}`);
-    const v = out.result.result.value;
-    if (v !== true) console.log(`  the panel shows: ${String(v).replace(/\n/g, ' | ')}`);
-    return v === true;
-  };
-  let run = call('javascript', { code: '1 + 1' });
-  check(await answer('No'), 'a script waits in the panel');
-  r = await run;
-  check(r.error && /chose not/.test(r.text), `and a no stops it: ${r.text.slice(0, 160)}`);
-  run = call('javascript', { code: '2 + 2' });
-  await answer('This once');
-  r = await run;
-  check(/4/.test(r.text), `this once runs it: ${r.text.slice(0, 160)}`);
-  run = call('javascript', { code: 'await Promise.resolve(document.title)' });
-  check(await answer('Always on this site'), 'and asks again the next time');
-  r = await run;
-  check(/Logs/.test(r.text), `await works: ${r.text.slice(0, 160)}`);
+  // A script runs at once, with nothing to approve.
+  r = await call('javascript', { code: 'await Promise.resolve(document.title)' });
+  check(/Logs/.test(r.text), `a script runs without asking, and await works: ${r.text.slice(0, 160)}`);
   r = await call('javascript', { code: '6 * 7' });
-  check(/42/.test(r.text), `always on this site does not ask again: ${r.text.slice(0, 160)}`);
+  check(/42/.test(r.text), `the last expression is the result: ${r.text.slice(0, 160)}`);
   r = await call('javascript', { code: 'document.cookie' });
   check(r.error && /cookies/.test(r.text), 'a script cannot read cookies');
   r = await call('javascript', { code: `'token=abcdefghijkl'` });
@@ -538,7 +507,6 @@ for (const where of ['behind another tab', 'in front']) {
   check((await say('out', m)) === 'set by script', 'and it runs in the page');
   const d = await call('routine_propose', { name: 'logs-replay', description: 'Send a request. Use when the user asks for this.' });
   check(!/set by script|document\.getElementById/.test(d.text), `a script is not in the routine: ${d.text.slice(0, 240)}`);
-  await fetch(`${CDP}/json/close/${panel.id}`);
 }
 
 await client.close();

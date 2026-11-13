@@ -99,47 +99,9 @@ export default defineBackground(() => {
   let reviewing: NonNullable<PanelState['hooksReview']> & { hash: string } | undefined;
 
   function badge() {
-    browser.action.setBadgeText({ text: recording ? 'REC' : (publishing && !publishing.card.done) || installing || scripting || replay.current()?.status === 'paused' ? '1' : '' });
+    browser.action.setBadgeText({ text: recording ? 'REC' : (publishing && !publishing.card.done) || installing || replay.current()?.status === 'paused' ? '1' : '' });
   }
 
-  // An agent's script runs with everything the page can reach, so the person says which sites. An agent can ask; only the panel can answer.
-  let scripting: { card: NonNullable<PanelState['script']>; ok: () => void; no: (e: Error) => void } | undefined;
-  const SCRIPT_WAIT_MS = 2 * 60_000;
-  const scriptSites = async () => ((await browser.storage.local.get('scriptSites')) as { scriptSites?: string[] }).scriptSites ?? [];
-
-  agent.askAboutScripts(async (site, code, by) => {
-    if ((await scriptSites()).includes(site)) return;
-    if (scripting) throw new Error('Another script is waiting for the user to say whether it may run. Try again after that.');
-    await new Promise<void>((ok, no) => {
-      const timer = setTimeout(() => {
-        scripting = undefined;
-        badge();
-        void push();
-        no(new Error('Nobody answered. Ask the user to open the side panel, then try again.'));
-      }, SCRIPT_WAIT_MS);
-      const done = () => {
-        clearTimeout(timer);
-        scripting = undefined;
-        badge();
-        void push();
-      };
-      scripting = {
-        card: { site, code: code.slice(0, 2000), by },
-        ok: () => (done(), ok()),
-        no: (e) => (done(), no(e)),
-      };
-      badge();
-      void push();
-    });
-  });
-
-  async function decideScript(answer: 'no' | 'once' | 'always') {
-    const s = scripting;
-    if (!s) return;
-    if (answer === 'no') return s.no(new Error('The user chose not to let that script run.'));
-    if (answer === 'always') await browser.storage.local.set({ scriptSites: [...new Set([...(await scriptSites()), s.card.site])] });
-    s.ok();
-  }
 
   async function beginInstall(source: string, path: string, by?: string, waiter?: Waiter) {
     if (installing) throw new Error('Another routine is waiting for the user to approve installing it. Try again after that.');
@@ -269,8 +231,6 @@ export default defineBackground(() => {
       recording: recording?.runId,
       publish: publishing?.card,
       install: installing?.card,
-      script: scripting?.card,
-      scriptSites: await scriptSites(),
       settings: settings(),
       update: newer,
       lent: await Promise.all(
@@ -435,11 +395,6 @@ export default defineBackground(() => {
         return beginPublish(c.id);
       case 'publishDecide':
         return decidePublish(c.approve, c.handle);
-      case 'scriptDecide':
-        return decideScript(c.answer);
-      case 'scriptForget':
-        await browser.storage.local.set({ scriptSites: (await scriptSites()).filter((x) => x !== c.site) });
-        return push();
       case 'sources':
         return git.list();
       case 'projects':
