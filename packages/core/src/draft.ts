@@ -542,7 +542,9 @@ function applyOne(d: Draft, op: Op): string {
         if (!tied.length) throw new EditError(`No typed value equals “${clip(op.value, 40)}”. Name the step with step: N instead.`);
       }
       for (const s of tied) {
-        if (!['type', 'upload', 'select', 'press', 'dialog'].includes(s.action) || s.value === undefined) throw new EditError(`Step ${s.n} does not take a value, so it cannot be a parameter.`);
+        // A field brought to a value (form_input) takes one like typing does; a box ticked on or off does not.
+        const textSet = s.action === 'set' && s.value !== undefined && !/^(true|false)$/.test(recorded(d, s) ?? s.value);
+        if ((!['type', 'upload', 'select', 'press', 'dialog'].includes(s.action) && !textSet) || s.value === undefined) throw new EditError(`Step ${s.n} does not take a value, so it cannot be a parameter.`);
         if (s.value.startsWith('{{secret:')) throw new EditError(`Step ${s.n} types a secret, which is never a parameter.`);
       }
       const spec: ParamSpec = d.params[op.name] ?? { type: tied[0]?.action === 'upload' ? 'file' : 'string' };

@@ -252,9 +252,12 @@ async function one(arm, rep) {
   if (kind === 'idle') {
     server = task === 'cic' ? 'cic' : 'ours';
     prompt = 'Reply with the single word ok.';
-  } else if (kind === 'record') {
+  } else if (kind === 'record' || kind === 'srecord') {
     if (!yt) v = v1;
     prompt = ask[task](v) + (task === 'ytlist' ? ' Find the video through the Filter box on the Content page, choosing Visibility, Unlisted and Apply, not through a filter address.' : '') + ` Then save what you did as a routine named ${name}. Only ${yt ? 'the description' : 'the app bundle, release name and release notes'} should change each run. Everything else stays as you did it.`;
+    if (kind === 'srecord') prompt += ' Use the script tool.';
+  } else if (kind === 'script') {
+    prompt += ' Use the script tool, in as few calls as you can.';
   } else if (kind === 'replay' || kind === 'changed' || kind === 'dialog' || kind === 'field') {
     prompt += ' Use the saved routine.';
     if (kind === 'changed') variant = 'b';
@@ -264,11 +267,11 @@ async function one(arm, rep) {
       prompt += ' If the console asks for a change window, choose Tonight.';
     }
   }
-  if (kind === 'cic' || kind === 'tools' || kind === 'record' || kind === 'idle') parkRoutines();
+  if (kind === 'cic' || kind === 'tools' || kind === 'script' || kind === 'record' || kind === 'srecord' || kind === 'idle') parkRoutines();
   else restoreRoutine(name);
   if (!yt) await fetch(`${BASE}/__reset?variant=${variant}`, { method: 'POST' });
   await backToRoutines();
-  const a = !yt && (kind === 'replay' || kind === 'changed' || kind === 'dialog' || kind === 'field' || kind === 'record') ? approver() : undefined;
+  const a = !yt && (kind === 'replay' || kind === 'changed' || kind === 'dialog' || kind === 'field' || kind === 'record' || kind === 'srecord') ? approver() : undefined;
   const raw = join(BENCH, 'raw', `${TAG}-${arm}-${rep}.jsonl`);
   const r = await runClaude(server, prompt, raw);
   const approvals = a?.stop() ?? 0;
@@ -276,7 +279,7 @@ async function one(arm, rep) {
   const problem = kind === 'idle' ? '' : yt ? await verifyYt(v) : verify(task, v, await (await fetch(`${BASE}/__log`)).json());
   const row = { arm, rep, model: MODEL, ok: !problem && !m.is_error, problem, wall_ms: r.wall_ms, exit: r.code, approvals, ...m };
   appendFileSync(RESULTS, JSON.stringify(row) + '\n');
-  if (kind === 'record' && row.ok) {
+  if ((kind === 'record' || kind === 'srecord') && row.ok) {
     if (existsSync(join(local, name))) {
       rmSync(join(SNAP, name), { recursive: true, force: true });
       cpSync(join(local, name), join(SNAP, name), { recursive: true });
