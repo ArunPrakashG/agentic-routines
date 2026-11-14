@@ -66,17 +66,22 @@ const ROLES: Record<Want, RegExp> = {
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /** The ref of the element target names. Fields and buttons are matched by their accessible name (labels count), so a
- *  label's own text never wins over its field; plain text on the page is the fallback for a click. */
-async function refFor(step: Step, target: unknown, want: Want): Promise<string> {
+ *  label's own text never wins over its field; plain text on the page is the fallback for a click. `look` is the page
+ *  as last read when nothing has moved since, so a run of fills does not read the page before each one. */
+async function refFor(step: Step, look: (fresh?: boolean) => Promise<string>, target: unknown, want: Want, before: Set<string> = new Set()): Promise<string> {
   if (typeof target !== 'string' || !target) throw new Error('A target is the words on the element, or a ref like ref_12.');
   if (/^ref_\d+$/.test(target)) return target;
   const t = norm(target);
   const pick = (body: string) => {
-    const rows = [...body.matchAll(/^(ref_\d+) (\S+) “([^”]*)”(.*)$/gm)].map(([, ref, role, name, rest]) => ({ ref, role, name: norm(name), rest }));
+    const rows = [...body.matchAll(/^(ref_\d+) (\S+) “([^”]*)”(.*)$/gm)].map(([line, ref, role, name, rest]) => ({ line, ref, role, name: norm(name), rest }));
     const fits = rows.filter((r) => (want === 'file' ? /\(file\)/.test(r.rest) : ROLES[want].test(r.role)));
-    return (fits.find((r) => r.name === t) ?? fits.find((r) => r.name.startsWith(t)) ?? fits.find((r) => r.name.includes(t)))?.ref;
+    // Two elements can share a name, as a site menu's “Internal testing” and the page's own. The one that was not on the
+    // page before the last move is the one the move brought up, so it wins the tie.
+    const best = (tier: typeof fits) => tier.find((r) => !before.has(r.line.replace(/^ref_\d+ /, ''))) ?? tier[0];
+    for (const tier of [fits.filter((r) => r.name === t), fits.filter((r) => r.name.startsWith(t)), fits.filter((r) => r.name.includes(t))]) if (tier.length) return best(tier).ref;
+    return undefined;
   };
-  const seen = pick(textOf(await step('read_page', { filter: 'interactive' })));
+  const seen = pick(await look()) ?? pick(await look(true));
   if (seen) return seen;
   const r = await step('find', { query: target });
   const found = r.isError ? undefined : (pick(textOf(r)) ?? (want === 'click' ? textOf(r).match(/\bref_\d+\b/)?.[0] : undefined));
@@ -100,18 +105,39 @@ function shorten(page: string) {
   let run: string[] = [];
   const flush = () => {
     if (run.length >= FOLD) out.push(`… ${run.length} lines as in the last read (${run[0].slice(0, 60)} … ${run[run.length - 1].slice(0, 60)}); read({full: true}) shows them`);
-    else out.push(...run);
+    else out.push(...alike(run));
     run = [];
   };
+  const fresh: string[] = [];
   for (const l of lines.slice(3)) {
-    if (before.has(l)) run.push(l);
-    else {
+    if (before.has(l)) {
+      if (fresh.length) out.push(...alike(fresh.splice(0)));
+      run.push(l);
+    } else {
       flush();
-      out.push(l);
+      fresh.push(l);
     }
   }
+  out.push(...alike(fresh));
   flush();
   return out.join('\n');
+}
+
+// Rows that differ only in a number (“View” twenty times, “item 0” to “item 13”) say little each; past a handful they
+// are folded to the first and the last, which keeps both refs and the pattern in view.
+const ALIKE = 6;
+const shape = (l: string) => l.match(/^ref_\d+ (\S+ “[^”]*”)/)?.[1].replace(/\d+/g, '#');
+function alike(lines: string[]) {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; ) {
+    const k = shape(lines[i]);
+    let j = i + 1;
+    while (k && j < lines.length && shape(lines[j]) === k) j++;
+    if (j - i >= ALIKE) out.push(lines[i], `… ${j - i - 2} more like it; read({full: true}) shows them`, lines[j - 1]);
+    else out.push(...lines.slice(i, j));
+    i = j;
+  }
+  return out;
 }
 
 export async function runScript(code: string, step: Step, timeoutMs: number) {
@@ -126,12 +152,34 @@ export async function runScript(code: string, step: Step, timeoutMs: number) {
   const did: string[] = [];
   const marks: Mark[] = [];
   let calls = 0;
+  // The page as last read, kept while only fields have been set since; anything that can move the page drops it.
+  let page: string | undefined;
+  // The rows of the page before the last move, without their refs, so a name shared with it can be told apart.
+  let before = new Set([...lastRead].map((l) => l.replace(/^ref_\d+ /, '')));
+  const moved = () => {
+    if (page !== undefined) before = new Set(page.split('\n').map((l) => l.replace(/^ref_\d+ /, '')));
+    page = undefined;
+  };
+  const look = async (fresh = false) => {
+    if (fresh || page === undefined) page = textOf(await step('read_page', { filter: 'interactive' }));
+    return page;
+  };
+  const here = async () => (await look()).split('\n').find((l) => /^https?:\/\//.test(l));
 
   const call = async (name: string, a: Record<string, any>): Promise<unknown> => {
     calls++;
-    const act = async (tool: string, args: Record<string, unknown>, what: string) => {
-      const r = await step(tool, args);
-      if (r.isError) throw new Error(`${what} failed: ${textOf(r).slice(0, 600)}`);
+    const act = async (tool: string, args: Record<string, unknown>, what: string, keeps = false) => {
+      if (!keeps) moved();
+      let r = await step(tool, args);
+      // A ref from the kept page can be gone after a field redrew its part of the page: look again, once.
+      if (r.isError && typeof args.ref === 'string' && /is gone from the page/.test(textOf(r)) && typeof a.target === 'string' && !/^ref_\d+$/.test(a.target)) {
+        page = undefined;
+        r = await step(tool, { ...args, ref: await refFor(step, look, a.target, tool === 'click' ? 'click' : 'field', before) });
+      }
+      if (r.isError) {
+        page = undefined;
+        throw new Error(`${what} failed: ${textOf(r).slice(0, 600)}`);
+      }
       did.push(what);
       return textOf(r);
     };
@@ -140,22 +188,22 @@ export async function runScript(code: string, step: Step, timeoutMs: number) {
         // An address relative to the page, such as /console/app, is taken from where the tab is now.
         let url = String(a.url);
         if (!/^[a-z][\w+.-]*:/i.test(url)) {
-          const here = textOf(await step('read_page', { filter: 'interactive' })).split('\n').find((l) => /^https?:\/\//.test(l));
-          if (!here) throw new Error(`open needs a full address; the tab has none to go from for ${url}.`);
-          url = new URL(url, here).href;
+          const from = await here();
+          if (!from) throw new Error(`open needs a full address; the tab has none to go from for ${url}.`);
+          url = new URL(url, from).href;
         }
         return act('navigate', { url }, `open ${url}`);
       }
       case 'click':
-        return act('click', { ref: await refFor(step, a.target, 'click') }, `click “${a.target}”`);
+        return act('click', { ref: await refFor(step, look, a.target, 'click', before) }, `click “${a.target}”`);
       case 'type':
-        return act('type', { ref: await refFor(step, a.target, 'field'), text: String(a.text), submit: a.submit || undefined }, `type into “${a.target}”`);
+        return act('type', { ref: await refFor(step, look, a.target, 'field', before), text: String(a.text), submit: a.submit || undefined }, `type into “${a.target}”`, !a.submit);
       case 'fill':
-        return act('form_input', { ref: await refFor(step, a.target, 'field'), value: a.value }, `set “${a.target}” to ${JSON.stringify(a.value)}`);
+        return act('form_input', { ref: await refFor(step, look, a.target, 'field', before), value: a.value }, `set “${a.target}” to ${JSON.stringify(a.value)}`, true);
       case 'select':
-        return act('select', { ref: await refFor(step, a.target, 'select'), value: String(a.value) }, `pick ${JSON.stringify(a.value)} in “${a.target}”`);
+        return act('select', { ref: await refFor(step, look, a.target, 'select', before), value: String(a.value) }, `pick ${JSON.stringify(a.value)} in “${a.target}”`, true);
       case 'upload':
-        return act('upload', { ref: await refFor(step, a.target, 'file'), path: String(a.path) }, `upload to “${a.target}”`);
+        return act('upload', { ref: await refFor(step, look, a.target, 'file', before), path: String(a.path) }, `upload to “${a.target}”`, true);
       case 'press':
         return act('press', { key: String(a.key) }, `press ${a.key}`);
       case 'wait':
@@ -163,8 +211,9 @@ export async function runScript(code: string, step: Step, timeoutMs: number) {
       case 'find':
         return textOf(await step('find', { query: String(a.query) }));
       case 'read': {
-        const page = textOf(await step('read_page', { filter: a.filter }));
-        return a.full ? remember(page) : shorten(page);
+        const body = textOf(await step('read_page', { filter: a.filter }));
+        if (a.filter === 'interactive') page = body;
+        return a.full ? remember(body) : shorten(body);
       }
       case 'text':
         return textOf(await step('get_page_text', {}));
@@ -217,6 +266,11 @@ export async function runScript(code: string, step: Step, timeoutMs: number) {
         r.value.dispose();
         if (v !== undefined) out.push(typeof v === 'string' ? v : JSON.stringify(v));
       }
+    }
+    // A script that stopped shows the page it stopped on, so the next call can go on without looking first.
+    if (error && !/^stopped after/.test(error)) {
+      const r = await Promise.race([step('read_page', { filter: 'interactive' }).catch(() => undefined), new Promise<undefined>((r) => setTimeout(r, 15_000))]);
+      if (r && !r.isError) out.push(`The page now:\n${shorten(textOf(r))}`);
     }
   } finally {
     // A helper still running finishes on its own; its answer has nowhere to go.
