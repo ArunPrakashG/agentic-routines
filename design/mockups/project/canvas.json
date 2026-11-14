@@ -36,13 +36,6 @@
       "x": 0,
       "y": 0
     },
-    "Hooks.dc.html": {
-      "h": 844,
-      "title": "Side panel \u00b7 Review hooks",
-      "w": 400,
-      "x": 8175,
-      "y": 2040
-    },
     "InstallGit.dc.html": {
       "h": 844,
       "title": "Side panel \u00b7 Install from Git",
@@ -140,6 +133,29 @@
       "w": 400,
       "x": 7135,
       "y": 2040
+    },
+    "Hooks.dc.html": {
+      "h": 844,
+      "title": "Side panel \u00b7 Review hooks",
+      "w": 400,
+      "x": 8175,
+      "y": 2040
+    },
+    "SiteOpen.dc.html": {
+      "x": 8700,
+      "y": 0,
+      "w": 1440,
+      "h": 5400,
+      "title": "Site v2 \u00b7 open source, desktop",
+      "expand": "fill"
+    },
+    "SiteOpenMobile.dc.html": {
+      "x": 10220,
+      "y": 0,
+      "w": 375,
+      "h": 8600,
+      "title": "Site v2 \u00b7 open source, mobile",
+      "expand": "fill"
     }
   },
   "createdOnFiles": {
@@ -171,7 +187,9 @@
     "InstallGit.dc.html",
     "Submit.dc.html",
     "Submissions.dc.html",
-    "Hooks.dc.html"
+    "Hooks.dc.html",
+    "SiteOpen.dc.html",
+    "SiteOpenMobile.dc.html"
   ],
   "pages": [],
   "title": "Agentic Routines",
