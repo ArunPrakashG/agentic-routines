@@ -1204,7 +1204,7 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
     {
       description:
         'Replay a saved routine without the model. Same as its rt_ tool. A routine only works on its own site, and a step that looks irreversible in a routine from someone else waits for the user in the side panel. match_viewport: true resizes the browser window to the size the routine was recorded at and puts it back afterwards; otherwise a window of a very different size is reported in the result and the picture check is relaxed.',
-      inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional(), match_viewport: z.boolean().optional(), flight_recorder: z.boolean().optional(), fast: z.boolean().optional().describe('Keep the last minute of the tab, and save it as a video if the run fails') },
+      inputSchema: { name: z.string(), params: z.record(z.string(), z.string()).optional(), match_viewport: z.boolean().optional(), flight_recorder: z.boolean().optional().describe('Keep the last minute of the tab, and save it as a video if the run fails'), fast: z.boolean().optional().describe('Run the steps through compiled code, stopping at every pause and going step by step from any step that fails') },
     },
     async ({ name, params, match_viewport, flight_recorder, fast }) => run(name, params ?? {}, match_viewport, flight_recorder, fast),
   );

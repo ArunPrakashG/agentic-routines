@@ -10,6 +10,8 @@ A routine is a skill for the browser: a folder with notes that tell an agent whe
 
 Your own routines live under a local owner. Installed ones live under their owner's handle, or `gh_<owner>` when they came from a Git repository.
 
+A routine can also live in a project's own repository, in `.agentic-routines/routines/`, so Git tracks it and the team reviews it in pull requests. `npx agentic-routines project add <routine>` copies one there. See [Project routines](project.md).
+
 ## ROUTINE.md
 
 The front matter is the routine's contract. The body is for people and for your agent when it asks for the full notes.
@@ -48,9 +50,14 @@ Production releases. This routine only covers testing tracks.
 | `urls` | The pages the routine applies to, as globs: a host on `site` and a path, with `*` for one part (an id, a number) and a closing `**` for the rest. No `https://`, no query. At most 8. Left out, they are worked out from the recorded pages. `navigate`, `read_page` and `routines_search` match the page an agent is on against them. |
 | `surface` | Where the routine acts. `browser` (the default, and the only one that runs today). `desktop` is reserved so desktop steps can come later without a format change; a routine that says it is read, listed as not supported yet, and not run or published. |
 | `description` | What it does, then a "Use when" clause in the words a person would say. Required, at most 1024 characters. This is what an agent reads to choose it. |
-| `params` | The values asked for on each run. Types are `string` and `file`. |
+| `params` | The values asked for on each run. Types are `string` and `file`. A `file` param can say which files it takes with `accept`, such as `".aab"`. `example` is the value seen when it was recorded; it is shown as a hint, kept on this computer and never published. |
+| `secrets` | The names of the [secrets](/docs/safety#secrets-you-keep-for-a-site) the routine types, as `{{secret:name}}` in its steps. The value is never in the file. |
 | `pauses` | Step numbers where the replay stops before going on. |
 | `returns` | What the routine gives back. |
+| `expect` | How the page looks when the task worked: `text` the page shows and part of the `url`, each at most 300 characters and able to use `{{params}}`. Every step can run and the task still not happen; this is how a run tells. See [Refine a routine](/docs/refine). |
+| `viewport` | The window size when it was recorded: `w`, `h` and `dpr`. See [Window size](/docs/how-it-works#window-size). |
+| `drafted_by` | The agent that wrote the description, such as `claude-code`. The side panel shows it. |
+| `repo` | Set when installed from a repository: its name and what its `config.routine` tells the agent. |
 | `instructions` | Notes for the agent that runs it, up to 4000 characters. See [Hooks and instructions](/docs/hooks). |
 | `hooks` | Code on events, one function per event. Off until the person allows it. See [Hooks and instructions](/docs/hooks). |
 | `version` | Goes up with every save. A fixed step is saved as the next version. |
@@ -59,7 +66,23 @@ Agents see only `name`, `description` and `params` up front. The body comes back
 
 ## Steps
 
-Steps are declarative: navigate, click, type, select, upload, wait and read, and `each` and `if`, which repeat the steps after them or only run them sometimes ([Loops and branches](/docs/refine#loops-and-branches)). A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
+Steps are declarative. Each one is one of these:
+
+| Step | What it does |
+|---|---|
+| `navigate` | Goes to an address. |
+| `click`, `hover` | Clicks or points at an element. A click can be a right or middle click, a double click, with keys held, or on one spot of the element (a canvas, a map, a slider). |
+| `type`, `clear` | Types into a field, or empties it. The value can be text, `{{param}}` or `{{secret:name}}`. |
+| `select`, `set` | Picks an option, or puts a field, checkbox or list into a state (what `form_input` records). |
+| `upload` | Gives a file to a file input, from a `file` param. |
+| `press` | Presses keys, such as `Enter` or `ctrl+a`. |
+| `drag`, `scroll` | Drags an element to another, or scrolls by a distance. |
+| `wait`, `read` | Waits for the page, or reads text from it for the result. |
+| `dialog` | Answers a browser dialog yes or no, with text when it asks for some. |
+| `handoff` | Asks the person to do something, such as a sign-in, and waits for them. |
+| `each`, `if` | Repeat the steps after them, or only run them sometimes ([Loops and branches](/docs/refine#loops-and-branches)). |
+
+A step can also pause before it runs (`pause`: `auto` when it looked irreversible, `author` when someone asked for it), and a click can pick whatever is first in a list now instead of the item recorded (`pick: first`), or the item a loop is on (`pick: each`). A step is never a script. Code can only come in as [hooks](/docs/hooks), which run in a sandbox with no network, return a short list of requests the extension checks, and stay off until the person reads and allows them. Each step carries the locators the replayer checks and a label for people to read.
 
 ## As Playwright code
 

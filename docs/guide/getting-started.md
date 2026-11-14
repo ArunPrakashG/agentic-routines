@@ -12,7 +12,7 @@ It has two parts: a browser extension, and one command that connects your agents
 
 ## 1. Add the extension
 
-Install it from the store for your browser once its listing is live: Chrome, Edge or Firefox. Brave, Arc and Opera use the Chrome version. Signing in with Google is optional. You need it only to publish routines to the directory.
+Install it from the store for your browser once its listing is live: Chrome, Edge or Firefox. Brave, Arc and Opera use the Chrome version. Signing in is optional, with Google, GitHub, Microsoft or an email address. You need it only to publish routines to the directory.
 
 ### Until the store listings are live
 

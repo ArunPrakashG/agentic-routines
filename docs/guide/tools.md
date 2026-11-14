@@ -25,7 +25,7 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `scroll` | Turn the wheel: `direction` and `amount`, over the middle of the page or over a ref or a point. Only a `ref` brings that element into view. `click` and `type` do that by themselves. |
 | `wait` | Wait some seconds. `read_page` with `wait` is usually better: it stops when the page is quiet. |
 | `resize_window` | Make the page lay out at another size, as a narrow window or a phone would, to see a layout or a mobile site. It changes only that tab, not the person's window. `reset` goes back. Read the page again after it. |
-| `batch` | Run up to 20 of the page tools one after another in one call and get every answer back together. Each runs as it would alone, with the same checks, pauses and recording, and the batch stops at the first one that fails. |
+| `batch` | Run up to 20 of these one after another in one call and get every answer back together: `navigate`, `read_page`, `find`, `get_page_text`, `click`, `hover`, `drag`, `scroll`, `type`, `press`, `select`, `form_input`, `wait`, `screenshot`, `dialog` and `resize_window`. Each runs as it would alone, with the same checks, pauses and recording, and the batch stops at the first one that fails. Uploads, scripts, hand-overs and secrets are not allowed in a batch. |
 | `type` | Type into a field by ref. Replaces what is there. `submit` presses Enter after. |
 | `select` | Pick an option in a select, by label or value. |
 | `form_input` | Bring a field to a value: a checkbox, switch or radio (`true` or `false`), a select, a slider, a date, a time, a colour, or text. What is ticked already stays ticked. |
@@ -36,6 +36,23 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `upload` | Attach files from this machine. Pass the `ref` of the file input, or of the button, label or drop zone in front of it, and an absolute `path` (or `paths` for several). See below. |
 | `press` | Press keys in the focused element: Enter, Escape, ArrowDown, `ctrl+a`. Several, separated by spaces, go one after another; `repeat` presses it that many times. |
 | `screenshot` | The area around the last element, or the whole tab with `full: true`, or part of the last picture enlarged with `region`. `read_page` costs less. |
+
+### Options worth knowing
+
+| Option | On | Does |
+|---|---|---|
+| `tab_id` | almost every browser tool | Acts on another tab of the session instead of the one the agent works in. `tabs` lists them. |
+| `new_tab` | `navigate` | Opens the address in a new tab. `force` leaves a page that asks first, losing what it has not saved. |
+| `filter`, `ref`, `wait` | `read_page` | `interactive` lists only what can be used, `all` everything. `ref` returns the full text of one element, up to 20000 characters. `wait` is how long, in milliseconds, it waits at most for a page still loading to go quiet (up to 10000). |
+| `note` | `click`, `type`, `select`, `form_input`, `screenshot` | Up to 80 characters shown on that element in an annotated screenshot. |
+| `pattern`, `only_errors`, `limit`, `clear` | `read_console_messages` | Only lines matching a regular expression, only errors, at most 500 lines, and forget them afterwards. |
+| `url_contains`, `limit`, `clear` | `read_network_requests` | Only requests whose address contains the text, at most 500, and forget them afterwards. |
+| `wait_seconds` | `handoff` | How long the call waits, 600 by default, 5 to 3000. When it runs out the card stays up, and the agent calls again to keep waiting. |
+| `idle_minutes` | `tabs_cleanup` | Only close tabs untouched for that long. |
+| `submit` | `type`, `type_secret` | Presses Enter after typing. |
+| `format` | `recording` | `webm` or `mp4`. |
+| `width`, `height`, `mobile`, `reset` | `resize_window` | A size from 200 to 3840 pixels, laid out as a phone with `mobile`, and back to the window's own size with `reset`. |
+| `site` | `routines_search` | Only routines for that site. |
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
 
@@ -66,9 +83,18 @@ See [Secrets you keep for a site](safety.md#secrets-you-keep-for-a-site).
 
 | Tool | What it does |
 |---|---|
-| `settings` | Read or change where agent tabs open, how they are grouped, when an untouched one closes, the agent's cursor and hand-over notifications. An agent changes these only when the person asks. The tool has no way to reach security settings or updates |
+| `settings` | Read or change the settings below. An agent changes these only when the person asks. The tool has no way to reach security settings or updates |
 | `status` | The browsers connected, the session and its limits, its tabs and the settings in force |
 | `tabs_cleanup` | Close the tabs this session opened and no longer needs |
+
+| Setting | Values | Default |
+|---|---|---|
+| `tabs_where` | `auto` (this window, or a window of its own while another agent is working), `window` (this window), `separate` (a window for agents) | `auto` |
+| `grouping` | `session` (a tab group per agent), `shared` (one group for all agents), `none` | `session` |
+| `idle_close_minutes` | `0` (never), `10`, `30`, `60` | `30` |
+| `agent_cursor` | Show the agent's cursor on the page | on |
+| `handoff_notifications` | A desktop notification when an agent hands over a tab | on |
+| `human_input` | Move and type at a person's pace (below) | off |
 
 The person has the same settings in the panel, under their account menu. A change from either side shows in the panel at once. A tab an agent opened and left closes by itself after 30 minutes, unless that is turned off, it is the tab the person is looking at, a hand-over is waiting on it or a run is paused there. A tab the person opened or lent is never closed.
 
@@ -113,7 +139,7 @@ What it does is recorded with the run and listed in the result, with the values 
 |---|---|
 | `cdp_endpoint` | A local address that speaks CDP, for `chromium.connectOverCDP` or anything else that does. |
 
-This is the person's own browser with their sign-ins, reached through the extension's debugger. The browser's real debugging port stays closed. The endpoint starts when an agent first asks for it, and stops when nothing holds a token, so a person who never uses it has nothing listening.
+This is the person's own browser with their sign-ins, reached through the extension's debugger. The browser's real debugging port stays closed. The endpoint starts when an agent first asks for it, and stops when nothing holds a token, so a person who never uses it has nothing listening. A token lasts as long as the agent's server runs, or eight hours; from the command line it lasts eight hours. The port is picked at random unless `AGENTIC_ROUTINES_CDP_PORT` sets one.
 
 ```js
 const browser = await chromium.connectOverCDP(endpoint);
@@ -236,7 +262,7 @@ An alert, confirm or prompt stops the page until someone answers. Every tool tha
 
 These can reach what signs a person in, so they are held back on purpose:
 
-- `javascript` waits for the person in the side panel the first time on a site: no, this once, or always on this site. A script cannot read cookies, and the result has anything shaped like a token, key or cookie hidden.
+- `javascript` runs on any website without asking, but never in a tab where a secret was typed until that tab goes to a new page. A script cannot read cookies, and the result has anything shaped like a token, key or cookie hidden.
 - A script is never recorded. A routine made from the run will not do it, so use the other tools for anything worth keeping.
 - `read_network_requests` gives no headers or bodies, and hides query values and long opaque parts of an address.
 - Listening to the console and network starts at the first call on a tab, because some sites treat being listened to as a sign of a bot.

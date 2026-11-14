@@ -2,35 +2,31 @@
 import Base from '../layouts/Base.astro';
 import Agents from '../components/Agents.astro';
 
-const pain = [
-  { n: '539k', t: 'tokens to change one YouTube description' },
-  { n: '17', t: 'tool calls, and 6 screenshots sent to the model' },
-  { n: '0:56', t: 'start to finish, every time it runs' },
-  { n: '+19k', t: 'tokens of page snapshots left in your agent’s context afterwards' },
-];
+const REPO = 'https://github.com/ArunPrakashG/agentic-routines';
 type Row = { task: string; note: string; tokens: string[]; time: string[]; cost: string[] };
-const same: Row[] = [
+const rows: Row[] = [
   { task: 'Edit a YouTube description', note: 'Real YouTube, signed in', tokens: ['539k', '97k', '−82%'], time: ['0:56', '0:19', '−66%'], cost: ['$0.21', '$0.04', '−81%'] },
-  { task: 'Release a build to testers', note: 'Replica of a store console, one form', tokens: ['530k', '109k', '−79%'], time: ['0:26', '0:10', '−63%'], cost: ['$0.10', '$0.02', '−82%'] },
+  { task: 'Release a build to testers', note: 'Store console replica, one form', tokens: ['530k', '109k', '−79%'], time: ['0:26', '0:10', '−63%'], cost: ['$0.10', '$0.02', '−82%'] },
   { task: 'Release with every setting', note: 'The same console, a long form', tokens: ['1.29M', '339k', '−74%'], time: ['0:57', '0:28', '−50%'], cost: ['$0.29', '$0.09', '−69%'] },
+  { task: 'The same release, a button renamed', note: 'Your agent fixed one step', tokens: ['1.29M', '381k', '−71%'], time: ['0:57', '0:38', '−33%'], cost: ['$0.29', '$0.07', '−75%'] },
 ];
-const changed: Row[] = [
-  { task: 'Release a build to testers', note: 'One button renamed since the recording', tokens: ['530k', '226k', '−57%'], time: ['0:26', '0:23', '−13%'], cost: ['$0.10', '$0.04', '−60%'] },
-  { task: 'Release with every setting', note: 'One button renamed since the recording', tokens: ['1.29M', '381k', '−71%'], time: ['0:57', '0:38', '−33%'], cost: ['$0.29', '$0.07', '−75%'] },
+const steps = [
+  { h: 'Your agent does the task', p: 'As it does today, in your own browser with your sign-ins. Every step is recorded.' },
+  { h: 'It keeps the ones worth keeping', p: 'Clicks a link can replace are dropped. Values that change each time become inputs.' },
+  { h: 'Next time it is one call', p: 'No model unless the page changed. Then only that one step goes to your agent.' },
 ];
-const tables = [
-  { head: 'Same page as recorded', rows: same },
-  { head: 'After the site changed', rows: changed },
+const safe = [
+  { h: 'Checks the page before every step', p: 'Same page: it runs straight through. A step moved: only that step goes to your agent, and the fix is kept.' },
+  { h: 'Pauses before anything you can’t undo', p: 'Publishing, paying, deleting. It waits for you, or for your agent to say yes.' },
+  { h: 'Never keeps a password', p: 'Typed secrets are recorded as a placeholder. Agents only ever see a secret’s name.' },
+  { h: 'Stays on its own site', p: 'A routine only works on the site it was recorded on, whatever a page says.' },
+  { h: 'Hands back when it breaks', p: 'Your agent picks up from the failed step, with everything done so far.' },
+  { h: 'Learns from you too', p: 'Do the task yourself once in the side panel. It saves the same way.' },
 ];
-const checks = [
-  { k: 'Same page', h: 'It runs straight through.', p: 'No model, no tokens.' },
-  { k: 'A step moved', h: 'Only that step goes to your agent.', p: 'It fixes it, and the fix is saved for next time.' },
-  { k: 'It breaks', h: 'Your agent takes over.', p: 'From that step, with everything done so far.' },
-];
-const stops = [
-  { h: 'Pauses before anything you can’t undo.', p: 'Publishing, paying, deleting. It waits for you, or for your agent to say yes.' },
-  { h: 'Keeps a password only if you ask it to.', p: 'What you type into a password field shows up as a placeholder. You can save one on your computer for a single site, so a routine can sign in. Agents only see its name.' },
-  { h: 'Learns from you too.', p: 'Do the task once yourself. It saves the same way an agent run does.' },
+const open = [
+  { h: 'No account, no server', p: 'Recording and replaying never leave your machine. Sign-in is only for publishing to the directory.' },
+  { h: 'Routines are plain files', p: 'Markdown you can read and diff. Keep them on your computer, or in your project’s repository so the team reviews them in pull requests and every agent started there finds them.' },
+  { h: 'Built in the open', p: 'Issues, releases and the benchmark are on GitHub. Bug reports and pull requests are welcome.' },
 ];
 // Direct store entries go in here once the listings are live; until then each opens the store's search.
 const stores = [
@@ -38,16 +34,10 @@ const stores = [
   { id: 'edge', name: 'Edge', store: 'Microsoft Edge Add-ons', href: 'https://microsoftedge.microsoft.com/addons/search/agentic%20routines' },
   { id: 'firefox', name: 'Firefox', store: 'Firefox Add-ons', href: 'https://addons.mozilla.org/firefox/search/?q=agentic+routines' },
 ];
-const runs = [
-  { pm: 'npm', cmd: 'npx agentic-routines setup' },
-  { pm: 'pnpm', cmd: 'pnpm dlx agentic-routines setup' },
-  { pm: 'bun', cmd: 'bunx agentic-routines setup' },
-  { pm: 'yarn', cmd: 'yarn dlx agentic-routines setup' },
-];
-const prompt = `Set up Agentic Routines on this machine.
+const prompt = `Set up Agentic Routines (open source, github.com/ArunPrakashG/agentic-routines) on this machine.
 1. Run "npx agentic-routines setup". If I use pnpm, bun or yarn, run it with "pnpm dlx", "bunx" or "yarn dlx" instead.
 2. Run "npx agentic-routines doctor" and tell me which agents and browsers are connected and what is still missing.
-3. If my browser has no extension yet, tell me which store page to open. Do not install anything else.
+3. If my browser has no extension yet, tell me which store to get it from: Chrome Web Store, Microsoft Edge Add-ons or Firefox Add-ons. Do not install anything else.
 4. Tell me to restart this agent so it loads the browser tools.`;
 const ld = {
   '@context': 'https://schema.org',
@@ -55,13 +45,16 @@ const ld = {
   name: 'Agentic Routines',
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'Chrome, Edge, Firefox',
-  description: 'A cache for your AI agent’s browser navigation: it remembers how the agent did a task, then replays it without asking the model again.',
+  description: 'Open source tool that records what your AI coding agent does in the browser and replays it without the model.',
+  license: 'https://opensource.org/licenses/MIT',
+  codeRepository: REPO,
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
 };
+const check = '<path d="M20 6 9 17l-5-5"/>';
 ---
 <Base
   title="Agentic Routines"
-  description="Agentic Routines is the cache for your agent’s browser navigation. It remembers how your agent did a long task, then replays it without asking the model again. Long chores run up to 3.5 times faster and cost up to 83% less."
+  description="Agentic Routines is open source. Teach your coding agent a browser chore once and it replays without the model: up to 82% cheaper and 2.7 times faster on long chores."
   path="/"
   jsonLd={ld}
   dark
@@ -69,100 +62,59 @@ const ld = {
   <section class="hero t-dark">
     <div class="wrap hero-in">
       <div class="hero-copy">
-        <span class="mono kicker">The cache for your agent’s browser navigation</span>
-        <h1>Stop paying your agent to figure out the same website twice.</h1>
-        <p class="sub">Agentic Routines remembers how your agent did a long chore in the browser, then replays it next time without asking the model again. Long chores run up to 3.5 times faster and cost up to 83% less.</p>
+        <a class="chip mono" href={REPO} target="_blank" rel="noopener"><i aria-hidden="true"></i>Open source · MIT</a>
+        <h1>Teach your agent a browser chore once. It replays without the model.</h1>
+        <p class="sub">Agentic Routines records what your coding agent does in your browser and keeps it as a routine. Next time the whole chore replays without the model: no reading pages, no tokens, the same steps.</p>
         <div class="cta">
-          <a class="btn btn-primary btn-lg" href="#install">Install, it’s free</a>
-          <a class="btn btn-secondary btn-lg" href="#numbers">See the numbers</a>
-          <a class="btn btn-secondary btn-lg" href="https://github.com/ArunPrakashG/agentic-routines" target="_blank" rel="noopener">Star on GitHub</a>
+          <a class="btn btn-primary btn-lg" href={REPO} target="_blank" rel="noopener">Star on GitHub</a>
+          <a class="btn btn-secondary btn-lg" href="#how">How it works</a>
         </div>
-        <div class="works"><span class="mono">Works with</span><Agents /></div>
+        <Agents />
       </div>
 
-      <figure class="chart">
-        <div class="chart-head">
-          <figcaption>The same chore, run 30 times</figcaption>
-          <span class="legend"><span><i style="background: var(--text-3)"></i>By hand</span><span><i style="background: var(--accent)"></i>With Agentic Routines</span></span>
+      <div class="setup">
+        <div class="setup-h">
+          <strong>Paste this into your agent</strong>
+          <span>It sets everything up</span>
         </div>
-        <svg viewBox="0 0 720 300" role="img" aria-label="Cost of running the same chore 30 times: $6.18 by hand, $1.34 with Agentic Routines, 78 percent less">
-          <g stroke="var(--border)" stroke-width="1"><line x1="40" y1="270" x2="560" y2="270"/><line x1="40" y1="192.3" x2="560" y2="192.3"/><line x1="40" y1="114.6" x2="560" y2="114.6"/><line x1="40" y1="37" x2="560" y2="37"/></g>
-          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-3)"><text x="0" y="274">$0</text><text x="0" y="196">$2</text><text x="0" y="118">$4</text><text x="0" y="41">$6</text><text x="40" y="292">run 1</text><text x="195" y="292">10</text><text x="368" y="292">20</text><text x="540" y="292" text-anchor="middle">30</text></g>
-          <line class="hl" pathLength="1" x1="40" y1="262" x2="540" y2="30" stroke="var(--text-3)" stroke-width="2.5" stroke-linecap="round"/>
-          <line class="hl hl2" pathLength="1" x1="40" y1="262" x2="540" y2="218.1" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round"/>
-          <g class="hfade">
-            <circle cx="540" cy="30" r="4.5" fill="var(--text-3)"/><circle cx="540" cy="218.1" r="5" fill="var(--accent)"/>
-            <text x="552" y="35" font-family="IBM Plex Mono, monospace" font-size="15" fill="var(--text-2)">$6.18</text>
-            <text x="552" y="223" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="500" fill="var(--accent-ink)">$1.34</text>
-            <path d="M624 42 V206" stroke="var(--accent)" stroke-width="1.5" fill="none"/><path d="M618 42 H624 M618 206 H624" stroke="var(--accent)" stroke-width="1.5"/>
-            <text x="636" y="130" font-family="IBM Plex Mono, monospace" font-size="26" font-weight="500" fill="var(--accent-ink)" letter-spacing="-0.5">−78%</text>
-          </g>
-        </svg>
-        <div class="rule"></div>
-        <dl class="hstats">
-          <div><dt>tokens</dt><dd class="hstat">−82%</dd></div>
-          <div><dt>time</dt><dd class="hstat">−66%</dd></div>
-          <div><dt>cost</dt><dd class="hstat">−81%</dd></div>
-        </dl>
-        <p class="fine">Cost of one YouTube description edit, 21 cents by hand and 4 cents replayed, times 30. Run 1 is your agent at full price, and the chart leaves out saving the routine, which took about 2.3 times one run by hand (median of 6 tasks). Tokens, time and cost for one run are medians of 5 runs with Claude Sonnet 5.5.</p>
-      </figure>
-    </div>
-  </section>
-
-  <section class="sec">
-    <div class="wrap stack">
-      <div class="head">
-        <h2 class="h2">Made for the long chores your agent repeats.</h2>
-        <p class="lede">The first run is your agent, as usual. Every run after that replays what it learned: no reading the page again, no thinking, no waiting.</p>
-      </div>
-      <div class="cols3">
-        <div class="col"><span class="mono k">Once</span><h3>A task you do once, or a quick lookup.</h3><p>Just ask your agent. It decides this one is not worth keeping, and nothing is lost.</p></div>
-        <div class="col on"><span class="mono k">Again and again</span><h3>A long chore you repeat.</h3><p>Shipping a release, filling in a long form, adding records to a portal with no API. Your agent saves it. Next time it is one call, or one call for a whole list.</p></div>
-        <div class="col"><span class="mono k">Everyone</span><h3>A chore other people do too.</h3><p>Someone may have saved it already. Installing their routine skips the recording, which is the most expensive run.</p></div>
+        <pre id="setup-prompt">{prompt}</pre>
+        <div class="setup-f">
+          <span>Or run <code>npx agentic-routines setup</code></span>
+          <button type="button" class="btn btn-primary btn-lg" id="copy-prompt" data-label="Copy">Copy</button>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="sec">
+  <section class="sec" id="how">
     <div class="wrap stack">
       <div class="head">
-        <h2 class="h2">Your agent learns it once. Every run replays it.</h2>
-        <p class="lede">Your agent does the task, as it does today. When it will come up again, the agent tidies the steps up and keeps them, then Agentic Routines checks the page at every step on the way back.</p>
+        <span class="k mono">How it works</span>
+        <h2 class="h2">The first run is your agent. Every run after is a replay.</h2>
+        <p class="lede">Browser agents read the page, think and act for every single step, and they pay for all of it again tomorrow. A routine keeps the steps, so the next run skips the thinking.</p>
       </div>
-      <ol class="flow">
-        <li>
-          <span class="mono k">1 · Record</span>
-          <h3>Your agent runs the task.</h3>
-          <pre class="code" aria-label="A recorded run of 25 steps">navigate  play.google.com/console
+      <ol class="g3">
+        {steps.map((s, i) => (
+          <li class="card">
+            <span class="n mono">{i + 1}</span>
+            <h3>{s.h}</h3>
+            <p>{s.p}</p>
+            {i === 0 && <pre class="code" aria-label="A recorded run">navigate  play.google.com/console
 click     Kavyam
-click     Test and release
 click     Testing
-click     Internal testing
 click     Create new release
-<span class="dim">… 19 more</span></pre>
-          <p>25 steps, as your agent clicked them.</p>
-        </li>
-        <li>
-          <span class="mono k">2 · Compile</span>
-          <h3>The steps are tidied up.</h3>
-          <pre class="code" aria-label="The compiled routine, 20 steps">navigate  …/releases/new  <span class="tag">direct URL</span>
+<span class="dim">… 21 more</span></pre>}
+            {i === 1 && <pre class="code" aria-label="The saved routine">navigate  …/releases/new  <span class="tag">direct</span>
 upload    <span class="tag">{'{{bundle}}'}</span>
 type      Release name  <span class="tag">{'{{version_name}}'}</span>
-type      Release notes <span class="tag">{'{{release_notes}}'}</span>
 click     Next
-<span class="dim">… 15 more</span></pre>
-          <p>Navigation a link can replace is dropped. What changes between runs becomes an input. 20 steps.</p>
-        </li>
-        <li>
-          <span class="mono k">3 · Replay</span>
-          <h3>One call, no model.</h3>
-          <pre class="code" aria-label="Replaying the routine with one tool call"><span class="fn">routine_run</span>(<span class="str">"play-release"</span>, {'{'}
+<span class="dim">… 16 more</span></pre>}
+            {i === 2 && <pre class="code" aria-label="Replaying it with one call"><span class="fn">routine_run</span>(<span class="str">"play-release"</span>, {'{'}
   version_name: <span class="str">"2.15.0 (215)"</span>,
-  release_notes: <span class="str">"Dark mode for the reader."</span>,
   bundle: <span class="str">"kavyam-2.15.0.aab"</span>
-{'}'})</pre>
-          <p>Step 9 changed, so the model was called once. 20 steps, 0:31.</p>
-        </li>
+{'}'})</pre>}
+          </li>
+        ))}
       </ol>
     </div>
   </section>
@@ -170,67 +122,94 @@ click     Next
   <section class="sec" id="numbers">
     <div class="wrap stack">
       <div class="head">
-        <h2 class="h2">Your agent starts from zero every time.</h2>
-        <p class="lede">Browser agents read the page, think, act, and read the page again, for every single step. Run the same chore tomorrow and you pay for all of it again.</p>
+        <span class="k mono">Measured</span>
+        <h2 class="h2">Up to 82% cheaper and 2.7 times faster.</h2>
+        <p class="lede">The same agent doing the same task by hand, against replaying the routine it saved.</p>
       </div>
-      <dl class="pain">
-        {pain.map((x) => <div><dt class="hstat">{x.n}</dt><dd>{x.t}</dd></div>)}
+      <dl class="stats">
+        <div><dt>fewer tokens</dt><dd>−82%</dd></div>
+        <div><dt>less time</dt><dd>−66%</dd></div>
+        <div><dt>lower cost</dt><dd>−81%</dd></div>
       </dl>
-      <p class="fine wide">That is one small edit to a YouTube description, done by hand through Claude in Chrome. On a longer console task it took 44 tool calls, 910k tokens and 1:33, and one run in five said it was done without starting the rollout.</p>
-
-      <div class="head" style="margin-top: 32px;">
-        <h2 class="h2">Measured, not estimated.</h2>
-        <p class="lede">Up to 82% cheaper and 2.7 times faster than the same agent doing the task by hand. Each arrow goes from by hand to replay.</p>
+      <div class="tbl" role="table" aria-label="By hand against replay">
+        <div class="tr th" role="row"><span role="columnheader">Task</span><span role="columnheader">Tokens</span><span role="columnheader">Time</span><span role="columnheader">Cost</span></div>
+        {rows.map((r) => (
+          <div class="tr" role="row">
+            <span class="task" role="cell"><b>{r.task}</b><small>{r.note}</small></span>
+            {[['Tokens', r.tokens], ['Time', r.time], ['Cost', r.cost]].map(([l, v]) => (
+              <span class="m" role="cell" data-l={l as string}><span class="mono">{(v as string[])[0]} → <b>{(v as string[])[1]}</b></span><em class="mono">{(v as string[])[2]}</em></span>
+            ))}
+          </div>
+        ))}
       </div>
-      {tables.map((t) => (
-        <div class="tbl" role="table" aria-label={t.head}>
-          <div class="tr th" role="row"><span role="columnheader">{t.head}</span><span role="columnheader">Tokens</span><span role="columnheader">Time</span><span role="columnheader">Cost</span></div>
-          {t.rows.map((r) => (
-            <div class="tr" role="row">
-              <span class="task" role="cell"><b>{r.task}</b><small>{r.note}</small></span>
-              {[['Tokens', r.tokens], ['Time', r.time], ['Cost', r.cost]].map(([l, v]) => (
-                <span class="m" role="cell" data-l={l as string}><span class="mono">{(v as string[])[0]} → <b>{(v as string[])[1]}</b></span><em class="mono">{(v as string[])[2]}</em></span>
-              ))}
-            </div>
-          ))}
+      <p class="fine">Medians of 3 to 5 runs with Claude Sonnet 5.5, costs at list prices as Claude Code reported them. Long chores gain the most; a one-step lookup costs more as a routine, so your agent does not save those. The benchmark is in the <a href={`${REPO}/tree/main/dev/bench`} target="_blank" rel="noopener">repository</a>, so you can run it yourself.</p>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="wrap stack">
+      <div class="head">
+        <span class="k mono">Safe by default</span>
+        <h2 class="h2">It stops where you would.</h2>
+      </div>
+      <div class="safe">
+        {safe.map((s) => <div><h3>{s.h}</h3><p>{s.p}</p></div>)}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="open-source">
+    <div class="wrap oss">
+      <div class="stack oss-copy">
+        <div class="head">
+          <span class="k mono">Open source</span>
+          <h2 class="h2">Free, open, and on your computer.</h2>
+          <p class="lede">The extension, the agent tools and the replay engine are all in one MIT-licensed repository. Read it, run it from source, change it.</p>
         </div>
-      ))}
-      <div class="notes">
-        <p>A button was renamed since the recording. That added 10 to 13 seconds: your agent fixed that one step and the fix was saved. It cost about 2 cents more on the small form and made no clear difference on the long one.</p>
-        <p>Length decides it. The 30-step form used 74% fewer tokens. A one-step lookup on GitHub used 70% more, because your agent still has to find the routine, call it and read the answer off the page. Saving a routine also costs more than doing the task, so a short task may never earn that back.</p>
-        <p class="fine">The YouTube row: Claude Sonnet 5.5 through Claude in Chrome against the saved routine, on real YouTube, median of 5 runs. The two console tasks: the same agent doing the task by hand with these browser tools against the saved routine, on a replica of a store console, on a cloud machine, median of 3 runs. All of it is a small sample. Costs are what Claude Code reported at list prices, and a replay still pays for the agent session around it. Token totals include context read back from cache.</p>
+        <ul class="list">
+          {open.map((o) => (
+            <li>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={check} />
+              <div><h3>{o.h}</h3><p>{o.p}</p></div>
+            </li>
+          ))}
+        </ul>
+        <div class="cta">
+          <a class="btn btn-primary btn-lg" href={REPO} target="_blank" rel="noopener">Star on GitHub</a>
+          <a class="btn btn-secondary btn-lg" href={`${REPO}/issues`} target="_blank" rel="noopener">Report an issue</a>
+        </div>
       </div>
+      <figure class="file">
+        <figcaption class="mono">~/.agentic-routines/routines/local/play-release/ROUTINE.md</figcaption>
+        <pre><span class="dim">---</span>
+name: play-release
+site: play.google.com
+description: Release a build to internal testing.
+  Use when shipping a new Android build to testers.
+params:
+  version_name: Release name, like 2.15.0 (215)
+  bundle: Absolute path of the .aab
+<span class="dim">---</span>
+1. navigate …/tracks/internal/releases/new
+2. upload “App bundle” <span class="tag">{'{{bundle}}'}</span>
+3. type “Release name” <span class="tag">{'{{version_name}}'}</span>
+4. click “Next”
+<span class="dim">…</span>
+9. click “Start rollout”  <span class="dim">pauses first</span></pre>
+      </figure>
     </div>
   </section>
 
   <section class="sec">
-    <div class="wrap stack">
-      <h2 class="h2">It checks the page before every step.</h2>
-      <div class="cols3">
-        {checks.map((c) => <div class="col"><span class="mono k">{c.k}</span><h3>{c.h}</h3><p>{c.p}</p></div>)}
-      </div>
-    </div>
-  </section>
-
-  <section class="sec">
-    <div class="wrap stack">
-      <h2 class="h2">It stops where you would.</h2>
-      <div class="cols3">
-        {stops.map((c) => <div class="col"><h3>{c.h}</h3><p>{c.p}</p></div>)}
-      </div>
-    </div>
-  </section>
-
-  <section class="sec">
-    <div class="wrap stack">
-      <div class="split">
+    <div class="wrap">
+      <div class="band">
         <div class="head">
           <h2 class="h2">Routines other people keep working.</h2>
-          <p class="lede">Install a routine someone else maintains and your agent never pays to record it. Every routine is read by a person before it is listed, and you see each step before it installs.</p>
+          <p class="lede">Install one someone else maintains and your agent never pays to record it. Every routine is read by a person before it is listed.</p>
         </div>
-        <div class="split-cta">
+        <div class="cta">
           <a class="btn btn-primary btn-lg" href="/directory">Browse the directory</a>
-          <a class="btn btn-secondary btn-lg" href="/guidelines">Read the guidelines</a>
+          <a class="btn btn-secondary btn-lg" href="/guidelines">Publish yours</a>
         </div>
       </div>
     </div>
@@ -238,10 +217,13 @@ click     Next
 
   <section class="sec" id="install">
     <div class="wrap stack">
-      <h2 class="h2">Set up in two steps.</h2>
-      <div class="cols2">
-        <div class="step">
-          <span class="num mono">1</span>
+      <div class="head">
+        <span class="k mono">By hand</span>
+        <h2 class="h2">Rather set it up yourself?</h2>
+      </div>
+      <ol class="g2">
+        <li class="card">
+          <span class="n mono">1</span>
           <h3>Add the extension</h3>
           <div class="stores">
             {stores.map((s) => (
@@ -250,35 +232,18 @@ click     Next
               </a>
             ))}
           </div>
-          <p>Brave, Arc and Opera use the Chrome version. Signing in with Google is optional.</p>
-          <p>Not in a store yet, or you would rather read the code first? The project is open source (MIT). <a href="/docs/quickstart">Try it now</a> runs it from a <a href="https://github.com/ArunPrakashG/agentic-routines/releases/latest" target="_blank" rel="noopener">release</a> or a build of the <a href="https://github.com/ArunPrakashG/agentic-routines" target="_blank" rel="noopener">repository</a>.</p>
-        </div>
-        <div class="step">
-          <span class="num mono">2</span>
-          <h3>Connect your agent</h3>
-          <div class="term" aria-label="Terminal">
-            <div class="runs">
-              {runs.map((r) => (
-                <>
-                  <span class="dim">{r.pm}</span>
-                  <span><span class="dim">$</span> {r.cmd}</span>
-                </>
-              ))}
-            </div>
-            <div class="ok"><span>✓</span> Claude Code <span class="dim">~/.claude.json</span></div>
-            <div class="ok"><span>✓</span> Codex <span class="dim">~/.codex/config.toml</span></div>
-            <div class="ok"><span>✓</span> GitHub Copilot <span class="dim">VS Code mcp.json</span></div>
-            <div class="ok"><span>✓</span> OpenCode <span class="dim">~/.config/opencode/opencode.json</span></div>
-            <div class="ok"><span>✓</span> Chrome <span class="dim">extension connected</span></div>
-          </div>
-          <div class="or" aria-hidden="true"><span></span>or<span></span></div>
-          <p>Paste this into Claude Code, Codex, OpenCode or any agent chat and it sets everything up for you.</p>
-          <div class="prompt">
-            <pre id="setup-prompt">{prompt}</pre>
-            <button type="button" class="btn btn-secondary btn-lg" id="copy-prompt" data-label="Copy instructions">Copy instructions</button>
-          </div>
-        </div>
-      </div>
+          <p>Brave, Arc and Opera use the Chrome version. Or load it from a <a href={`${REPO}/releases/latest`} target="_blank" rel="noopener">release</a> or a build of the repository: <a href="/docs/quickstart">Try it now</a>.</p>
+        </li>
+        <li class="card">
+          <span class="n mono">2</span>
+          <h3>Connect your agents</h3>
+          <pre class="term" aria-label="Terminal"><span class="dim">$</span> npx agentic-routines setup
+<span class="ok">✓</span> Claude Code  <span class="dim">~/.claude.json</span>
+<span class="ok">✓</span> Codex        <span class="dim">~/.codex/config.toml</span>
+<span class="ok">✓</span> Chrome       <span class="dim">extension connected</span></pre>
+          <p>pnpm dlx, bunx and yarn dlx work too. <code>doctor</code> says what is still missing.</p>
+        </li>
+      </ol>
     </div>
   </section>
 </Base>
@@ -286,62 +251,46 @@ click     Next
 <style is:global>
   .top.t-dark { background: var(--bg); color: var(--text-1); }
   .hero { background: var(--bg); color: var(--text-1); }
-  .hero-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 620px); gap: 48px; align-items: center; padding-top: 56px; padding-bottom: 96px; }
-  .hero-copy { display: flex; flex-direction: column; gap: 28px; }
-  .hero .kicker { font-size: 13px; color: var(--accent-ink); }
-  .hero h1 { margin: 0; font-size: 60px; line-height: 64px; font-weight: 600; letter-spacing: -0.035em; text-wrap: balance; }
+  .hero-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px); gap: 56px; align-items: center; padding-top: 56px; padding-bottom: 96px; }
+  .hero-copy { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 13px; color: var(--text-2); text-decoration: none; }
+  .chip:hover { color: var(--text-1); background: var(--surface-2); }
+  .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .hero h1 { margin: 0; font-size: 56px; line-height: 60px; font-weight: 600; letter-spacing: -0.035em; text-wrap: balance; }
   .hero .sub { margin: 0; font-size: 18px; line-height: 28px; color: var(--text-2); max-width: 540px; }
-  .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
-  .hero .works { display: flex; flex-direction: column; gap: 12px; }
-  .hero .works > .mono { font-size: 12px; color: var(--text-3); }
-  .chart { margin: 0; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--surface-1); padding: 28px; display: flex; flex-direction: column; gap: 22px; box-shadow: var(--shadow-2); }
-  .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
-  .chart figcaption { font-size: 15px; font-weight: 500; }
-  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
-  .chart svg { display: block; width: 100%; height: auto; }
-  .chart .rule { height: 1px; background: var(--border); }
-  .hstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
-  .hstats div { display: flex; flex-direction: column-reverse; gap: 2px; }
-  .hstats dd { margin: 0; font-size: 44px; line-height: 1.05; }
-  .hstats dt { font-size: 13px; color: var(--text-2); }
-  .hstat { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.03em; color: var(--accent-ink); }
-  .fine { margin: 0; font-size: 12px; line-height: 18px; color: var(--text-3); }
-  .fine.wide { max-width: 760px; }
-  .hl { stroke-dasharray: 1; stroke-dashoffset: 1; animation: hl 9s var(--ease-out) infinite both; }
-  .hl2 { animation-delay: .25s; }
-  @keyframes hl { 0%, 5% { stroke-dashoffset: 1; } 48%, 94% { stroke-dashoffset: 0; } 98%, 100% { stroke-dashoffset: 1; } }
-  .hfade { animation: hfade 9s ease-out infinite both; }
-  @keyframes hfade { 0%, 46% { opacity: 0; transform: translateY(4px); } 54%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .hl { stroke-dashoffset: 0 !important; } .hfade { opacity: 1 !important; } }
+  .cta { display: flex; gap: 10px; flex-wrap: wrap; }
 
-  .stack { display: flex; flex-direction: column; gap: 48px; }
-  .head { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
-  .cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
-  .cols2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
-  .col { display: flex; flex-direction: column; gap: 10px; padding-top: 20px; border-top: 2px solid var(--border-strong); }
-  .col.on { border-top-color: var(--accent); }
-  .col .k { font-size: 12px; color: var(--text-3); }
-  .col.on .k { color: var(--accent-ink); }
-  .col h3, .flow h3, .step h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 500; }
-  .col p, .flow p, .step p { margin: 0; font-size: 14px; line-height: 22px; color: var(--text-2); }
+  .setup { border: 1px solid var(--border-strong); border-radius: 16px; background: var(--surface-1); box-shadow: var(--shadow-2); overflow: hidden; min-width: 0; }
+  .setup-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .setup-h strong { font-size: 15px; font-weight: 500; }
+  .setup-h span { font-size: 13px; color: var(--text-3); }
+  .setup pre { margin: 0; padding: 20px; font: 400 13px/22px var(--font-mono); color: var(--text-1); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+  .setup-f { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--surface-2); border-top: 1px solid var(--border); font-size: 13px; color: var(--text-2); }
+  .setup-f code, .card code { font-family: var(--font-mono); color: var(--text-1); }
 
-  .flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-  .flow li { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  .flow .k { font-size: 12px; color: var(--accent-ink); }
-  .code { margin: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); font: 400 12px/20px var(--font-mono); color: var(--text-1); overflow-x: auto; white-space: pre; }
-  .code .dim, .term .dim { color: var(--text-3); }
-  .code .tag { background: var(--accent-soft); color: var(--accent-ink); border-radius: 4px; padding: 1px 6px; }
-  .code .fn { color: var(--accent-ink); }
+  .stack { display: flex; flex-direction: column; gap: 44px; }
+  .head { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
+  .k { font-size: 12px; font-weight: 500; color: var(--accent-ink); text-transform: uppercase; letter-spacing: 0.04em; }
+  h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 500; }
+  .card p, .safe p, .list p { margin: 0; font-size: 15px; line-height: 23px; color: var(--text-2); }
+  .card p a { color: var(--accent-ink); }
+  .g3, .g2 { list-style: none; margin: 0; padding: 0; display: grid; gap: 24px; }
+  .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 12px; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); min-width: 0; }
+  .n { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; }
+  .code, .term { margin: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font: 400 12px/20px var(--font-mono); color: var(--text-1); white-space: pre; overflow-x: auto; }
+  .term { font-size: 13px; line-height: 22px; }
+  .dim { color: var(--text-3); }
+  .tag { background: var(--accent-soft); color: var(--accent-ink); border-radius: 4px; padding: 1px 6px; }
+  .code .fn, .term .ok { color: var(--accent-ink); }
   .code .str { color: var(--text-2); }
 
-  .pain { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 0; }
-  .pain div { border-top: 2px solid var(--border-strong); padding-top: 16px; display: flex; flex-direction: column; gap: 6px; }
-  .pain dt { font-size: 44px; line-height: 1.05; }
-  .pain dd { margin: 0; font-size: 14px; line-height: 21px; color: var(--text-2); }
-
-  .tbl { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 0; }
+  .stats div { display: flex; flex-direction: column-reverse; gap: 6px; padding-top: 18px; border-top: 2px solid var(--accent); }
+  .stats dd { margin: 0; font: 500 52px/1 var(--font-mono); letter-spacing: -0.03em; color: var(--accent-ink); }
+  .stats dt { font-size: 15px; color: var(--text-2); }
+  .tbl { border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); overflow: hidden; }
   .tr { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 20px; align-items: center; border-top: 1px solid var(--border); }
   .tr:first-child { border-top: 0; }
   .tr.th { font-size: 12px; color: var(--text-3); background: var(--surface-2); padding-top: 10px; padding-bottom: 10px; }
@@ -351,53 +300,52 @@ click     Next
   .tr .m { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--text-2); }
   .tr .m b { color: var(--text-1); font-weight: 500; }
   .tr .m em { font-style: normal; font-size: 12px; color: var(--accent-ink); }
-  .notes { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
-  .notes p { margin: 0; font-size: 15px; line-height: 24px; color: var(--text-2); }
-  .notes p.fine { font-size: 12px; line-height: 18px; color: var(--text-3); }
+  .fine { margin: 0; font-size: 12px; line-height: 18px; color: var(--text-3); max-width: 760px; }
+  .fine a { color: inherit; }
 
-  .split { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; flex-wrap: wrap; }
-  .split-cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .safe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px 32px; }
+  .safe div { display: flex; flex-direction: column; gap: 8px; padding-top: 18px; border-top: 1px solid var(--border-strong); }
 
-  .step { display: flex; flex-direction: column; gap: 14px; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); min-width: 0; }
-  .step .num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+  .oss { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 56px; align-items: start; }
+  .oss-copy { gap: 32px; }
+  .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+  .list li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 14px; }
+  .list svg { margin-top: 2px; }
+  .list div { display: flex; flex-direction: column; gap: 4px; }
+  .file { margin: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); overflow: hidden; min-width: 0; }
+  .file figcaption { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-3); overflow-wrap: anywhere; }
+  .file pre { margin: 0; padding: 16px; font: 400 12px/20px var(--font-mono); white-space: pre; overflow-x: auto; }
+
+  .band { display: flex; align-items: center; justify-content: space-between; gap: 24px 40px; flex-wrap: wrap; padding: 36px 40px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-1); }
+  .band .head { max-width: 620px; }
   .stores { display: flex; gap: 8px; flex-wrap: wrap; }
   .stores .btn { gap: 10px; }
   .stores img { display: block; }
-  .runs { display: grid; grid-template-columns: 48px minmax(0, 1fr); margin-bottom: 8px; }
-  .or { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-3); }
-  .or span { flex: 1; height: 1px; background: var(--border); }
-  .prompt { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
-  .prompt pre { margin: 0; font: 400 13px/22px var(--font-mono); white-space: pre-wrap; user-select: all; }
-  .prompt .btn { align-self: flex-end; }
-  .term { font: 400 13px/22px var(--font-mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; white-space: nowrap; }
-  .term .ok span:first-child { color: var(--accent-ink); }
 
   @media (max-width: 1100px) {
-    .hero-in { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-bottom: 72px; }
-    .chart { max-width: 680px; }
+    .hero-in, .oss { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+    .setup, .file { max-width: 680px; }
   }
   @media (max-width: 900px) {
-    .cols3, .flow { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-    .cols2 { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-    .pain { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .stack { gap: 36px; }
+    .g3, .g2, .safe, .stats { grid-template-columns: minmax(0, 1fr); }
+    .stack { gap: 32px; }
   }
   @media (max-width: 640px) {
     .hero-in { padding-top: 32px; padding-bottom: 56px; }
     .hero h1 { font-size: 38px; line-height: 42px; }
-    .hero .sub { font-size: 16px; line-height: 26px; }
-    .hero .cta .btn { flex: 1 1 100%; }
-    .chart { padding: 20px 16px; }
-    .hstats dd { font-size: 30px; }
-    .pain dt { font-size: 34px; }
+    .hero .sub { font-size: 16px; line-height: 25px; }
+    .cta .btn { flex: 1 1 100%; }
+    .setup pre { padding: 16px; font-size: 12px; line-height: 20px; }
+    .setup-h, .setup-f { padding: 12px 16px; }
+    .setup-f { flex-direction: column; align-items: stretch; }
+    .stats dd { font-size: 40px; }
     .tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); gap: 10px; padding: 14px 16px; }
     .tr .task { grid-column: 1 / -1; }
     .tr.th { display: none; }
     .tr .m::before { content: attr(data-l); font: 400 11px/1 var(--font-sans); color: var(--text-3); }
     .tr .m { font-size: 12px; }
-    .split-cta .btn { flex: 1 1 100%; }
-    .prompt .btn { align-self: stretch; }
-    .prompt pre { font-size: 12px; line-height: 20px; }
+    .card { padding: 20px 16px; }
+    .band { padding: 24px 16px; }
   }
 </style>
 
@@ -417,6 +365,6 @@ click     Next
       sel?.addRange(range);
       copy.textContent = 'Press Ctrl+C';
     }
-    setTimeout(() => { copy.textContent = copy.dataset.label ?? 'Copy instructions'; }, 2000);
+    setTimeout(() => { copy.textContent = copy.dataset.label ?? 'Copy'; }, 2000);
   });
 </script>

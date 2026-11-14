@@ -61,7 +61,7 @@ import '../styles/directory.css';
       const side = el(
         'aside',
         { style: 'display: flex; flex-direction: column; gap: 16px' },
-        el('section', { class: 'panel' }, el('h2', {}, 'Install'), el('p', {}, 'In the extension, open Directory, find this routine and press Add. You see every step before it installs.'), el('p', {}, 'Or ask your agent:'), copyBlock('Agent command', `routine_install("${r.owner}/${r.name}")`)),
+        el('section', { class: 'panel' }, el('h2', {}, 'Install'), el('p', {}, 'Give this to your agent. The side panel shows every step before it installs.'), copyBlock('Agent command', `routine_install("${r.owner}/${r.name}")`)),
         ...(params.length ? [el('section', { class: 'panel' }, el('h2', {}, 'Inputs'), el('p', { class: 'mono' }, params.join(', ')))] : []),
         el('section', { class: 'panel' }, el('h2', {}, 'Reviewed'), el('p', {}, 'A person read this routine before it was listed. ', el('a', { href: '/guidelines' }, 'See the guidelines'), '.')),
       );
