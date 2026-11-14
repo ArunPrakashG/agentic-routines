@@ -30,7 +30,7 @@ Agentic Routines is a pnpm monorepo. The code is on [GitHub](https://github.com/
                                                         recorder, replayer, checks, side panel
 ```
 
-The MCP server and the native host are the same package in two modes. They talk over a socket in `~/.agentic-routines`. The extension holds the Google session, so the tool server has no sign-in of its own. When the extension is signed out, local routines still work.
+The MCP server and the native host are the same package in two modes. They talk over a socket in `~/.agentic-routines`. The extension holds the sign-in session, so the tool server has no sign-in of its own. When the extension is signed out, local routines still work.
 
 ## Run it
 

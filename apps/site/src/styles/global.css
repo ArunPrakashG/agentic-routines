@@ -69,7 +69,7 @@ footer.site nav { display: flex; gap: 4px; flex-wrap: wrap; }
 .prose ul { padding-left: 20px; margin: 0 0 14px; }
 .prose li { margin-bottom: 6px; }
 .prose strong { color: var(--text-1); font-weight: 600; }
-.prose code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-2); padding: 1px 6px; border-radius: 4px; color: var(--text-1); }
+.prose code { font-family: var(--font-mono); font-size: 0.9em; overflow-wrap: anywhere; background: var(--surface-2); padding: 1px 6px; border-radius: 4px; color: var(--text-1); }
 .prose a { color: var(--accent-ink); }
 @media (max-width: 640px) { .prose h1 { font-size: 32px; line-height: 38px; } }
 

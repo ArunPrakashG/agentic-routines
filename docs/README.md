@@ -6,6 +6,7 @@ New here? Start with [Try it now](guide/quickstart.md), or [Getting started](gui
 - [Try it now](guide/quickstart.md): run it today from a release or a build of the repository.
 - [Getting started](guide/getting-started.md): install, connect an agent, make a first routine.
 - [How it works](guide/how-it-works.md): recording, checking and replaying.
+- [The side panel](guide/side-panel.md): your routines, recording a demo, saving, running and approvals.
 - [Routines](guide/routines.md): what a routine is and what it can do.
 - [Refining routines](guide/refine.md): turning a run into a lean routine.
 - [Agent tools](guide/tools.md): every browser tool an agent has.
