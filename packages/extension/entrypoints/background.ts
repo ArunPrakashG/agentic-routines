@@ -52,6 +52,8 @@ export default defineBackground(() => {
     if (method === 'directory.submissions') return directory.mine();
     // An agent can ask. The person reads the steps and clicks Install in the panel; nothing is installed before that.
     if (method === 'git.install') return askToInstall(String(p.source), String(p.path), agent.agentName(p.agent));
+    // The same for the directory. Only the id comes from the agent; the routine is fetched here.
+    if (method === 'directory.install') return askToInstallFromDirectory(String(p.id), agent.agentName(p.agent));
     if (method === 'replay.start' && policyOf(p?.session)?.readOnly) throw new Error('This session is read-only, so it cannot run a routine. Only the person can change that.');
     if (method === 'replay.start') return replay.start({ ...p, foreign: p.foreign === true || isForeign(p.routine) });
     if (method === 'replay.resume') return replay.resume(p);
@@ -94,7 +96,7 @@ export default defineBackground(() => {
 
   // The same for a routine from a Git source or a folder.
   type Waiter = { ok: (v: unknown) => void; no: (e: Error) => void };
-  let installing: { card: git.GitCard; waiter?: Waiter } | undefined;
+  let installing: { card: git.GitCard; waiter?: Waiter; routine?: Routine } | undefined;
   // Hook code the person is reading from the library, to allow it or keep it off.
   let reviewing: NonNullable<PanelState['hooksReview']> & { hash: string } | undefined;
 
@@ -115,6 +117,18 @@ export default defineBackground(() => {
     return new Promise((ok, no) => beginInstall(source, path, by, { ok, no }).catch(no));
   }
 
+  async function beginDirectoryInstall(id: string, by: string, waiter: Waiter) {
+    if (installing) throw new Error('Another routine is waiting for the user to approve installing it. Try again after that.');
+    const { card, routine } = await git.directoryPreview(id, by);
+    installing = { card, waiter, routine };
+    badge();
+    push();
+  }
+
+  function askToInstallFromDirectory(id: string, by: string) {
+    return new Promise((ok, no) => beginDirectoryInstall(id, by, { ok, no }).catch(no));
+  }
+
   async function decideInstall(approve: boolean, allowHooks = false) {
     const i = installing;
     if (!i || i.card.busy) return;
@@ -129,7 +143,9 @@ export default defineBackground(() => {
     i.card.error = undefined;
     push();
     try {
-      const saved = await git.install(i.card);
+      const saved = i.routine
+        ? await native.call<Routine>('store.write', { routine: i.routine, owner: i.card.source, origin: { kind: 'directory', source: i.card.source } })
+        : await git.install(i.card);
       const owner = (saved.meta as { owner?: string }).owner ?? '';
       // Approval is for the code the person read. If what got installed is not that (the source moved
       // between the preview and the click), the hooks stay off and the person is asked again from the library.

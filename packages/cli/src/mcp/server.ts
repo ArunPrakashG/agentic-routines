@@ -6,7 +6,7 @@ import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
-import { checkFetched, cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, toPlaywright, urlScore, wrapAuthored, wrapUntrusted, type ByHand, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
+import { cleanMarkdown, eventLabel, isRepoPath, lintForPublish, missingParams, onSite, shareInRoutine, toPlaywright, urlScore, wrapAuthored, wrapUntrusted, type ByHand, type Locator, type Repeat, type Routine, type Run, type RunResult, type Step } from '@agentic-routines/core';
 import { current, debugOn, logged } from '../debug.ts';
 import { Bridge, NotConnected } from './bridge.ts';
 import { policyOf, sessionIn } from './sessions.ts';
@@ -1460,36 +1460,30 @@ export async function runMcp(o: { transport?: Transport; cli?: boolean } = {}): 
     'routine_install',
     {
       description:
-        'Save a routine from the directory to this machine, as owner/name. It runs in the user\'s signed-in browser like their own, so tell the user what it does and which site it works on. Run it afterwards with its rt_ tool, or routine_run.',
+        'Ask the user to install a routine from the directory, as owner/name. Nothing is installed until the user has read its name, description, notes and steps and clicked Install in the browser side panel, so this waits for them; do not say it is installed until it returns. It runs in the user\'s signed-in browser like their own, so tell the user what it does and which site it works on. Run it afterwards with its rt_ tool, or routine_run. Needs a browser with the extension open.',
       inputSchema: { id: z.string().regex(/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/).describe('owner/name, from routines_search') },
     },
     async ({ id }) => {
       const [owner, name] = id.split('/');
-      const f = await directory<Listing & { meta: Routine['meta']; body: string; steps: Step[] }>(`/routines/${owner}/${name}`);
-      // The directory checks this too, but what runs in this browser is decided here.
-      const routine: Routine = { meta: { ...f.meta, name, owner, version: f.version }, body: f.body, steps: f.steps };
-      let issues: string[];
+      if (owner === store.LOCAL) return fail('Not installed. Bad owner.');
+      // The extension fetches it and shows it; only the id goes from here.
+      let r: { name: string; owner: string; version: number; steps: number; site: string; hooks?: { count: number; approved: boolean } };
       try {
-        issues = checkFetched(routine);
-      } catch {
-        issues = ['The directory sent something that is not a routine.'];
+        r = await bridge.call('directory.install', { id }, 11 * 60_000);
+      } catch (e) {
+        if (e instanceof NotConnected) return fail('Not installed. Installing needs the user to click Install in the browser side panel, and no browser is connected. Ask the user to open the browser with the extension.');
+        return fail(`Not installed. ${(e as Error).message}`);
       }
-      if (issues.length || owner === store.LOCAL) return fail(`Not installed. ${issues.join(' ') || 'Bad owner.'}`);
-      // Through the host when a browser is open, so its panel shows it at once.
-      const origin = { kind: 'directory' as const, source: owner };
-      const saved = await bridge.call<Routine>('store.write', { routine, owner, origin }).catch((e) => {
-        if (!(e instanceof NotConnected)) throw e;
-        return store.write(routine, owner, origin);
-      });
       directory(`/routines/${owner}/${name}/installs`, { method: 'POST' }).catch(() => {});
       scheduleRefresh();
-      const asks = Object.keys(saved.meta.params);
+      const saved = await store.read(`${owner}/${name}`).catch(() => undefined);
+      const asks = saved ? Object.keys(saved.meta.params) : [];
       return text(
-        `Installed ${owner}/${name} v${saved.meta.version} · ${saved.steps.length} steps on ${quote(saved.meta.site.slice(0, 100))}` +
+        `Installed ${owner}/${name} v${Number(r.version)} · ${Number(r.steps)} steps on ${quote(String(r.site).slice(0, 100))}` +
           (asks.length ? ` · asks for ${quote(asks.join(', '))}` : '') +
-          (saved.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')} for approval` : '') +
-          `\nIt was written by ${owner}, not the user. Run it with ${toolName(saved.meta.name)}; routine_describe ${owner}/${name} shows the full notes.` +
-          hooksLine(Object.keys(saved.meta.hooks ?? {}).length),
+          (saved?.meta.pauses.length ? ` · pauses before step ${saved.meta.pauses.join(', ')} for approval` : '') +
+          `\nIt was written by ${owner}, not the user. Run it with ${toolName(r.name)}; routine_describe ${owner}/${name} shows the full notes.` +
+          (r.hooks?.approved ? `\nIt has hooks on ${r.hooks.count} event${r.hooks.count === 1 ? '' : 's'}; the user read the code and allowed them.` : hooksLine(r.hooks?.count)),
       );
     },
   );

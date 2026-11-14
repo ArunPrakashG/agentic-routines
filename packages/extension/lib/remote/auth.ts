@@ -2,7 +2,7 @@
 // the client secrets and issues our own session, which only lives here: the panel gets the account, never the tokens.
 
 // Dev scripts build with WXT_API_URL pointing at a local API, so tests never reach the real one.
-const API = import.meta.env.WXT_API_URL || 'https://agenticroutines.arunprakashg.com';
+export const API = import.meta.env.WXT_API_URL || 'https://agenticroutines.arunprakashg.com';
 const GOOGLE_CLIENT_ID = '883265328584-285ao8n0u1nkv8b9ftr2q2bov23lieeo.apps.googleusercontent.com';
 
 export interface Account {

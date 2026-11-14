@@ -255,7 +255,7 @@ At most 30 routine tools are exposed at once. The rest are reached with `routine
 | Tool | What it does |
 |---|---|
 | `routines_search` | Find routines for a page or a task. Pass `url` (the page you are on) and/or `query`. Installed routines come first, then the directory (no account needed) and the person's Git sources. A routine that lists the page you are on ranks above one that only matches the site. |
-| `routine_install` | Install `owner/name` from the directory. It is checked again on this side. Any hooks it has stay off until the person reads and allows them in the side panel. |
+| `routine_install` | Ask to install `owner/name` from the directory. The extension fetches it and checks it again, and the side panel shows its name, description, notes and steps. Nothing is saved until the person clicks Install, so it waits for them and needs the browser open. Hooks stay off unless the person allows them there. |
 | `routine_install_from_git` | Ask to install from a GitHub repository. The side panel shows every step and any hook code, and Install is the person's click. Hooks are off unless the person switches them on there. |
 | `routine_publish` | Ask to send a routine for review. The person approves in the side panel. An agent can't publish by itself. |
 | `routine_submissions` | Where each submission stands: waiting, rejected with the guideline, live or turned off. Read only. |
