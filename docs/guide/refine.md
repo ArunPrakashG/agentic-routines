@@ -2,10 +2,10 @@
 
 An agent does not save every run. After it finishes a browser task it decides, on its own and without asking the person, whether the task is likely to repeat and worth keeping, and if so it turns the run into a routine in four steps. Nothing is saved or rewritten until the agent says so.
 
-1. **`routine_propose`** with a name and a description. It returns a draft: every recorded step, numbered, with the page it happened on, the action, the target, and what happened after it ("navigated to /apps", "new on the page: “Release published”").
+1. **`routine_propose`** with a name and a description, and optionally `do_not_use_for`. It drafts from the latest run unless given a `run_id`, or from a saved routine with `from_routine`. It returns a draft: every recorded step, numbered, with the page it happened on, the action, the target, and what happened after it ("navigated to /apps", "new on the page: “Release published”").
 2. **`routine_edit`** changes the draft.
 3. **`routine_test`** replays the draft on the live site.
-4. **`routine_save`** saves it.
+4. **`routine_save`** saves it. It can still change the `name`, `description` and `do_not_use_for` as it saves.
 
 ## Hints
 
@@ -23,7 +23,7 @@ A real case: publishing to a testing track shows a dialog offering to go back to
 
 ## Edits
 
-`routine_edit` takes a list of edits. They apply in order, all or none, and the numbered draft comes back.
+`routine_edit` takes a list of up to 40 edits. They apply in order, all or none, and the numbered draft comes back. `undo` goes back through the last 20 edits.
 
 | Edit | Does |
 |---|---|
@@ -31,17 +31,17 @@ A real case: publishing to a testing track shows a dialog offering to go back to
 | `navigate` | Replace steps `from` to `to` with one step that opens an address. |
 | `open` | Add a step that opens an address before step N. |
 | `handoff` | Add a step before step N that gives the tab to the person, for a login or a code, and waits until they give it back. A test skips it and says so. |
-| `param` | Make a typed value a parameter, by `step` or by `value`. Without either, declare a parameter to use as `{{name}}` in an address. |
+| `param` | Make a typed value a parameter, by `step` or by `value`. Without either, declare a parameter to use as `{{name}}` in an address. `description` says what to give, and `example` is shown as a hint and never published. |
 | `fixed` | Keep the recorded value instead of asking for it. |
 | `pause` | Add a pause before a step, or take away one you added. |
-| `note` | Text for the agent that runs the routine: what to check at this step. |
+| `note` | Text for the agent that runs the routine: what to check at this step, up to 1000 characters. Empty clears it. |
 | `first_in_list` | A click that takes whatever is first in the list next time. |
-| `read` | Adds a step that reads an element's text and returns it under a name you give (`as`). Give `step` to reuse the element another step uses, or `before` with `name` or `text` (and `role`) for an element nothing clicked. The run result carries it. |
+| `read` | Adds a step that reads an element's text and returns it under a name you give (`as`). Give `step` to reuse the element another step uses, or `before` with `name` or `text` (and `role`) for an element nothing clicked. `where: after` puts it after that step instead of before. The run result carries it. |
 | `retarget` | Changes what a step looks for: role, accessible name, text, CSS or the nearby heading. Use it when the recorded name holds text that changes, like a chat row's last message. Steps that submit, publish, pay or delete cannot be retargeted. |
 | `each` | Repeat steps `from` to `to`: for each value of a parameter (`param`), or for each element on the page like the one a step used (`step`). At most `limit` times, 25 unless you say, 100 at the most. |
 | `if` | Run steps `from` to `to` only when the page shows `text` or has the element a step used (`has_step`). Steps after `to` up to `else_to` run otherwise. `not` turns it round. |
 | `describe` | Change the name, description or "do not use for". |
-| `expect` | What the page shows once the task has worked: `text` it shows, part of the `url`. Can use `{{name}}`. Empty clears it. |
+| `expect` | What the page shows once the task has worked: `text` it shows, part of the `url`, each up to 300 characters. Can use `{{name}}`. Empty clears it. |
 | `undo`, `reset` | Back one edit, or back to the proposal. |
 
 ## Loops and branches

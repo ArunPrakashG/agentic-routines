@@ -31,7 +31,7 @@ This is a filter, and filters miss things. A reworded order will not be marked. 
 
 These hold whatever the agent, the page or a routine says:
 
-- **A script runs only on a site the person allowed.** `javascript` waits for the person in the side panel: no, this once, or always on this site. They can take a site back in the panel. A script is never recorded and cannot read cookies, and anything shaped like a token, key or cookie is hidden from what comes back from a script or the console. The hiding catches accidents, not a script written to get around it.
+- **A script stays inside the page.** `javascript` runs only on a website, never in a tab where a secret was typed until that tab goes to a new page, and it does not ask first. A script is never recorded and cannot read cookies, and anything shaped like a token, key or cookie is hidden from what comes back from a script or the console. The hiding catches accidents, not a script written to get around it.
 - **A frame a person cannot see is left out.** A hidden or tiny frame is not in `read_page`, `find` or `get_page_text`, so what it says does not reach the agent.
 - **A dialog that now asks something final stops a replay.** A routine that said yes to a harmless dialog will not say yes to one that now talks about deleting or paying. A yes to one that sounded final when it was recorded pauses like any other irreversible step.
 
@@ -67,6 +67,8 @@ agentic-routines secrets add work_code --origin https://work.example.com --totp
 It asks in the terminal with nothing shown, and a value is never an argument. Nothing is kept unless you do this. The values sit in `~/.agentic-routines/secrets`, readable only by your account. They are not encrypted: anything that runs as you can read them, and that includes an agent's shell if you let it read that folder.
 
 Keeping the seed of a one-time code next to a password makes two-factor sign-in one factor, because anything that can read the folder has both. Do it only for an account where that is acceptable, and limit the session to that site.
+
+A routine run by an agent can also take a secret from that agent's environment: `AGENTIC_ROUTINES_SECRET_<NAME>`, such as `AGENTIC_ROUTINES_SECRET_WORK_PASSWORD` for `{{secret:work_password}}`. `routine_describe` lists the secrets a routine needs. The run screen in the side panel asks for them instead when you start a routine there, and does not keep them.
 
 What an agent gets is the name and the site, from `secrets_list`. It types with `type_secret`, or a routine with `{{secret:name}}`. Then:
 

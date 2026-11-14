@@ -78,7 +78,7 @@ The extension checks every `click` and `type` against the live page before it ac
 - Half a second of run time per hook; a hook that is still going is cut off and the run carries on without its answer.
 - 16 KB of answer. A longer one is refused.
 - 400 hook runs in one replay.
-- Hooks need Chromium. In Firefox the routine runs without them and says so.
+- Hooks need Chromium, and the build loaded by hand from a release or the repository. The store versions leave hooks out, because store rules do not allow code that a routine brings with it. There, and in Firefox, the routine runs without its hooks and the side panel says so.
 
 Hook code is not run in the page and has no network, no storage and no access to the browser. A hook cannot send anything anywhere; what it can do is limited to the directives above, on the routine's own site. A hook that tries `fetch`, `XMLHttpRequest` or a WebSocket gets an error and nothing else happens.
 

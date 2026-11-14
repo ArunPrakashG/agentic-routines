@@ -17,19 +17,19 @@ npx agentic-routines <command>
 | `profiles` | Lists the browser profiles with the extension that are open now, numbered. `profiles name <number> <name>` gives one a name an agent can use to pick it (`browser_profile`, or `AGENTIC_ROUTINES_PROFILE`). |
 | `secrets add <name> --origin <origin> [--totp]` | Keep a password or a one-time code seed on this computer for one site, read from a hidden prompt. `secrets list` and `secrets remove <name>` |
 | `remote pair`, `start`, `status`, `revoke`, `stop` | [A browser on another computer](remote.md). `pair` gives an address and a code to enter in its side panel. |
-| `session list`, `session allow`, `session write` | Named sessions. An agent can tighten a session's limits. Widening them is here, and asks in the terminal |
+| `session list`, `session allow`, `session write` | Named sessions. An agent can tighten a session's limits; widening them is here, and asks in the terminal. `session allow <name> <site> ...` adds sites to its list, `--any` takes the list off, `--private` lets a listed site be on a private address, and `session write <name>` lets a read-only session change pages. |
 | `debug on` / `debug off` | Turns the action log on or off. While it is on, every tool call an agent makes is written to `~/.agentic-routines/logs/actions.jsonl`: the agent, the tool, its arguments, how long it took, whether it worked and what came back (cut short). Text typed into a field and any argument that looks like a secret are never written, only their length. It takes effect on the next call, with no restart. `AGENTIC_ROUTINES_DEBUG=1` in an agent's environment does the same for that agent. |
 | `marks on` / `marks off` | Draws what an agent just clicked or typed into on every screenshot it takes: a numbered box with a label. Handy for QA, as the picture shows what was touched. It adds no tool call and no tokens. An agent can also pass `ref` and `note` to `screenshot` to point at any element with a box, a label and an arrow, whether marks are on or not. With the action log on, pictures are also kept in `~/.agentic-routines/logs/shots`. `AGENTIC_ROUTINES_MARK=1` in an agent's environment does the same for that agent. |
 | `logs [-f]` | Reads the action log. `-f` follows it, `-n 100` shows more lines, `--errors` shows only failures and `--raw` prints the JSON. Each tool call is followed by the calls it made to the browser, so a failure can be traced to the step. |
 | `sources` | Lists the places routines can come from. |
-| `sources add <address>` | Adds a GitHub repository, such as `github.com/owner/repository`. Nothing is installed until you click Install in the side panel. |
+| `sources add <address>` | Adds a GitHub repository, such as `github.com/owner/repository`, or a folder on this computer, such as `~/team-routines`. Nothing is installed until you click Install in the side panel. |
 | `sources check <folder>` | Reads a folder the way a source would and prints every problem in its `config.routine`, with the file, line and field. Run it before you push a [routine repository](/docs/repositories). |
 | `sources remove <address>` | Removes a source. |
 | `project` | Shows the routines this repository shares in `.agentic-routines`, and whether each is installed on this computer. See [Project routines](project.md). |
 | `project add <routine>` | Copies a routine into the repository's `.agentic-routines/routines`, for Git to track. `--examples` keeps the example values. |
 | `project remove <name>` | Deletes a shared routine's file. |
 | `project prune` | Uninstalls the copies on this computer whose file the project no longer has. |
-| `sources on <address>` / `off <address>` | Turns a source on or off. |
+| `sources on <address>` / `off <address>` | Turns a source on or off. `directory` is the public directory. |
 | `export <routine>` | Prints a routine as one file, ready to commit under a repository's `routines/` folder. `--playwright` prints it as a Playwright script instead. |
 | `mcp` | Runs the tool server. Your agent starts this. |
 | `host` | Runs the native host. Your browser starts this. |
@@ -50,7 +50,25 @@ agentic-routines navigate --help
 
 A value the tool needs can go without its flag, in order. Dashes and underscores both work, so `read-page` is `read_page`. An image goes to a temporary file, and the command prints where. It exits 1 when the tool failed.
 
-Each command is its own process, so they share a named session to keep their tabs between them. It is called `cli` unless you say `--session <name>` or set `AGENTIC_ROUTINES_SESSION`. `session_delete cli` closes its tabs and forgets it.
+Each command is its own process, so they share a named session to keep their tabs between them. It is called `cli` unless you say `--session <name>` or set `AGENTIC_ROUTINES_SESSION`. The first command makes it, with no site limits; make it yourself first with `session_new` to limit it. `session_delete cli` closes its tabs and forgets it.
+
+## Environment variables
+
+| Variable | Does |
+|---|---|
+| `AGENTIC_ROUTINES_HOME` | Keeps everything in another folder instead of `~/.agentic-routines`. |
+| `AGENTIC_ROUTINES_SESSION` | The named session an agent's server, or a command, works in. |
+| `AGENTIC_ROUTINES_PROFILE` | The browser profile to use, by the name `profiles name` gave it. |
+| `AGENTIC_ROUTINES_SECRET_<NAME>` | A routine's secret, given by the agent's environment. See [Secrets you keep for a site](safety.md#secrets-you-keep-for-a-site). |
+| `AGENTIC_ROUTINES_DEBUG=1` | Writes the action log for that agent. |
+| `AGENTIC_ROUTINES_MARK=1` | Marks what was clicked on that agent's screenshots. |
+| `AGENTIC_ROUTINES_NO_UPDATE=1` | No updates by themselves. |
+| `AGENTIC_ROUTINES_BASE` | Where updates are downloaded from, for a mirror. |
+| `AGENTIC_ROUTINES_LOCK_WAIT_MS` | How long a run waits for another run of the same routine, two minutes by default. |
+| `AGENTIC_ROUTINES_ALLOW_SENSITIVE_UPLOADS=1` | Lets `upload` send credential files, such as `.env` files and keys. See [Uploading files](tools.md#uploading-files). |
+| `AGENTIC_ROUTINES_CDP_PORT` | A fixed port for `cdp_endpoint`. |
+| `AGENTIC_ROUTINES_API` | Another directory server, for development. |
+| `AGENTIC_ROUTINES_GITHUB_API`, `AGENTIC_ROUTINES_GITHUB_RAW` | Other GitHub addresses for repository sources, for development and tests. |
 
 ## Updates
 

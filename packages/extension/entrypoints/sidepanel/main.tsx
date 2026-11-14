@@ -215,7 +215,6 @@ function SignIn({ back }: { back: () => void }) {
           <ul class="signin-why">
             <li>Publish routines to the community directory</li>
             <li>Track what you submitted and its review</li>
-            <li>Sync your routines across browsers</li>
           </ul>
         )}
         {!form && (
