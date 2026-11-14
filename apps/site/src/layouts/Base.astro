@@ -11,7 +11,8 @@ interface Props {
 }
 const { title, description, path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/?index$/, '/'), noindex = false, jsonLd, dark = false } = Astro.props;
 const canonical = new URL(path, Astro.site).toString().replace(/\/$/, '') || String(Astro.site);
-const full = title === 'Agentic Routines' ? title : `${title} · Agentic Routines`;
+const full = title === 'Agentic Routines' ? 'Agentic Routines · Teach your agent a browser chore once' : `${title} · Agentic Routines`;
+const image = new URL('/og.png', Astro.site).toString();
 const here = Astro.url.pathname.replace(/\.html$/, '');
 const REPO = 'https://github.com/ArunPrakashG/agentic-routines';
 const nav = [
@@ -29,6 +30,7 @@ const nav = [
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="color-scheme" content="light dark" />
     {noindex && <meta name="robots" content="noindex" />}
     <meta property="og:type" content="website" />
@@ -36,9 +38,14 @@ const nav = [
     <meta property="og:title" content={full} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Agentic Routines: teach your agent a browser chore once. It replays without the model." />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={full} />
     <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
   </head>
   <body>
