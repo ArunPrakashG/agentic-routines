@@ -129,7 +129,7 @@ const Pips = ({ colors, label }: { colors?: string[]; label: string }) => (
 
 // ---------- views ----------
 
-type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' } | { v: 'signin' };
+type View = { v: 'library' } | { v: 'save'; runId: string } | { v: 'inputs'; id: string; name: string } | { v: 'submissions' } | { v: 'sources' } | { v: 'settings' } | { v: 'signin' } | { v: 'deleteAccount' };
 
 function RecordButton({ on }: { on: boolean }) {
   return (
@@ -351,13 +351,20 @@ function Account({ account, go }: { account?: AccountInfo; go?: (v: View) => voi
             </button>
           )}
           {account ? (
-            <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
-              Sign out
-            </button>
+            <>
+              <button class="btn btn-secondary sm" type="button" onClick={() => send({ t: 'signOut' })}>
+                Sign out
+              </button>
+              {go && (
+                <button class="btn btn-ghost sm danger" type="button" onClick={() => { setOpen(false); go({ v: 'deleteAccount' }); }}>
+                  Delete account
+                </button>
+              )}
+            </>
           ) : (
             go && (
               <>
-                <span class="why">Sign in to publish routines to the community and sync them across browsers.</span>
+                <span class="why">Sign in to publish routines to the directory.</span>
                 <button class="btn btn-primary sm" type="button" onClick={() => { setOpen(false); go({ v: 'signin' }); }}>
                   Sign in
                 </button>
@@ -917,6 +924,18 @@ const GUIDELINES: Record<string, string> = {
 function Submissions({ s, back }: { s: PanelState; back: () => void }) {
   const [data, setData] = useState<{ routines: LiveRoutine[]; submissions: Submission[] }>();
   const [error, setError] = useState('');
+  // The live routine the person is about to take down, asked once more first.
+  const [sure, setSure] = useState('');
+  const [busy, setBusy] = useState(false);
+  const takeDown = (name: string) => {
+    setBusy(true);
+    send({ t: 'takeDown', name })
+      .then(load, (e) => setError(e.message))
+      .finally(() => {
+        setBusy(false);
+        setSure('');
+      });
+  };
   const load = () => send<{ routines: LiveRoutine[]; submissions: Submission[] }>({ t: 'submissions' }).then(setData, (e) => setError(e.message));
   useEffect(() => void load(), []);
   const mine = new Set(s.routines.filter((r) => r.owner === 'local').map((r) => r.name));
@@ -987,10 +1006,29 @@ function Submissions({ s, back }: { s: PanelState; back: () => void }) {
               </span>
               <span class="meta">{r.disabled ? 'Not listed, and it stopped installing.' : `${r.installs} installs`}</span>
               {r.disabled && <span class="desc">{r.disabled_reason}</span>}
-              {r.disabled && mine.has(r.name) && (
-                <button class="btn btn-secondary sm" type="button" onClick={() => fix(r.name)}>
-                  Fix and resubmit
-                </button>
+              {sure === r.name ? (
+                <>
+                  <span class="desc">It leaves the directory and stops installing. People who installed it keep their copy.</span>
+                  <span class="acts">
+                    <button class="btn btn-secondary sm" type="button" disabled={busy} onClick={() => setSure('')}>
+                      Keep it
+                    </button>
+                    <button class="btn btn-secondary sm danger" type="button" disabled={busy} onClick={() => takeDown(r.name)}>
+                      {busy ? 'Taking down…' : 'Take it down'}
+                    </button>
+                  </span>
+                </>
+              ) : (
+                <span class="acts">
+                  {r.disabled && mine.has(r.name) && (
+                    <button class="btn btn-secondary sm" type="button" onClick={() => fix(r.name)}>
+                      Fix and resubmit
+                    </button>
+                  )}
+                  <button class="btn btn-secondary sm" type="button" onClick={() => setSure(r.name)}>
+                    Take down
+                  </button>
+                </span>
               )}
             </div>
           ))}
@@ -998,6 +1036,50 @@ function Submissions({ s, back }: { s: PanelState; back: () => void }) {
         <span class="meta" style={{ whiteSpace: 'normal' }}>
           Every submission is read against the directory guidelines before it is listed.
         </span>
+      </main>
+    </div>
+  );
+}
+
+function DeleteAccount({ s, back }: { s: PanelState; back: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const go = () => {
+    setBusy(true);
+    setError('');
+    send({ t: 'deleteAccount' }).then(back, (e) => {
+      setError(e.message);
+      setBusy(false);
+    });
+  };
+  return (
+    <div class="panel">
+      <header class="bar back">
+        <button class="icon-btn" type="button" aria-label="Back to routines" disabled={busy} onClick={back}>
+          <Back />
+        </button>
+        <h1>Delete account</h1>
+      </header>
+      <main class="form">
+        <span class="mono" style={{ fontSize: '13px' }}>{s.account?.email}</span>
+        <div class="warnbox bad" role="note">
+          <span class="wt">This can’t be undone</span>
+          <span class="meta">Your account, its sign-ins and everything you published to the directory are deleted. People who installed your routines keep their copies.</span>
+        </div>
+        <span class="meta" style={{ whiteSpace: 'normal' }}>Your routines on this computer stay. You can keep recording and running them without an account.</span>
+        {error && (
+          <span class="err" role="alert">
+            {error}
+          </span>
+        )}
+        <div class="foot2">
+          <button class="btn btn-ghost" type="button" disabled={busy} onClick={back}>
+            Cancel
+          </button>
+          <button class="btn btn-primary danger" type="button" disabled={busy} onClick={go}>
+            {busy ? 'Deleting…' : 'Delete my account'}
+          </button>
+        </div>
       </main>
     </div>
   );
@@ -1671,6 +1753,7 @@ function App() {
   if (view.v === 'save') return <Save s={s} runId={view.runId} back={back} />;
   if (view.v === 'inputs') return <Inputs id={view.id} name={view.name} back={back} />;
   if (view.v === 'submissions') return <Submissions s={s} back={back} />;
+  if (view.v === 'deleteAccount') return <DeleteAccount s={s} back={back} />;
   if (view.v === 'sources') return <Sources back={back} />;
   if (view.v === 'settings') return <SettingsView s={s} back={back} />;
   return <Library s={s} go={setView} />;

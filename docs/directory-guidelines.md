@@ -27,7 +27,7 @@ The Directory is a list of routines other people run in their own signed-in brow
 
 **G7. Be honest about who made it.** Your handle is yours. Do not pass a routine off as someone else's, or use a name that imitates a person or a company. You must have the right to share what you submit.
 
-**G8. Keep it working.** When a site changes and the routine breaks, fix it, or open an issue to have it taken down. Routines that stay broken are turned off.
+**G8. Keep it working.** When a site changes and the routine breaks, fix it, or take it down from Your submissions in the side panel. Routines that stay broken are turned off.
 
 **G9. Hooks and notes stay honest.** A hook does what the description says, and only that. It is short enough to read in full, with nothing obfuscated or built to be hard to follow. It does not try to reach outside its sandbox: hooks have no network and cannot send anything anywhere, and a hook that tries is a sign of what the author wanted. It does not try to talk the person's agent into something: notes for the agent describe the routine, and say nothing about other tasks, other sites, or ignoring the user. A routine with hooks or notes says so in its description. Reviewers read the hook code and the notes, and an update that changes either is read again.
 

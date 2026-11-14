@@ -64,8 +64,9 @@ Signing in is optional. Recording, running and editing routines never need an ac
 - **Sign in** with Google, GitHub or Microsoft, or with an email address and a password. For email, the panel mails a 6-digit code to show the address is yours, then you choose a password of at least 10 characters. **New here, or forgot your password?** does the same for a new account or a forgotten password. Too many wrong passwords locks sign-in for 15 minutes.
 - **Sources**: where routines come from. Turn the directory on or off, and each repository or folder. Open one to see its routines, any problems in its `config.routine`, and **Review** for each routine before you install it. **Remove this source** takes it away. Add a GitHub repository or a folder on this computer. A project's own folder shows as Project. See [Routine repositories](repositories.md).
 - **Settings**: where agent tabs open, tab groups, when an agent's untouched tab closes, the agent's cursor, hand-over notifications and input at a person's pace ([Settings and status](tools.md#settings-and-status)). Pairing with [a browser on another computer](remote.md) is here too.
-- **Your submissions**: what you sent to the directory and where each stands ([Sharing and publishing](sharing.md)).
+- **Your submissions**: what you sent to the directory and where each stands. Withdraw one that waits for review, or **Take down** one that is live ([Sharing and publishing](sharing.md)).
 - **Sign out**.
+- **Delete account**: deletes your account, its sign-ins and everything you published, after you confirm. Your routines on this computer stay.
 
 ## Approvals
 

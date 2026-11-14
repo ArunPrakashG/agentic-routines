@@ -146,6 +146,13 @@ export async function signOut(): Promise<void> {
   if (s) await post('/auth/signout', { refresh_token: s.refresh }).catch(() => {});
 }
 
+/** Deletes the account, its sessions and everything it published, then signs out here. */
+export async function deleteAccount(): Promise<void> {
+  const res = await api('DELETE', '/me');
+  if (!res.ok) throw new Error('Could not delete the account. Try again.');
+  await browser.storage.local.remove(['session', 'published']);
+}
+
 let refreshing: Promise<string | undefined> | undefined;
 
 async function refresh(s: Session): Promise<string | undefined> {

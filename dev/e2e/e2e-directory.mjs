@@ -115,7 +115,27 @@ bad.steps[0].url = 'https://evil.example/reports';
 const rows = { 'pone/weekly-report': good, 'pone/tampered': bad };
 let fetched = 0;
 let installs = 0;
+let live = [{ name: 'weekly-report', site: 'example.com', version: 3, installs: 12, updated_at: new Date().toISOString(), disabled: false, disabled_reason: null }];
+let deleted = false;
+const calls = [];
+const json = (res, v) => {
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify(v));
+};
 const api = createServer((req, res) => {
+  calls.push(`${req.method} ${req.url}`);
+  if (req.url === '/api/v1/me/routines') return json(res, { routines: live });
+  if (req.url === '/api/v1/me/submissions') return json(res, { submissions: [] });
+  if (req.method === 'DELETE' && req.url === '/api/v1/routines/weekly-report') {
+    live = [];
+    res.statusCode = 204;
+    return res.end();
+  }
+  if (req.method === 'DELETE' && req.url === '/api/v1/me') {
+    deleted = req.headers.authorization === 'Bearer x';
+    res.statusCode = 204;
+    return res.end();
+  }
   const m = /^\/api\/v1\/routines\/([a-z0-9-]+\/[a-z0-9-]+)(\/installs)?$/.exec(req.url);
   if (m?.[2]) {
     installs++;
@@ -185,6 +205,36 @@ check(t.error && !saved('tampered'), 'nothing is saved');
 t = await call('routine_install', { id: 'pone/nope' });
 check(t.error && /not in the directory/i.test(t.text), 'an unknown routine is reported');
 check(fetched >= 3, 'the extension fetched each routine itself');
+
+// ---------- 5. take down a live routine ----------
+const menu = async (item) => {
+  await panelClick('Account');
+  await sleep(200);
+  return panelClick(item);
+};
+check(await menu('Your submissions'), 'the person opens Your submissions');
+check(await panelWait(/weekly-report[\s\S]*Live[\s\S]*Take down/), 'a live routine has Take down');
+await panelClick('Take down');
+check(await panelWait(/keep their copy/), 'it asks once more, and says installed copies stay');
+await look('take-down-confirm');
+check(!calls.some((c) => c.startsWith('DELETE /api/v1/routines')), 'nothing is taken down before the second click');
+await panelClick('Take it down');
+check(await panelWait(/Nothing sent yet/), 'after the second click it is gone from the list');
+check(calls.includes('DELETE /api/v1/routines/weekly-report'), 'and the directory was asked to take it down');
+await panelClick('Back to routines');
+await sleep(300);
+
+// ---------- 6. delete the account ----------
+check(await menu('Delete account'), 'the account menu has Delete account');
+check(await panelWait(/can’t be undone/), 'it says it cannot be undone and what goes');
+await look('delete-account');
+check(!deleted, 'nothing is deleted before the click');
+await panelClick('Delete my account');
+for (let i = 0; i < 30 && !deleted; i++) await sleep(100);
+check(deleted, 'the directory was asked to delete it, signed in');
+await sleep(500);
+const session = await panelEval(`chrome.storage.local.get('session').then((x) => !!x.session)`);
+check(session === false, 'and this browser is signed out');
 
 await client.close();
 api.close();

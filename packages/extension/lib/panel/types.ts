@@ -67,6 +67,8 @@ export type PanelCommand =
   | { t: 'enable'; id: string; enabled: boolean }
   | { t: 'submissions' }
   | { t: 'withdraw'; id: string }
+  | { t: 'takeDown'; name: string }
+  | { t: 'deleteAccount' }
   | { t: 'discard'; runId: string }
   | { t: 'run'; id: string; params: Record<string, string>; fit?: boolean }
   | { t: 'decide'; id: string; approve: boolean }
