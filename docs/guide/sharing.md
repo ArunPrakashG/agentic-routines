@@ -54,4 +54,4 @@ See [Routine format](/docs/routines) for how to export a routine as a file.
 
 ## Taking something down
 
-You can withdraw a submission while it waits for review. A live routine has no button to take it down yet: open an issue on GitHub and it is turned off. Anyone who installed it keeps their local copy. Agentic Routines can turn off a listed routine or block a publisher, and always says why. The block list is public, and installs from a blocked source are turned off with a note.
+You can withdraw a submission while it waits for review. To take a live routine down, open **Your submissions**, press **Take down** and confirm. It leaves the directory and stops installing. Anyone who installed it keeps their local copy. Agentic Routines can turn off a listed routine or block a publisher, and always says why. The block list is public, and installs from a blocked source are turned off with a note.

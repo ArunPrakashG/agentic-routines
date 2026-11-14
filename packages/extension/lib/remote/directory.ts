@@ -110,6 +110,12 @@ export async function withdraw(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error('Could not withdraw it. Try again.');
 }
 
+/** Takes a live routine out of the directory. Copies people already installed stay with them. */
+export async function takeDown(name: string): Promise<void> {
+  const res = await auth.api('DELETE', `/routines/${encodeURIComponent(name)}`);
+  if (!res.ok && res.status !== 404) throw new Error('Could not take it down. Try again.');
+}
+
 export async function claimHandle(handle: string): Promise<void> {
   const res = await auth.api('PUT', '/me/handle', { handle });
   if (!res.ok) {

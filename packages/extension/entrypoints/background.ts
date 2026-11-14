@@ -452,6 +452,19 @@ export default defineBackground(() => {
         return directory.mine();
       case 'withdraw':
         return directory.withdraw(c.id);
+      case 'takeDown': {
+        await directory.takeDown(c.name);
+        // It is no longer listed, so the library stops showing it as published.
+        const { published = {} } = (await browser.storage.local.get('published')) as { published?: Published };
+        for (const [k, v] of Object.entries(published)) if (v.as.endsWith(`/${c.name}`)) delete published[k];
+        await browser.storage.local.set({ published });
+        await refreshRoutines();
+        return;
+      }
+      case 'deleteAccount':
+        await auth.deleteAccount();
+        await refreshRoutines();
+        return;
       case 'discard':
         return runs.discard(c.runId);
       case 'inputs': {

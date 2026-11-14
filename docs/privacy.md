@@ -29,7 +29,7 @@ Signing in is optional. Recording, running and editing routines on your computer
 
 - The extension opens Google's sign-in. Our server receives the one-time code Google returns, checks it with Google, and stores your Google account id, email address, name and picture.
 - It also stores a hash of the session token and the id of the browser install the session belongs to.
-- Signing out ends the session. Deleting your account removes these records, your sessions and everything you published. The extension has no button for it yet, so ask for it by opening an issue on GitHub and it is done by hand.
+- Signing out ends the session. Deleting your account removes these records, your sessions and everything you published. Do it from the side panel: the account menu, then **Delete account**.
 
 ## If you publish a routine
 
