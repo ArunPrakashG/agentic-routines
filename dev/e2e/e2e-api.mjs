@@ -716,6 +716,13 @@ check((await call(null, 'GET', '/routines/ptwo/gmail-label')).status === 404 && 
 let limited = false;
 for (let i = 0; i < 60 && !limited; i++) limited = (await post('/auth/refresh', {}, '10.9.9.9')).status === 429;
 check(limited, 'too many sign-in calls from one address are limited');
+// With Redis not answering, the count is kept in the API process instead of letting everything through.
+sh(`docker pause ${REDIS}`);
+limited = false;
+for (let i = 0; i < 60 && !limited; i++) limited = (await post('/auth/refresh', {}, '10.9.9.10')).status === 429;
+const elsewhere = (await post('/auth/refresh', {}, '10.9.9.11')).status;
+sh(`docker unpause ${REDIS}`);
+check(limited && elsewhere !== 429, 'and still are while Redis is down, counted per address in the API');
 
 // ---------- how fast ----------
 const token = (await kept.json()).access_token;
