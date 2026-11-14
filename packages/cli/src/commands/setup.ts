@@ -4,7 +4,7 @@ import { chmod, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promise
 import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
+import { applyEdits, findNodeAtLocation, modify, parse as parseJsonc, parseTree } from 'jsonc-parser';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { BROWSERS, hostManifest, type Browser, type OS } from '@agentic-routines/browsers';
 import { launcher } from '../update.ts';
@@ -117,6 +117,8 @@ async function editJson(file: string, path: (string | number)[], value: unknown,
 async function dropJson(file: string, path: (string | number)[], dry: boolean) {
   if (!existsSync(file)) return;
   const before = await readFile(file, 'utf8');
+  const tree = parseTree(before);
+  if (!tree || !findNodeAtLocation(tree, path)) return; // Nothing there, and modify throws on a missing parent.
   const after = applyEdits(before, modify(before, path, undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
   if (!dry && after !== before) save(file, after);
 }
