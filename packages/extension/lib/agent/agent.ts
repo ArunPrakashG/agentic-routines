@@ -210,7 +210,7 @@ async function act(source: string, session: string | undefined, tabId: number, r
       throw new Error(`The field did not keep the secret ${stored}: it holds something else now. Check what the field accepts with read_page.`);
     }
   }
-  const after = await settle(tabId, before);
+  const after = await settle(tabId, before, action === 'type' || action === 'set' || action === 'select' || action === 'clear');
   // A click on a tick is kept as what it came to, or a replay would untick what is already ticked.
   if (action === 'click' && d.state !== undefined && after === before && !how?.button && !how?.count) {
     const now = await ask<Described>(tabId, { t: 'describe', ref }).then((x) => x.state, () => undefined);

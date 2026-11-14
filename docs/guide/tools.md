@@ -25,6 +25,7 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `scroll` | Turn the wheel: `direction` and `amount`, over the middle of the page or over a ref or a point. Only a `ref` brings that element into view. `click` and `type` do that by themselves. |
 | `wait` | Wait some seconds. `read_page` with `wait` is usually better: it stops when the page is quiet. |
 | `resize_window` | Make the page lay out at another size, as a narrow window or a phone would, to see a layout or a mobile site. It changes only that tab, not the person's window. `reset` goes back. Read the page again after it. |
+| `script` | Do a whole task in one call with a short JavaScript program whose helpers are the step tools. See [A whole task in one script](#a-whole-task-in-one-script). |
 | `batch` | Run up to 20 of these one after another in one call and get every answer back together: `navigate`, `read_page`, `find`, `get_page_text`, `click`, `hover`, `drag`, `scroll`, `type`, `press`, `select`, `form_input`, `wait`, `screenshot`, `dialog` and `resize_window`. Each runs as it would alone, with the same checks, pauses and recording, and the batch stops at the first one that fails. Uploads, scripts, hand-overs and secrets are not allowed in a batch. |
 | `type` | Type into a field by ref. Replaces what is there. `submit` presses Enter after. |
 | `select` | Pick an option in a select, by label or value. |
@@ -55,6 +56,26 @@ Your agent works in its own tab unless told otherwise. Everything it does with t
 | `site` | `routines_search` | Only routines for that site. |
 
 Everything these tools return that came from a page is [untrusted data](/docs/safety): wrapped between `BEGIN` and `END UNTRUSTED DATA` lines with a boundary that is new for each call, never instructions.
+
+### A whole task in one script
+
+`script` takes JavaScript (with `await`) that calls these helpers. Each helper is a step tool call, so the run is recorded and saves as a routine like any other. The script itself is never kept.
+
+| Helper | Does |
+|---|---|
+| `open(url)` | Goes to a full address, or a path on the current site such as `/app/settings`. |
+| `click(target)`, `type(target, text, {submit})`, `press(keys)` | As the tools of the same name. |
+| `fill(target, value)`, `check(target, on)`, `select(target, value)` | Put a field, checkbox or list into a state. |
+| `upload(target, absolutePath)` | Gives a file to a file input. |
+| `wait(seconds)` | Waits. |
+| `find(query)`, `read({all, full})`, `text()` | Return page text. `read` folds lines the last read already showed, such as a site menu, and long runs of rows that look alike; `full: true` shows everything. |
+| `print(...)` | Adds to what comes back. Only what is printed or returned comes back. |
+| `param(name, value)` | Returns `value` and marks it as what changes each run, as in `fill("Version", param("version", "2.15.0"))`. |
+| `expect(text)` | Marks what the page says once the task worked. |
+
+A target is the words on the element (its label, name or text, as `find` matches them) or a ref from `read_page`. Helpers run in the order they are called, awaited or not. The first that fails stops the script: the steps before it stay done, and the reply lists them and shows the page it stopped on, so guessing the next clicks from the task costs little when a guess is wrong.
+
+`routine_propose` applies the `param` and `expect` marks, so a routine saved from a script run needs no edits for them. The code runs sandboxed, with no network, no files and no Node, and stops after 120 seconds unless `timeout_seconds` says otherwise (600 at most). Page text it reads is untrusted data.
 
 ### Video, flight recorder and network capture
 

@@ -466,7 +466,7 @@ const carry = (raw: string | null | undefined, cleaned: string) => {
 export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400): { text: string; notes: OutlineNotes } {
   const lines = [clean(unmark(document.title), 200), location.href, ''];
   const notes: OutlineNotes = { omitted: {}, longValues: 0 };
-  const want = filter === 'all' ? `${INTERACTIVE},${HEADINGS},p,li,td,th,[role=alert],[role=status],dialog` : `${INTERACTIVE},${HEADINGS},[role=alert],dialog`;
+  const want = filter === 'all' ? `${INTERACTIVE},${HEADINGS},p,li,td,th,[role=alert],[role=status],output,dialog` : `${INTERACTIVE},${HEADINGS},[role=alert],[role=status],output,dialog`;
   const seen = new Set<Element>();
   const omit = (why: string) => (notes.omitted[why] = (notes.omitted[why] ?? 0) + 1);
   const plain = new Set(plainClickables());
@@ -510,6 +510,14 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
       if (name) lines.push(`${'#'.repeat(Number(el.tagName[1]) || 2)} ${name}`);
       continue;
     }
+    // What a page says back after an action (saved, sent, an error) is how the agent knows the step took.
+    if (el.matches('[role=alert],[role=status],output')) {
+      if (el.querySelector(INTERACTIVE)) continue;
+      const raw = seenText(el);
+      const t = carry(raw, clean(raw, 300));
+      if (t) lines.push(`  ${el.getAttribute('role') === 'alert' ? 'Alert' : 'Status'}: ${t}`);
+      continue;
+    }
     if (el.matches('p,li,td,th')) {
       if (el.querySelector(INTERACTIVE)) continue;
       const raw = seenText(el);
@@ -525,10 +533,20 @@ export function outline(filter: 'interactive' | 'all' = 'interactive', max = 400
       else if (el.value) extra = ` value="${clean(el.value, 60)}"`;
     } else if (el instanceof HTMLSelectElement) {
       extra = ` value="${clean(el.selectedOptions[0]?.textContent, 60)}"`;
+      // The choices, so a select is set in one step without opening it first.
+      const opts = [...el.options].map((o) => clean(o.textContent, 40)).filter(Boolean);
+      if (opts.length) extra += ` options: ${opts.slice(0, 12).map((o) => JSON.stringify(o)).join(', ')}${opts.length > 12 ? `, … ${opts.length - 12} more` : ''}`;
     } else if (el.getAttribute('aria-expanded')) {
       extra = el.getAttribute('aria-expanded') === 'true' ? ' expanded' : ' collapsed';
     }
     if (el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true') extra += ' disabled';
+    // Where a link goes, so the agent can open it directly; a routine made from the run then opens the address too.
+    if (el instanceof HTMLAnchorElement && el.href && /^https?:/.test(el.href)) {
+      const u = new URL(el.href);
+      const here = u.origin === location.origin;
+      const to = here ? u.pathname + u.search : u.origin + u.pathname;
+      if (!(here && u.pathname === location.pathname && u.search === location.search)) extra += ` → ${clean(to, 100)}`;
+    }
     lines.push(`${refOf(el)} ${plain.has(el) ? 'clickable' : r} “${name}”${extra}`);
   }
   return { text: lines.join('\n'), notes };

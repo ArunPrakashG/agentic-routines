@@ -127,15 +127,17 @@ export async function waitLoaded(tabId: number, timeoutMs = 30_000) {
 }
 
 /** After an action: let the page react, and follow a navigation if one started. */
-export async function settle(tabId: number, beforeUrl: string): Promise<string> {
-  await sleep(250);
+export async function settle(tabId: number, beforeUrl: string, quick = false): Promise<string> {
+  // Putting a value in a field seldom leaves the page, so it gets a short look; a click or a key gets the full wait.
+  await sleep(quick ? 80 : 250);
   let t = await browser.tabs.get(tabId);
-  if (t.status === 'loading' || t.url !== beforeUrl) {
+  const moved = t.status === 'loading' || t.url !== beforeUrl;
+  if (moved) {
     await waitLoaded(tabId);
     t = await browser.tabs.get(tabId);
   }
   await wake(tabId);
-  await sleep(150);
+  if (!quick || moved) await sleep(150);
   return t.url ?? beforeUrl;
 }
 
