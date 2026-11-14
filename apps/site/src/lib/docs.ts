@@ -26,6 +26,11 @@ export const pages = [
   { slug: 'development', title: 'Development', summary: 'Repository layout, running it locally and adding a browser.' },
 ] as const;
 
+/** GitHub's heading id: the text, lower case, punctuation dropped, spaces as dashes. */
+function headingId(html: string) {
+  return html.replace(/<[^>]+>/g, '').replace(/&[#a-z0-9]+;/gi, '').toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-');
+}
+
 export async function render(slug: string): Promise<{ title: string; html: string }> {
   // Relative to the site's folder, which is where astro runs: the built chunk's own location moves between Astro versions.
   const md = readFileSync(join(process.cwd(), '../../docs/guide', `${slug}.md`), 'utf8');
@@ -34,6 +39,8 @@ export async function render(slug: string): Promise<{ title: string; html: strin
     // Links between guide pages are written as files so they work on GitHub too; on the site they are pages.
     .replace(/href="([a-z-]+)\.md(#[^"]*)?"/g, (_, page, hash = '') => `href="/docs/${page}${hash}"`)
     // Links out of the guide go to the repository.
-    .replace(/href="\.\.\/\.\.\/([^"]*)"/g, (_, path) => `href="${REPO}/tree/main/${path}"`);
+    .replace(/href="\.\.\/\.\.\/([^"]*)"/g, (_, path) => `href="${REPO}/tree/main/${path}"`)
+    // Headings get the ids GitHub gives them, so a link to a section lands on it here too.
+    .replace(/<h([2-4])>(.*?)<\/h\1>/g, (_, level, inner) => `<h${level} id="${headingId(inner)}">${inner}</h${level}>`);
   return { title, html };
 }
