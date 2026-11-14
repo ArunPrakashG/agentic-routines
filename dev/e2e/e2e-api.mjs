@@ -695,24 +695,12 @@ let t = await tool('routines_search', { site: 'https://play.google.com/console/x
 check(!t.error && t.text.includes('pone/play-release v2') && t.text.includes('Use when'), 'an agent finds a routine by the site it is on');
 t = await tool('routines_search', { query: 'nothing like this' });
 check(!t.error && /nothing installed, in the directory/i.test(t.text), 'and is told when there is none');
+// Installing waits for the person in the side panel (dev/e2e/e2e-directory.mjs), so with no browser nothing is saved.
 t = await tool('routine_install', { id: 'pone/play-release' });
-check(!t.error && t.text.includes('Installed pone/play-release v2') && t.text.includes('asks for version_name') && t.text.includes('pauses before step 3'), 'an agent installs it and is told what it asks and where it pauses');
-const onDisk = (f) => sh(`cat '${mcpHome}/routines/pone/play-release/${f}'`).stdout;
-check(onDisk('ROUTINE.md').includes('owner: pone') && JSON.parse(onDisk('steps.json')).length === 3, 'it is saved under its owner, all steps');
-check(!onDisk('ROUTINE.md').includes('private'), 'with no example value in it');
-await sleep(500);
-check(psql("SELECT installs FROM routines WHERE name = 'play-release'") === '2', 'and the install was counted');
-check((await agent.listTools()).tools.some((x) => x.name === 'rt_play_release'), 'it shows up as a tool of its own');
-t = await tool('routine_install', { id: 'pone/nope' });
-check(t.error && /not in the directory/i.test(t.text), 'an unknown routine is reported');
+check(t.error && /no browser is connected/i.test(t.text) && sh(`test -d '${mcpHome}/routines/pone/play-release'`).status !== 0, 'installing without a browser says so, and saves nothing')
 t = await tool('routine_publish', { name: 'play-release' });
 check(t.error && /not connected/i.test(t.text), 'publishing without a browser says so, and does not publish');
 
-// A bad row in the directory must not get into the browser: what runs there is decided on this side too.
-await publishLive(p1, 'tamper-me', routine({ meta: { ...routine().meta, name: 'tamper-me' } }));
-psql(`UPDATE routines SET steps = jsonb_set(steps, '{0,url}', '\\"https://evil.example/\\"') WHERE name = 'tamper-me'`);
-t = await tool('routine_install', { id: 'pone/tamper-me' });
-check(t.error && /leaves play\.google\.com/.test(t.text) && sh(`test -d '${mcpHome}/routines/pone/tamper-me'`).status !== 0, 'a routine whose step leaves its site is not installed, whatever the directory says');
 await agent.close();
 
 let writes = [];

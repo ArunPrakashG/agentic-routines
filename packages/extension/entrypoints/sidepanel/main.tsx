@@ -653,13 +653,19 @@ function InstallGit({ card }: { card: GitCard }) {
       </header>
       <main class="form install" style={{ gap: '16px' }}>
         <div class="stack" style={{ gap: '2px' }}>
-          <span class="mono" style={{ fontSize: '13px' }}>{card.kind === 'folder' ? card.source.replace(/^\/home\/[^/]+/, '~') : repoName(card.source)}</span>
-          <span class="meta mono">{card.path}{card.ref ? ` · ${card.ref.slice(0, 7)}` : ''}</span>
+          <span class="mono" style={{ fontSize: '13px' }}>{card.kind === 'directory' ? `Directory · by ${card.source}` : card.kind === 'folder' ? card.source.replace(/^\/home\/[^/]+/, '~') : repoName(card.source)}</span>
+          {card.kind !== 'directory' && <span class="meta mono">{card.path}{card.ref ? ` · ${card.ref.slice(0, 7)}` : ''}</span>}
         </div>
-        <div class="warnbox" role="note">
-          <span class="wt">Not reviewed by Agentic Routines</span>
-          <span class="meta">{card.by ? `${card.by} asked for this. ` : ''}Anyone can put a routine in a repository. Read the steps before you install.</span>
-        </div>
+        {card.kind === 'directory' ? (
+          <span class="meta" style={{ whiteSpace: 'normal' }}>
+            {card.by ? `${card.by} asked for this. ` : ''}A person read it before it was listed, but {card.source} wrote it, not you. Read the steps before you install.
+          </span>
+        ) : (
+          <div class="warnbox" role="note">
+            <span class="wt">Not reviewed by Agentic Routines</span>
+            <span class="meta">{card.by ? `${card.by} asked for this. ` : ''}Anyone can put a routine in a repository. Read the steps before you install.</span>
+          </div>
+        )}
         <div class="stack" style={{ gap: '6px' }}>
           <span class="title mono">{card.name}</span>
           <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere' }}>{card.description}</span>
@@ -674,7 +680,7 @@ function InstallGit({ card }: { card: GitCard }) {
             <div class={x.pause ? 'gstep flag' : 'gstep'} key={x.n}>
               <span class="n">{x.n}</span>
               <span>{x.action}</span>
-              <span class="t">{x.action === 'navigate' || x.action === 'type' || x.action === 'select' ? (x.value ?? x.label) : x.label}</span>
+              <span class="t">{x.action === 'navigate' ? (x.url ?? x.value ?? x.label) : x.action === 'type' || x.action === 'select' ? (x.value ?? x.label) : x.label}</span>
               {x.pause && <span class="tag warn">pause</span>}
             </div>
           ))}
@@ -684,6 +690,12 @@ function InstallGit({ card }: { card: GitCard }) {
             </button>
           )}
         </section>
+        {card.body && (
+          <div class="stack" style={{ gap: '6px' }}>
+            <span class="meta">Notes</span>
+            <span class="desc" style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--text-2)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{card.body}</span>
+          </div>
+        )}
         {(card.instructions || card.repoInstructions) && (
           <div class="stack" style={{ gap: '6px' }}>
             <span class="meta">Notes the author wrote for your agent</span>
