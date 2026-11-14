@@ -21,6 +21,8 @@ The draft ends with hints. A hint is a suggestion with the exact edit that would
 
 A real case: publishing to a testing track shows a dialog offering to go back to the overview. The recorded run clicks through it and then clicks its way to the page the next step needs. The hint says those clicks only get to one address, and the agent replaces them with `navigate <that address>`. The routine is shorter and does not depend on the dialog.
 
+A run done with the [`script`](tools.md#a-whole-task-in-one-script) tool drafts the same way, and the values and checks it marked with `param` and `expect` are already applied.
+
 ## Edits
 
 `routine_edit` takes a list of up to 40 edits. They apply in order, all or none, and the numbered draft comes back. `undo` goes back through the last 20 edits.
