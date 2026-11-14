@@ -4,17 +4,81 @@ import (
 	"context"
 	"log/slog"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 // limiter counts calls per visitor in Redis, so the count survives a restart and holds if
-// there is ever more than one instance. If Redis is down it lets calls through.
+// there is ever more than one instance. If Redis is down it counts in this process instead, so
+// sign-in and publishing still have a limit, though one that resets on a restart.
 type limiter struct {
 	rdb    *redis.Client
 	limit  int64
 	window time.Duration
+	local  localCounts
+}
+
+// localCounts is the in-process stand-in for Redis: a count per key, and when its window ends.
+type localCounts struct {
+	mu   sync.Mutex
+	keys map[string]localCount
+}
+
+type localCount struct {
+	n     int64
+	until time.Time
+}
+
+// maxLocalKeys bounds memory if Redis stays down under a flood of new visitors.
+const maxLocalKeys = 50_000
+
+func (c *localCounts) incr(key string, window time.Duration) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	if c.keys == nil {
+		c.keys = map[string]localCount{}
+	}
+	e, ok := c.keys[key]
+	if !ok || !now.Before(e.until) {
+		if !ok && len(c.keys) >= maxLocalKeys {
+			c.prune(now)
+		}
+		e = localCount{until: now.Add(window)}
+	}
+	e.n++
+	c.keys[key] = e
+	return e.n
+}
+
+func (c *localCounts) get(key string) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.keys[key]; ok && time.Now().Before(e.until) {
+		return e.n
+	}
+	return 0
+}
+
+func (c *localCounts) del(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.keys, key)
+}
+
+// prune drops ended windows, and if every window is still running, all of them: a fresh count is
+// better than an unbounded map. Called with the lock held.
+func (c *localCounts) prune(now time.Time) {
+	for k, e := range c.keys {
+		if !now.Before(e.until) {
+			delete(c.keys, k)
+		}
+	}
+	if len(c.keys) >= maxLocalKeys {
+		clear(c.keys)
+	}
 }
 
 func newLimiter(url string, limit int, window time.Duration) (*limiter, error) {
@@ -26,7 +90,7 @@ func newLimiter(url string, limit int, window time.Duration) (*limiter, error) {
 	o.DialTimeout = 500 * time.Millisecond
 	o.ReadTimeout = 200 * time.Millisecond
 	o.WriteTimeout = 200 * time.Millisecond
-	return &limiter{redis.NewClient(o), int64(limit), window}, nil
+	return &limiter{rdb: redis.NewClient(o), limit: int64(limit), window: window}, nil
 }
 
 func (l *limiter) allow(ctx context.Context, group, visitor string) bool {
@@ -42,8 +106,8 @@ func (l *limiter) within(ctx context.Context, group, visitor string, limit int64
 	n := pipe.Incr(ctx, key)
 	pipe.ExpireNX(ctx, key, l.window)
 	if _, err := pipe.Exec(ctx); err != nil {
-		slog.Warn("rate limit check failed", "err", err)
-		return true
+		slog.Warn("rate limit check failed, counting in process", "err", err)
+		return l.local.incr(key, l.window) <= limit
 	}
 	return n.Val() <= limit
 }
@@ -65,25 +129,26 @@ func visitorKey(ip string) string {
 }
 
 // once is true the first time a visitor does a thing in a window, and false for the repeats. If Redis is
-// down it says yes, as the other limits do.
+// down it is decided in this process.
 func (l *limiter) once(ctx context.Context, group, visitor, what string, window time.Duration) bool {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
-	ok, err := l.rdb.SetNX(ctx, "br:once:"+group+":"+visitorKey(visitor)+":"+what, 1, window).Result()
+	key := "br:once:" + group + ":" + visitorKey(visitor) + ":" + what
+	ok, err := l.rdb.SetNX(ctx, key, 1, window).Result()
 	if err != nil {
-		slog.Warn("rate limit check failed", "err", err)
-		return true
+		slog.Warn("rate limit check failed, counting in process", "err", err)
+		return l.local.incr(key, window) == 1
 	}
 	return ok
 }
 
-// count is how many hits a key has in its window. Redis being down counts as none, like the other checks.
+// count is how many hits a key has in its window. With Redis down it is the count kept in this process.
 func (l *limiter) count(ctx context.Context, key string) int64 {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
 	n, err := l.rdb.Get(ctx, "br:rl:"+key).Int64()
 	if err != nil {
-		return 0
+		return l.local.get("br:rl:" + key)
 	}
 	return n
 }
@@ -96,8 +161,8 @@ func (l *limiter) hit(ctx context.Context, key string, window time.Duration) int
 	n := pipe.Incr(ctx, "br:rl:"+key)
 	pipe.ExpireNX(ctx, "br:rl:"+key, window)
 	if _, err := pipe.Exec(ctx); err != nil {
-		slog.Warn("rate limit check failed", "err", err)
-		return 0
+		slog.Warn("rate limit check failed, counting in process", "err", err)
+		return l.local.incr("br:rl:"+key, window)
 	}
 	return n.Val()
 }
@@ -106,4 +171,5 @@ func (l *limiter) clear(ctx context.Context, key string) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
 	l.rdb.Del(ctx, "br:rl:"+key)
+	l.local.del("br:rl:" + key)
 }
