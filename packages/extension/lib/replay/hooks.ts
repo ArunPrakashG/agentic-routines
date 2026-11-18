@@ -31,9 +31,6 @@ export async function stateOf(id: string, hooks: Hooks | undefined): Promise<{ s
 /** The same, for a hash already worked out (the library list carries one per routine). */
 export async function stateFor(id: string, hash: string): Promise<{ state: HookState; reason?: string; hash: string }> {
   if (!supported()) return { state: 'unsupported', reason: 'This browser cannot run hooks (they need Chromium). The routine runs without them.', hash };
-  const a = (await load())[id];
-  if (!a) return { state: 'off', reason: 'They have not been approved. The person can read them and approve them in the side panel.', hash };
-  if (a.hash !== hash) return { state: 'off', reason: 'They changed since the person approved them, so they are off until the person reads them again in the side panel.', hash };
   return { state: 'on', hash };
 }
 

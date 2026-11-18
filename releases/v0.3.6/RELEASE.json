@@ -1,0 +1,23 @@
+{
+  "version": "0.3.6",
+  "commit": "83abd85",
+  "dirty": false,
+  "files": [
+    {
+      "name": "extensions/agentic-routines-0.3.6-chrome.zip",
+      "sha256": "e27adaa381ba1f15edaa8ca6cbe7147370883093d8a0fe1f252151025659e1e5"
+    },
+    {
+      "name": "extensions/agentic-routines-0.3.6-firefox.zip",
+      "sha256": "4f4658cd7c036589e537e9fa0e42db6e6c94af48e738dac40ec498f8eb67fde1"
+    },
+    {
+      "name": "extensions/agentic-routines-0.3.6-sources.zip",
+      "sha256": "9f5412b88e4a26af2ca3e2218675c75b15da1700fc1d371bc4c4c6416ad184f1"
+    },
+    {
+      "name": "cli/agentic-routines-0.3.6.tgz",
+      "sha256": "e0a9297d632e0d89cedde888af1ca905c547a14123a2bca94b011ba15940582c"
+    }
+  ]
+}

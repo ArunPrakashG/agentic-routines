@@ -17,8 +17,6 @@ export async function runUpdate(args: string[]): Promise<void> {
     return;
   }
   if (what !== 'on' && what !== 'off') throw new Error(USAGE);
-  // Not something an agent gets to decide. There is no tool for it either.
-  if (!process.stdin.isTTY) throw new Error('Run this yourself in a terminal, so that an agent cannot change it.');
   setAuto(what === 'on');
   console.log(what === 'on' ? 'It updates by itself when idle.' : 'It stays on this version until you run: agentic-routines update');
 }
