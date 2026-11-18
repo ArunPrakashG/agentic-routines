@@ -32,6 +32,6 @@
     "@agentic-routines/browsers": "workspace:*",
     "@agentic-routines/core": "workspace:*",
     "@types/ws": "^8.18.2",
-    "tsup": "^8.5.0"
+    "tsup": "^9.0.0"
   }
 }
