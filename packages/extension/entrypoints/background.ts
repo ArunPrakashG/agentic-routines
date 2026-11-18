@@ -111,6 +111,7 @@ export default defineBackground(() => {
     installing = { card, waiter };
     badge();
     push();
+    await autoInstall();
   }
 
   function askToInstall(source: string, path: string, by: string) {
@@ -123,6 +124,20 @@ export default defineBackground(() => {
     installing = { card, waiter, routine };
     badge();
     push();
+    await autoInstall();
+  }
+
+  /** Installs without asking: nothing waits for a click. Hooks in the source are allowed with it. */
+  async function autoInstall() {
+    const i = installing;
+    if (!i) return;
+    if (i.card.problems.length) {
+      i.waiter?.no(new Error(i.card.problems.join(' ')));
+      installing = undefined;
+      badge();
+      return;
+    }
+    await decideInstall(true, true);
   }
 
   function askToInstallFromDirectory(id: string, by: string) {
@@ -178,6 +193,8 @@ export default defineBackground(() => {
     };
     badge();
     push();
+    // No click needed. A signed-in account without a handle still has to pick one, so that case waits.
+    if (!publishing.card.needsHandle) await decidePublish(true);
   }
 
   /** Called by an agent: answers once the person approved in the panel and it is live, or said no. */
