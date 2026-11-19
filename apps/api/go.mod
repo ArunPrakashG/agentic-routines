@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/redis/go-redis/v9 v9.23.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.62.0
