@@ -726,17 +726,47 @@ export function aimAt(el: Element, how: How = {}): { x: number; y: number; hit: 
 
 // Whether the input sent since the last watch reached the element. Only the browser can make an event that isTrusted.
 let watching: { el: Element; landed: boolean; stop: () => void } | undefined;
-export function watchLanding(el: Element, moving = false) {
+export function watchLanding(el: Element, how: boolean | 'key' = false) {
   watching?.stop();
   const on = (e: Event) => {
     // A closed shadow root hides what was really hit from a listener out here, so it is looked up by the point.
-    const at = deepPoint((e as MouseEvent).clientX, (e as MouseEvent).clientY) ?? e.composedPath()[0];
+    // A key, and a click a key made (detail 0), has no point: it is on what it was sent to.
+    const keyed = e instanceof KeyboardEvent || (e.type === 'click' && (e as MouseEvent).detail === 0);
+    const at = (keyed ? undefined : deepPoint((e as MouseEvent).clientX, (e as MouseEvent).clientY)) ?? e.composedPath()[0];
     if (e.isTrusted && watching && at instanceof Element && partOf(el, at)) watching.landed = true;
   };
-  const kinds = moving ? ['pointermove', 'mousemove', 'mouseover'] : ['pointerdown', 'mousedown', 'click'];
+  const kinds = how === 'key' ? ['keydown', 'click'] : how ? ['pointermove', 'mousemove', 'mouseover'] : ['pointerdown', 'mousedown', 'click'];
   for (const t of kinds) window.addEventListener(t, on, true);
   watching = { el, landed: false, stop: () => { for (const t of kinds) window.removeEventListener(t, on, true); } };
 }
+/**
+ * The key that clicks this element when it has focus, as a person tabbing to it would press: Space for what toggles,
+ * Enter for buttons and links. Null for anything a key does not click.
+ */
+export function keyFor(el: Element): 'Enter' | ' ' | null {
+  if ((el as HTMLButtonElement).disabled) return null;
+  const r = el.getAttribute('role');
+  if (el instanceof HTMLInputElement) {
+    if (['checkbox', 'radio'].includes(el.type)) return ' ';
+    return ['button', 'submit', 'reset', 'image'].includes(el.type) ? 'Enter' : null;
+  }
+  if (el instanceof HTMLButtonElement || el.localName === 'summary') return 'Enter';
+  if (el instanceof HTMLAnchorElement && el.hasAttribute('href')) return 'Enter';
+  // A role alone promises the key only if the page made it focusable.
+  if (r && (el as HTMLElement).tabIndex >= 0) {
+    if (['checkbox', 'switch', 'radio'].includes(r)) return ' ';
+    if (['button', 'link', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio'].includes(r)) return 'Enter';
+  }
+  return null;
+}
+
+/** The focused element, looking into open shadow roots. */
+export function deepActive(): Element | null {
+  let a: Element | null = document.activeElement;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  return a;
+}
+
 export function landed() {
   const out = !!watching?.landed;
   if (out) {

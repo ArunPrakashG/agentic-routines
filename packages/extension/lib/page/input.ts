@@ -147,8 +147,35 @@ async function drawFrame(send: Send, ref: string) {
   clearInterval(timer);
 }
 
+/**
+ * Whether a mouse press would bring the browser in front of the window the user is working in. Chrome asks the window
+ * manager to raise its window when a press reaches the tab it shows while another window has focus, and some window
+ * managers do (Hyprland, X11 ones). Keys, typed text and presses in a tab behind another ask nothing.
+ */
+async function wouldRaise(tabId: number) {
+  const tab = await browser.tabs.get(tabId);
+  if (!tab.active) return false;
+  return !(await browser.windows.get(tab.windowId).catch(() => ({ focused: true }))).focused;
+}
+
+/** Click with the key a person would press on it once focused: Enter on a button or link, Space on a checkbox. */
+async function keyClick(tabId: number, ref: string): Promise<{ done: boolean } | undefined> {
+  const key = await ask<'Enter' | ' ' | null>(tabId, { t: 'keyable', ref, quick: await behind(tabId) }).catch(() => null);
+  if (!key) return undefined;
+  return platform.cdp!(tabId, async (send) => {
+    const before = (await browser.tabs.get(tabId)).url;
+    await pressKey(tabId, send, key === ' ' ? 'space' : 'Enter');
+    return { done: await arrived(tabId, before, ref) };
+  });
+}
+
 /** Click an element for real. Says what was on top of it, if something was. */
 async function realClick(tabId: number, ref: string, how: How): Promise<{ done: boolean; note?: string }> {
+  if (await wouldRaise(tabId)) {
+    // Not a mouse, then. A plain click on what a key clicks gets the key; anything else gets DOM events.
+    const plain = !how.at && !how.spot && !how.mods && (how.button ?? 'left') === 'left' && (how.count ?? 1) === 1;
+    return (plain && (await keyClick(tabId, ref))) || { done: false };
+  }
   const a = await aimFor(tabId, ref, 'click', how);
   if (!a.hit) return { done: false, note: a.over ? `“${a.over}” is drawn over it, so a person could not have clicked it; check the page took it.` : undefined };
   return platform.cdp!(tabId, async (send) => {
@@ -182,7 +209,8 @@ async function realDrag(tabId: number, ref: string, how: How) {
   const end = how.toAt ?? (await ask<Point & { off: boolean }>(tabId, { t: 'where', ref: how.toRef!, spot: how.to?.spot }));
   if ('off' in end && end.off) throw new Error('The place to drag to is not on screen from there. Scroll so both ends show first.');
   const to = await toTab(tabId, how.toRef, end);
-  if (!from.hit) return false;
+  // A press would raise the window over the one the user is in; DOM events do the drag instead.
+  if (!from.hit || (await wouldRaise(tabId))) return false;
   return platform.cdp!(tabId, async (send) => {
     await drawFrame(send, ref);
     const before = (await browser.tabs.get(tabId)).url;
