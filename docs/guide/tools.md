@@ -248,6 +248,16 @@ The wording is fixed so that agents and skills can rely on it: `Routine <tool na
 
 See [Refine a routine](/docs/refine) for the loop.
 
+### Routines one after another
+
+Small routines can be run in a row: one opens the app, the next fills the form. The agent decides the order. Nothing is enforced, and a routine always runs from wherever the tab is. It is told what helps it choose:
+
+- `routines_list`, `routine_describe`, `routines_search` and each `rt_` tool say where a routine starts and where it leaves the tab. A routine saved from a run opens its own page first ("Starts from any page: it opens … itself"). One written by hand or from Git may need the tab on a page already ("Starts on …: the tab should be on that page first"). Where it leaves the tab is learned from its finished runs.
+- They name the routines that fit before or after it: the ones that end where it starts, and the ones that start where it ends.
+- After a run, the result says where the tab is now, which routines start there and which open that page.
+- When a routine that needs a page stops after starting somewhere else, the result says which page it starts on, where the tab was, and which routine ends there.
+- `keep_page: true` on an `rt_` tool or `routine_run` leaves out the routine's opening step when the tab is already on that page, so it works on the page as the last routine left it (a form already filled stays filled). On any other page it opens its page as usual. The result says which happened.
+
 At most 30 routine tools are exposed at once. The rest are reached with `routines_list` and `routine_run`.
 
 ## Directory tools

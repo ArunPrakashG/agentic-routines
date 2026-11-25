@@ -266,6 +266,8 @@ export interface RunResult {
   loops?: { n: number; passes: number; note?: string }[];
   /** Every branch that ran: its step, and which way it went each time. */
   branches?: { n: number; took: ('then' | 'else')[] }[];
+  /** keep_page was asked: whether the tab was already on the page the routine opens, so it was kept as it was. */
+  kept_page?: 'kept' | 'opened';
   /** Notes the author left on the steps the run stopped at or changed, for the agent. */
   step_notes?: { n: number; label: string; text: string }[];
 }

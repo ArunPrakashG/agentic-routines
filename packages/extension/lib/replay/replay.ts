@@ -1,6 +1,6 @@
 import { flightOn, saveFlight, startFlight, stopFlight } from '../page/capture';
 import { secretForField } from '../page/secrets';
-import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, pageSimilarity, SAME_PAGE, type Candidate, type Directive, type FastFrom, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
+import { compareViewport, CROP_DRIFT, fill, loopValues, spanOf, hashDistance, isIrreversible, onSite, pageSimilarity, samePage, SAME_PAGE, type Candidate, type Directive, type FastFrom, type HookContext, type HookEvent, type Locator, type PageFingerprint, type Routine, type RunResult, type Step, type Viewport } from '@agentic-routines/core';
 import { challengeOn, onAgentWork, uploadFile } from '../agent/agent';
 import { hashAt, screenshot, type Rect } from './crop';
 import * as hooks from './hooks';
@@ -82,6 +82,8 @@ export interface ReplayState {
   skipped: number[];
   trace: string[];
   finalUrl?: string;
+  /** keep_page was asked: whether the opening step was left out. */
+  keptPage?: 'kept' | 'opened';
   /** The routine's hooks for this run, when it has any. */
   hooks?: hooks.HookRun;
   started?: boolean;
@@ -164,7 +166,9 @@ function result(s: ReplayState): RunResult & { fixes: Record<number, Locator>; c
     at_step: step?.n,
     step_label: step?.label,
     ...(s.status === 'paused' ? { step_action: step?.action, pause_kind: s.pauseKind === 'forced' ? ('forced' as const) : ('asked' as const) } : {}),
-    ...(s.test ? { final_url: s.finalUrl } : {}),
+    // Where the tab was left: a test shows it, and a run tells the agent which routine could come next.
+    ...(s.finalUrl ? { final_url: s.finalUrl } : {}),
+    ...(s.keptPage ? { kept_page: s.keptPage } : {}),
     ...(s.hooks ? { hooks: s.hooks.report() } : {}),
     candidates: s.candidates,
     error: s.error,
@@ -835,7 +839,7 @@ async function drive(s: ReplayState, choiceRef?: string): Promise<ReturnType<typ
   }
   await ended(s);
   end(s);
-  if (s.test) s.finalUrl = await browser.tabs.get(s.tabId).then((t) => t.url, () => s.finalUrl);
+  s.finalUrl = await browser.tabs.get(s.tabId).then((t) => t.url, () => s.finalUrl);
   notify(s);
   return result(s);
 }
@@ -911,7 +915,7 @@ function takeOver(s: ReplayState, from: FastFrom) {
   s.loop = { first, end, step: steps[j], pass: from.loop.pass, values: from.loop.values, index: from.loop.index, seen: from.loop.seen, record };
 }
 
-export async function start(p: { from?: FastFrom; routine: Routine; params: Record<string, string>; secrets: Record<string, string>; flight?: boolean; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean }) {
+export async function start(p: { from?: FastFrom; routine: Routine; params: Record<string, string>; secrets: Record<string, string>; flight?: boolean; agent?: string; session?: string; test?: boolean; foreign?: boolean; fit?: boolean; keepPage?: boolean }) {
   if (p.routine.meta.surface && p.routine.meta.surface !== 'browser')
     return { run_id: 'rp-none', status: 'failed', routine: p.routine.meta.name, version: p.routine.meta.version, steps_run: 0, steps_total: p.routine.steps.length, model_calls: 0, ms: 0, error: `This routine acts on the ${p.routine.meta.surface}, which this version cannot control. Only browser routines run.`, fixes: {}, crops: {} } as ReturnType<typeof result>;
   const busy = await waitForRoutine(p.routine, p.session);
@@ -956,6 +960,17 @@ export async function start(p: { from?: FastFrom; routine: Routine; params: Reco
   } else s.flightForRun = false;
   // Attached before the first step, so the bar this puts up has already moved the page before anything is measured.
   await platform.cdp?.(s.tabId, async () => {}).catch(() => {});
+  // After another routine: the agent asked to work on the page as it is. Only the opening step is left out, and only
+  // when the tab is already on the page it opens; anywhere else the routine opens its page as usual.
+  if (p.keepPage && !p.from) {
+    const first = s.routine.steps[0];
+    const target = first?.action === 'navigate' ? fill(first.url, s.params, {}, true) : undefined;
+    const here = await browser.tabs.get(s.tabId).then((t) => t.url, () => undefined);
+    if (target && samePage(here, target)) {
+      s.i = 1;
+      s.keptPage = 'kept';
+    } else if (target) s.keptPage = 'opened';
+  }
   if (p.from) takeOver(s, p.from);
   live.set(s.id, s);
   await fitWindow(s);

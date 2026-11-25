@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { deriveUrls, hookHash, parseRoutineMd, stringifyRoutineMd, type ByHand, type Origin, type Routine, type Step } from '@agentic-routines/core';
+import { chainOf, deriveUrls, hookHash, parseRoutineMd, stringifyRoutineMd, type ByHand, type Chain, type Origin, type Routine, type Step } from '@agentic-routines/core';
 import type { Surface } from '@agentic-routines/core';
 import { paths } from '../paths.ts';
 
@@ -29,6 +29,8 @@ export interface Listed {
   surface: Surface;
   /** How the agent's runs of it have gone on this machine. */
   stats?: Stats;
+  /** Where it starts and where it leaves the tab, for putting routines one after another. */
+  chain: Chain;
 }
 
 /** Efficiency of a routine as the agent has run it. Kept in the routine's folder, never sent anywhere. */
@@ -56,6 +58,8 @@ export interface RunStat {
   unconfirmed?: boolean;
   steps?: number;
   agent?: string;
+  /** The page the tab was on when it finished, as a glob. Tells the agent where the routine leaves it. */
+  end?: string;
 }
 
 const STATS_KEPT = 200;
@@ -161,13 +165,15 @@ export async function list(): Promise<Listed[]> {
       try {
         const md = await readFile(join(paths.routines(), owner, name, 'ROUTINE.md'), 'utf8');
         const { meta } = parseRoutineMd(md);
-        const urls = meta.urls ?? deriveUrls(await readJson<Step[]>(join(paths.routines(), owner, name, 'steps.json')) ?? [], meta.site);
+        const steps = (await readJson<Step[]>(join(paths.routines(), owner, name, 'steps.json'))) ?? [];
+        const urls = meta.urls ?? deriveUrls(steps, meta.site);
         const stats = await readJson<Stats>(join(paths.routines(), owner, name, '.stats.json'));
+        const chain = chainOf(steps, stats?.recent ?? []);
         const disabled = await readFile(join(paths.routines(), owner, name, '.disabled'), 'utf8').then(() => true, () => false);
         const origin = await readJson<Origin>(join(paths.routines(), owner, name, '.origin.json'));
         const blocked = (await readJson<{ reason: string }>(join(paths.routines(), owner, name, '.blocked.json')))?.reason;
         const n = Object.keys(meta.hooks ?? {}).length;
-        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked, hooks: n ? { count: n, hash: await hookHash(meta.hooks) } : undefined, urls, surface: meta.surface ?? 'browser', stats });
+        out.push({ name, owner, version: meta.version, site: meta.site, description: meta.description, enabled: !disabled, draftedBy: meta.drafted_by, origin, blocked, hooks: n ? { count: n, hash: await hookHash(meta.hooks) } : undefined, urls, surface: meta.surface ?? 'browser', stats, chain });
       } catch {
         // Not a routine folder.
       }
