@@ -1,4 +1,5 @@
 import { runDebug, runLogs } from './commands/debug.ts';
+import { runHistory } from './commands/history.ts';
 import { runDoctor } from './commands/doctor.ts';
 import { runMarks } from './commands/marks.ts';
 import { runProfiles } from './commands/profiles.ts';
@@ -78,6 +79,11 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
   runMarks(args);
 } else if (cmd === 'debug') {
   runDebug(args);
+} else if (cmd === 'history') {
+  runHistory(args).catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
 } else if (cmd === 'logs') {
   runLogs(args).catch((e) => {
     console.error(e.message);
@@ -108,6 +114,8 @@ if (cmd?.startsWith('chrome-extension://') || cmd?.endsWith('.json') || cmd === 
   marks [on|off]      Annotate screenshots: a numbered box and label on what the agent clicked or typed into
   debug [on|off]      Record every tool call an agent makes, with arguments, time and result (typed text and secrets left out)
   logs [-f]           Read that record: -f follows it, -n 100 shows more lines, --errors only failures, --raw is JSON
+  history [on|off]    Keep every tool call and browser step, one file per day, on by default (addresses without
+                      query, typed values hashed); "history show" reads it: -n 100, --steps, --tools, --raw
   update              Look for a new version now; "update off" stops it updating by itself, "update status" says how it stands
   tools               Every tool an agent has, each one a command too: "navigate https://example.com", "read_page", "<tool> --help"
         [--session <name>]  Tabs stay open between commands, in a session called "cli" unless you name one

@@ -6,6 +6,7 @@ Agentic Routines keeps your routines and recordings on your computer. Nothing is
 
 - Routines, recorded runs, settings and the list of recent runs are stored in the browser and in a folder in your home directory (`~/.agentic-routines`).
 - A recorded run can contain what was on the page: element names, addresses and the values you or your agent typed. Values that were marked as secrets are never stored.
+- A history of every tool call and browser step is kept in `~/.agentic-routines/logs/history`, one file per day, until you delete it. It keeps which tool ran, which element was used and the page address without its query or fragment. Typed values are not kept: a short hash only shows whether two runs typed the same thing. Nothing is kept for password fields. Turn it off with `agentic-routines history off`.
 - The extension talks to the companion program on your computer, which your coding agent starts. Unless you connect it to another computer as described below, it does not send page content over the network.
 
 ## If you connect your browser to another computer

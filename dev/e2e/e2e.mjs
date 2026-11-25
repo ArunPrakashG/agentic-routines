@@ -999,6 +999,23 @@ if (panel) {
 const wrapper = await (await import('node:fs/promises')).readFile(join(STORE, 'bin/host'), 'utf8');
 check(wrapper.includes(join(STORE, 'bin/host.cjs')) && !wrapper.includes('dist/'), 'the host runs from its own copy');
 
+// ---------- lasting history ----------
+{
+  const fsp = await import('node:fs/promises');
+  const dir = join(STORE, 'logs/history');
+  // Steps reach the host as events, so give the last ones a moment to land.
+  await new Promise((r) => setTimeout(r, 1500));
+  const files = (await fsp.readdir(dir).catch(() => [])).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f));
+  const text = (await Promise.all(files.map((f) => fsp.readFile(join(dir, f), 'utf8')))).join('');
+  const lines = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const tools = lines.filter((e) => e.kind === 'tool');
+  const steps = lines.filter((e) => e.kind === 'step');
+  check(files.length > 0 && tools.some((e) => e.name === 'navigate') && tools.some((e) => e.name === 'type'), 'every tool call is kept in the lasting history, debug log or not');
+  check(steps.some((e) => e.action === 'type' && /^[0-9a-f]{12}$/.test(e.valueHash ?? '')) && steps.some((e) => e.action === 'click' && e.target?.name), 'browser steps are kept with what they acted on and a hash of what was typed');
+  check(!/2\.14\.0 \(214\)|Faster search\.|Stays the same\./.test(text), 'no typed text is written to the history');
+  check(lines.every((e) => !String(e.url ?? '').includes('?') && !String(e.navigatedTo ?? '').includes('?')), 'addresses are kept without their query');
+}
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 await client.close();
 panel?.close();

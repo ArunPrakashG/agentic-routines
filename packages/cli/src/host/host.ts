@@ -10,6 +10,7 @@ import { isEvent, isRequest, isResponse, lineReader, nativeFrame, nativeReader, 
 import * as sources from '../store/sources.ts';
 import * as projects from '../store/projects.ts';
 import * as store from '../store/routines.ts';
+import { appendHistory, stepEntry } from '../history.ts';
 
 // Started by the browser through native messaging, one per browser.
 // stdout belongs to the browser, so all logging goes to a file.
@@ -341,6 +342,11 @@ export function runHost(): void {
         if (m.event === 'profile.focus') {
           focusedAt = Date.now();
           writeInfo();
+          return;
+        }
+        // A step the browser recorded goes into the lasting history here; the browser keeps only the latest runs.
+        if (m.event === 'history.step') {
+          appendHistory(stepEntry(m.data));
           return;
         }
         if (m.event === 'cdp.event' || m.event === 'cdp.gone' || m.event === 'cdp.tab') {
