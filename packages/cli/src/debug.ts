@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendHistory, toolEntry } from './history.ts';
 import { paths } from './paths.ts';
 
 // A record of what agents did through the tool server, for finding out why something went wrong.
@@ -65,7 +66,8 @@ export function record(e: Omit<Entry, 'ts'>): void {
     const file = paths.actions();
     mkdirSync(paths.logs(), { recursive: true });
     try {
-      if (statSync(file).size > MAX_BYTES) renameSync(file, `${file}.1`);
+      // A full log is put aside under the time it filled up, never written over: older ones stay readable.
+      if (statSync(file).size > MAX_BYTES) renameSync(file, file.replace(/\.jsonl$/, `-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`));
     } catch {
       // Nothing there yet.
     }
@@ -77,22 +79,30 @@ export function record(e: Omit<Entry, 'ts'>): void {
 
 let calls = 0;
 
+/** This tool server process, so history can tell one agent's sitting from another's. */
+const SESSION = `${process.pid}-${Date.now().toString(36)}`;
+
 // A tool with no inputs is handed the request details in place of its arguments.
 const isExtra = (a: unknown) => !!a && typeof a === 'object' && 'signal' in a && 'requestId' in a;
 
 /** Wrap a tool's handler so every call is recorded with its arguments, time and outcome. */
 export function logged<A, R>(name: string, agent: () => string | undefined, fn: (a: A, extra: unknown) => Promise<R>): (a: A, extra: unknown) => Promise<R> {
   return async (a, extra) => {
-    if (!debugOn()) return fn(a, extra);
     const call = ++calls;
     const t = Date.now();
-    const base = { kind: 'tool' as const, call, agent: agent(), name, args: isExtra(a) ? undefined : redact(a, '', name) };
+    const args = isExtra(a) ? undefined : a;
+    // History is kept whether or not the debug log is on; the debug log adds what came back.
+    const done = (ok: boolean, out: string) => {
+      const ms = Date.now() - t;
+      appendHistory(toolEntry({ session: SESSION, agent: agent(), name, args, ms, ok, out }));
+      if (debugOn()) record({ kind: 'tool', call, agent: agent(), name, args: args === undefined ? undefined : redact(args, '', name), ms, ok, out });
+    };
     try {
       const res = await current.run(call, () => fn(a, extra));
-      record({ ...base, ms: Date.now() - t, ok: !(res as { isError?: boolean })?.isError, out: summarize(res) });
+      done(!(res as { isError?: boolean })?.isError, summarize(res));
       return res;
     } catch (e) {
-      record({ ...base, ms: Date.now() - t, ok: false, out: clip((e as Error).message ?? String(e), 300) });
+      done(false, clip((e as Error).message ?? String(e), 300));
       throw e;
     }
   };

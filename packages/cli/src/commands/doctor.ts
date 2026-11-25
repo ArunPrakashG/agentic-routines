@@ -10,6 +10,7 @@ import { hosts, profileLabel } from '../mcp/bridge.ts';
 import { autoOn, hasKey, launcher, updateState, version } from '../update.ts';
 import { connected } from './tool.ts';
 import { HOST_NAME, paths } from '../paths.ts';
+import { historyDays, historyOn } from '../history.ts';
 
 // `npx agentic-routines doctor`: says what is connected and what to do about what is not.
 
@@ -79,6 +80,7 @@ export async function runDoctor() {
   if (open.length > 1) lines.push(`✓ ${'Profiles'.padEnd(22)} ${(await Promise.all(open.map(profileLabel))).join(', ')}. Name them with: agentic-routines profiles`);
 
   // Not a problem either way, so it never fails the check.
+  lines.push(`✓ ${'History'.padEnd(22)} ${historyOn() ? `on: ${historyDays().length} day(s) kept, see "agentic-routines history show"` : 'off. Turn on with: agentic-routines history on'}`);
   lines.push(`✓ ${'Debug log'.padEnd(22)} ${debugOn() ? 'on: see "agentic-routines logs"' : 'off. Turn on with: agentic-routines debug on'}`);
 
   // An installed copy has its own command, and npx would fetch another copy.

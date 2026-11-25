@@ -1,3 +1,4 @@
+import * as native from './native';
 import { findRepeat, type RecordedEvent, type Repeat, type Run } from '@agentic-routines/core';
 
 // Every agent run is recorded. A new run starts after 10 idle minutes,
@@ -30,6 +31,12 @@ async function persist() {
   for (const fn of listeners) fn();
 }
 
+/** Tells two runs that typed the same thing apart from two that did not, without the value leaving the browser. */
+async function hashValue(v: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v)));
+  return Array.from(d.slice(0, 6), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 const newId = () => 'run-' + crypto.randomUUID().slice(0, 4);
 
 async function going(source: string, session?: string): Promise<StoredRun> {
@@ -48,6 +55,15 @@ export async function record(source: string, event: RecordedEvent, session?: str
   cur.events.push(event);
   cur.updatedAt = Date.now();
   await persist();
+  // Only the latest runs stay here; the host keeps a lasting history of every step (values hashed, never kept).
+  // A step with no host connected is not kept there, and the work goes on.
+  try {
+    const { value, crop: _c, page: _p, view: _v, ...rest } = event;
+    const valueHash = value && event.field !== 'password' && event.field !== 'file' ? await hashValue(value) : undefined;
+    native.emit('history.step', { run: cur.id, source, session, event: { ...rest, valueHash } });
+  } catch {
+    // No host: nothing more to do.
+  }
   return cur;
 }
 
