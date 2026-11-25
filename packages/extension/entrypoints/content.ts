@@ -4,7 +4,7 @@ import { challengeHere } from '../lib/page/challenge';
 import { hiddenWhy } from '../lib/page/hidden';
 import { clearStale, lock } from '../lib/page/lock';
 import { aim, glow, veil, type GlowMode } from '../lib/page/overlay';
-import { heldLength, maskField, accessibleName, aimAt, allShadowRoots, attach, busyWhy, clickedThing, closestDeep, deepAll, deepPoint, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
+import { heldLength, maskField, accessibleName, aimAt, allShadowRoots, attach, busyWhy, clickedThing, closestDeep, deepAll, deepPoint, drag, fieldState, findOnPage, hover, isState, landed, pageText, plainClickables, pointAt, readyToType, scrollBy, scrollPos, setValue, signedInAs, spotOn, toggleOf, typedInto, visible, watchChanges, watchLanding, whereOn, byRef, click, describe, fieldKind, fileInputFor, fingerprint, hookMay, interactive, keyFor, deepActive, outline, press, rectOf, refOf, role, select, snapshot, type, viewport, type How, type Point } from '../lib/page/dom';
 
 export type ContentMsg =
   | { t: 'ping' }
@@ -32,6 +32,7 @@ export type ContentMsg =
   | { t: 'scrollby'; p: Point; by: Point }
   | { t: 'landed' }
   | { t: 'ready'; ref: string; keep?: boolean; quick?: boolean }
+  | { t: 'keyable'; ref: string; quick?: boolean }
   | { t: 'typed'; ref: string; value: string }
   | { t: 'hookmay'; ref: string; action: 'click' | 'type' }
   | { t: 'snapshot'; ref?: string }
@@ -392,6 +393,20 @@ export default defineContentScript({
           case 'landed':
             send({ ok: landed() });
             break;
+          case 'keyable': {
+            // A key on a focused control clicks it as a mouse would, without asking the window manager for the window.
+            const el = byRef(msg.ref);
+            void aim(el, 'click', msg.quick).finally(() => {
+              const key = keyFor(el);
+              if (key) {
+                (el as HTMLElement).focus({ preventScroll: true });
+                if (deepActive() !== el) return send({ ok: null });
+                watchLanding(el, 'key');
+              }
+              send({ ok: key });
+            });
+            break;
+          }
           case 'ready': {
             const el = byRef(msg.ref);
             void aim(el, 'type', msg.quick).finally(() => send({ ok: readyToType(el, msg.keep) }));
